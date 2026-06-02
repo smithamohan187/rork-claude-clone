@@ -1,0 +1,170 @@
+export interface ExploreBusiness {
+  id: string;
+  name: string;
+  logo: string;
+  category: string;
+  categoryColor: string;
+  subscribers: number;
+  joinPoints: number;
+  distance: string;
+  rating: number;
+}
+
+export const exploreCategories = [
+  { key: 'all', label: 'All' },
+  { key: 'food', label: 'Food' },
+  { key: 'retail', label: 'Retail' },
+  { key: 'fitness', label: 'Fitness' },
+  { key: 'beauty', label: 'Beauty' },
+  { key: 'travel', label: 'Travel' },
+  { key: 'entertainment', label: 'Entertainment' },
+];
+
+export const trendingBusinesses: ExploreBusiness[] = [
+  {
+    id: 't1',
+    name: 'Nourish Kitchen',
+    logo: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200&h=200&fit=crop',
+    category: 'Food',
+    categoryColor: '#1A5C35',
+    subscribers: 1240,
+    joinPoints: 50,
+    distance: '0.3 mi',
+    rating: 4.8,
+  },
+  {
+    id: 't2',
+    name: 'FitZone Gym',
+    logo: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&h=200&fit=crop',
+    category: 'Fitness',
+    categoryColor: '#10B981',
+    subscribers: 860,
+    joinPoints: 75,
+    distance: '0.5 mi',
+    rating: 4.6,
+  },
+  {
+    id: 't3',
+    name: 'Glow Studio',
+    logo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=200&h=200&fit=crop',
+    category: 'Beauty',
+    categoryColor: '#EC4899',
+    subscribers: 2100,
+    joinPoints: 100,
+    distance: '0.7 mi',
+    rating: 4.9,
+  },
+  {
+    id: 't4',
+    name: 'Urban Threads',
+    logo: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200&h=200&fit=crop',
+    category: 'Retail',
+    categoryColor: '#3B82F6',
+    subscribers: 530,
+    joinPoints: 30,
+    distance: '1.0 mi',
+    rating: 4.5,
+  },
+  {
+    id: 't5',
+    name: 'Rivera Coffee',
+    logo: 'https://images.unsplash.com/photo-1559305616-3f99cd43e353?w=200&h=200&fit=crop',
+    category: 'Food',
+    categoryColor: '#1A5C35',
+    subscribers: 3400,
+    joinPoints: 40,
+    distance: '0.2 mi',
+    rating: 4.7,
+  },
+  {
+    id: 't6',
+    name: 'SoundWave Events',
+    logo: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop',
+    category: 'Entertainment',
+    categoryColor: '#00B246',
+    subscribers: 4200,
+    joinPoints: 60,
+    distance: '1.5 mi',
+    rating: 4.4,
+  },
+  {
+    id: 't7',
+    name: 'Wanderlust Travel',
+    logo: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200&h=200&fit=crop',
+    category: 'Travel',
+    categoryColor: '#0EA5E9',
+    subscribers: 1870,
+    joinPoints: 80,
+    distance: '2.1 mi',
+    rating: 4.7,
+  },
+  {
+    id: 't8',
+    name: 'Zenith Yoga',
+    logo: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=200&h=200&fit=crop',
+    category: 'Fitness',
+    categoryColor: '#10B981',
+    subscribers: 720,
+    joinPoints: 55,
+    distance: '0.8 mi',
+    rating: 4.8,
+  },
+];
+
+export const nearYouBusinesses: ExploreBusiness[] = [
+  {
+    id: 'n1',
+    name: 'Rivera Coffee Co.',
+    logo: 'https://images.unsplash.com/photo-1559305616-3f99cd43e353?w=200&h=200&fit=crop',
+    category: 'Food',
+    categoryColor: '#1A5C35',
+    subscribers: 3400,
+    joinPoints: 40,
+    distance: '0.2 mi',
+    rating: 4.7,
+  },
+  {
+    id: 'n2',
+    name: 'Nourish Kitchen',
+    logo: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200&h=200&fit=crop',
+    category: 'Food',
+    categoryColor: '#1A5C35',
+    subscribers: 1240,
+    joinPoints: 50,
+    distance: '0.3 mi',
+    rating: 4.8,
+  },
+  {
+    id: 'n3',
+    name: 'FitZone Gym',
+    logo: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&h=200&fit=crop',
+    category: 'Fitness',
+    categoryColor: '#10B981',
+    subscribers: 860,
+    joinPoints: 75,
+    distance: '0.5 mi',
+    rating: 4.6,
+  },
+  {
+    id: 'n4',
+    name: 'Glow Studio',
+    logo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=200&h=200&fit=crop',
+    category: 'Beauty',
+    categoryColor: '#EC4899',
+    subscribers: 2100,
+    joinPoints: 100,
+    distance: '0.7 mi',
+    rating: 4.9,
+  },
+  {
+    id: 'n5',
+    name: 'Zenith Yoga',
+    logo: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=200&h=200&fit=crop',
+    category: 'Fitness',
+    categoryColor: '#10B981',
+    subscribers: 720,
+    joinPoints: 55,
+    distance: '0.8 mi',
+    rating: 4.8,
+  },
+];

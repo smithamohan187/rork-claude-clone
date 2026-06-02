@@ -1,0 +1,10 @@
+{
+  "$schema": "https://rork.com/schema/rork.json",
+  "apps": [
+    {
+      "name": "TouchPoints",
+      "path": ".",
+      "framework": "react-native"
+    }
+  ]
+}
