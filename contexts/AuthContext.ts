@@ -4,6 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { testUsers, currentBusinessUser } from '@/mocks/data';
 import { adminUser } from '@/contexts/AdminContext';
+import {
+  apiClient,
+  setAccessToken,
+  setRefreshToken,
+  getRefreshToken,
+  clearTokens,
+} from '@/api/client';
+import { authApi, AuthTokens, SessionResponse } from '@/api/auth.api';
 import type { AccountType, User, BusinessProfileData, ProfileEntry } from '@/types';
 
 const ACCOUNT_TYPE_KEY = 'account_type';
@@ -15,11 +23,50 @@ const LAST_ACTIVE_PROFILE_KEY = 'last_active_profile_id';
 
 export type { BusinessProfileData } from '@/types';
 
+type AuthUser = Partial<User> & {
+  id: string;
+  email?: string;
+  full_name?: string;
+  role?: string;
+  profile?: Record<string, unknown>;
+};
+
+type AuthRefreshResponse = {
+  accessToken?: string;
+  refreshToken?: string;
+  user?: SessionResponse;
+  tokens?: {
+    accessToken?: string;
+    refreshToken?: string;
+  };
+};
+
 const TEST_USER_HAS_BUSINESS: Record<number, boolean> = {
   0: true,
   1: false,
   2: false,
 };
+
+function getTokens(data: AuthTokens | AuthRefreshResponse | null | undefined) {
+  return {
+    accessToken: data?.accessToken ?? data?.tokens?.accessToken ?? null,
+    refreshToken: data?.refreshToken ?? data?.tokens?.refreshToken ?? null,
+  };
+}
+
+function toAuthUser(user: SessionResponse | AuthUser | null | undefined): AuthUser | null {
+  if (!user?.id) return null;
+  return {
+    ...user,
+    name: user.name ?? user.full_name,
+    email: user.email ?? undefined,
+  };
+}
+
+async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const session = await authApi.getSession();
+  return session.success ? toAuthUser(session.data) : null;
+}
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const queryClient = useQueryClient();
@@ -29,6 +76,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [businessProfileData, setBusinessProfileData] = useState<BusinessProfileData | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [testUserIndex, setTestUserIndex] = useState<number>(0);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   const storedType = useQuery({
     queryKey: ['accountType'],
@@ -101,6 +150,40 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (storedProfileData.data !== undefined) setBusinessProfileData(storedProfileData.data);
   }, [storedProfileData.data]);
 
+  useEffect(() => {
+    async function restoreSession() {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const result = await apiClient.post<AuthRefreshResponse>(
+          '/auth/refresh',
+          { refreshToken },
+          { _isRetry: true },
+        );
+        const { accessToken, refreshToken: nextRefreshToken } = getTokens(result.data);
+
+        if (result.success && accessToken) {
+          setAccessToken(accessToken);
+          if (nextRefreshToken) await setRefreshToken(nextRefreshToken);
+          setAuthUser(toAuthUser(result.data?.user) ?? await fetchCurrentUser());
+        } else {
+          await clearTokens();
+          setAuthUser(null);
+        }
+      } catch {
+        await clearTokens();
+        setAuthUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    restoreSession();
+  }, []);
 
   const switchAccount = useCallback(async (type: AccountType) => {
     if (type === 'admin') {
@@ -111,6 +194,47 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
     setAccountType(type);
     await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, type);
+  }, []);
+
+  const loginWithTokens = useCallback(async (data: AuthTokens, fallbackEmail?: string): Promise<AuthUser> => {
+    const { accessToken, refreshToken } = getTokens(data);
+    if (!accessToken || !refreshToken) {
+      throw new Error('Login response did not include auth tokens');
+    }
+
+    setAccessToken(accessToken);
+    await setRefreshToken(refreshToken);
+
+    const user =
+      toAuthUser(data.user) ??
+      await fetchCurrentUser() ??
+      (data.userId ? { id: data.userId, email: fallbackEmail } : null);
+
+    if (!user) {
+      await clearTokens();
+      throw new Error('Login response did not include user details');
+    }
+
+    setAuthUser(user);
+    return user;
+  }, []);
+
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
+    const result = await authApi.login({ email, password });
+    if (!result.success || !result.data) {
+      throw new Error(result.error ?? 'Login failed');
+    }
+    await loginWithTokens(result.data, email);
+  }, [loginWithTokens]);
+
+  const logout = useCallback(async (): Promise<void> => {
+    try {
+      await authApi.logout();
+    } catch {
+      await clearTokens();
+    }
+    setAuthUser(null);
+    setAccountType('personal');
   }, []);
 
   const loginAsAdmin = useCallback(async () => {
@@ -169,6 +293,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const resetAllData = useCallback(async () => {
     console.log('[Auth] Resetting all test mode data...');
     await AsyncStorage.clear();
+    await clearTokens();
+    setAuthUser(null);
     setAccountType('personal');
     setHasOnboarded(true);
     setHasBusinessProfile(false);
@@ -198,6 +324,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const currentPersonalUser = testUsers[testUserIndex];
   const activeUser: User = isAdmin ? adminUser : (accountType === 'personal' ? currentPersonalUser : businessUser);
+  const currentUser: User = authUser
+    ? {
+        ...activeUser,
+        ...authUser,
+        name: authUser.name ?? authUser.full_name ?? activeUser.name,
+        avatar: authUser.avatar ?? activeUser.avatar,
+      }
+    : activeUser;
 
   const profiles: ProfileEntry[] = [
     {
@@ -219,10 +353,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   ];
 
   const activeProfile: ProfileEntry = {
-    id: activeUser.id,
+    id: currentUser.id,
     type: (accountType === 'admin' ? 'personal' : accountType) as 'personal' | 'business',
-    displayName: activeUser.name,
-    avatarUrl: activeUser.avatar,
+    displayName: currentUser.name,
+    avatarUrl: currentUser.avatar,
   };
 
   const profilesRef = React.useRef(profiles);
@@ -280,12 +414,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   return {
     accountType,
-    currentUser: activeUser,
+    currentUser,
     personalUser: currentPersonalUser,
     hasOnboarded,
     hasBusinessProfile,
     businessProfileData,
     isAdmin,
+    isAuthenticated: !!authUser,
+    authUser,
+    loginWithTokens,
+    login,
+    logout,
     switchAccount,
     loginAsAdmin,
     logoutAdmin,
@@ -295,7 +434,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     resetAllData,
     testUserIndex,
     testUsers,
-    isLoading: storedType.isLoading || storedOnboarded.isLoading || storedBusinessProfile.isLoading,
+    isLoading: authLoading || storedType.isLoading || storedOnboarded.isLoading || storedBusinessProfile.isLoading,
     activeProfile,
     profiles,
     switchProfile,

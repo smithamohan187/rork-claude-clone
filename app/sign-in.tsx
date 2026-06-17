@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useMutation } from '@tanstack/react-query';
 import { isApiConfigured } from '@/api/client';
 import { authApi } from '@/api/auth.api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,15 +42,17 @@ type AuthMode = 'email' | 'otp';
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { restoreLastProfile } = useAuth();
+  const { login, restoreLastProfile } = useAuth();
 
-  const [mode, setMode] = useState<AuthMode>('email');
+  const [mode] = useState<AuthMode>('email');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -67,54 +68,55 @@ export default function SignInScreen() {
   const passwordError = submitted && mode === 'email' && password.length === 0 ? 'Password is required' : '';
   const phoneError = submitted && mode === 'otp' && phoneNumber.trim().length < 6 ? 'Enter a valid phone number' : '';
 
-  const loginMutation = useMutation({
-    mutationFn: async () => {
-      if (!isApiConfigured) {
-        throw new Error('Backend is not configured. Please set up your environment variables.');
-      }
-      if (mode === 'email') {
-        console.log('[SignIn] Logging in with email:', email);
-        const result = await authApi.login({ email: email.trim(), password });
-        if (!result.success || !result.data) {
-          console.log('[SignIn] Auth error:', result.error);
-          throw new Error(result.error ?? 'Login failed');
-        }
-        console.log('[SignIn] Login successful, user:', result.data.userId);
-        return { userId: result.data.userId, hasSession: !!result.data.accessToken };
-      } else {
-        console.log('[SignIn] Sending OTP to:', phoneNumber);
-        const result = await authApi.sendOtp({ identifier: phoneNumber.trim(), type: 'phone' });
-        if (!result.success) {
-          console.log('[SignIn] OTP error:', result.error);
-          throw new Error(result.error ?? 'Could not send code');
-        }
-        Alert.alert('OTP Sent', 'Check your phone for the verification code.');
-        return null;
-      }
-    },
-    onSuccess: async (data) => {
-      if (mode === 'email' && data) {
-        console.log('[SignIn] Login success, restoring last active profile...');
-        const profileType = await restoreLastProfile();
-        console.log('[SignIn] Restored profile type:', profileType);
-        router.replace('/(tabs)/feed' as never);
-      }
-    },
-    onError: (error: Error) => {
-      console.log('[SignIn] Login failed:', error.message);
-      Alert.alert('Login Failed', error.message);
-    },
-  });
-
-  const handleLogin = useCallback(() => {
+  const handleLogin = useCallback(async () => {
     setSubmitted(true);
     if (mode === 'email') {
       if (!isValidEmail(email) || password.length === 0) return;
     } else {
       if (phoneNumber.trim().length < 6) return;
     }
-    loginMutation.mutate();
-  }, [mode, email, password, phoneNumber, loginMutation]);
+    setApiError(null);
+    setLoading(true);
+    try {
+      if (!isApiConfigured) {
+        setApiError('Backend is not configured.');
+        return;
+      }
+      if (mode === 'email') {
+        console.log('[SignIn] Logging in with email:', email);
+        const result = await authApi.login({ email: email.trim(), password });
+                if (!result.success) {
+                  console.log('[SignIn] Auth error:', result.error);
+                  const isNetworkError =
+                    result.error === 'Network request failed' ||
+                    result.error === 'Failed to fetch' ||
+                    result.error === 'Network error';
+                  setApiError(isNetworkError ? 'Unable to connect. Please try again.' : (result.error ?? 'Login failed'));
+                  return;
+                }
+        console.log('[SignIn] Login success, restoring last active profile...');
+        const profileType = await restoreLastProfile();
+        console.log('[SignIn] Restored profile type:', profileType);
+        router.replace('/(tabs)/feed' as never);
+        
+      } else {
+        console.log('[SignIn] Sending OTP to:', phoneNumber);
+        const result = await authApi.sendOtp({ identifier: phoneNumber.trim(), type: 'phone' });
+        if (!result.success) {
+          console.log('[SignIn] OTP error:', result.error);
+          const isNetworkError =
+            result.error === 'Network request failed' ||
+            result.error === 'Failed to fetch' ||
+            result.error === 'Network error';
+          setApiError(isNetworkError ? 'Unable to connect. Please try again.' : (result.error ?? 'Could not send code'));
+          return;
+        }
+        Alert.alert('OTP Sent', 'Check your phone for the verification code.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [mode, email, password, phoneNumber, login, restoreLastProfile, router]);
 
   return (
     <ImageBackground source={AUTH_BG} style={styles.bg} resizeMode="cover">
@@ -155,7 +157,7 @@ export default function SignInScreen() {
                         placeholder="you@example.com"
                         placeholderTextColor={TEXT_TERTIARY}
                         value={email}
-                        onChangeText={(t) => { setEmail(t); if (submitted) setSubmitted(false); }}
+                        onChangeText={(t) => { setEmail(t); if (submitted) setSubmitted(false); setApiError(null); }}
                         onFocus={() => setFocusedField('email')}
                         onBlur={() => setFocusedField(null)}
                         keyboardType="email-address"
@@ -185,7 +187,7 @@ export default function SignInScreen() {
                         placeholder="Enter your password"
                         placeholderTextColor={TEXT_TERTIARY}
                         value={password}
-                        onChangeText={(t) => { setPassword(t); if (submitted) setSubmitted(false); }}
+                        onChangeText={(t) => { setPassword(t); if (submitted) setSubmitted(false); setApiError(null); }}
                         onFocus={() => setFocusedField('password')}
                         onBlur={() => setFocusedField(null)}
                         secureTextEntry={!showPassword}
@@ -208,7 +210,7 @@ export default function SignInScreen() {
                       placeholder="+1 (555) 000-0000"
                       placeholderTextColor={TEXT_TERTIARY}
                       value={phoneNumber}
-                      onChangeText={(t) => { setPhoneNumber(t); if (submitted) setSubmitted(false); }}
+                      onChangeText={(t) => { setPhoneNumber(t); if (submitted) setSubmitted(false); setApiError(null); }}
                       onFocus={() => setFocusedField('phone')}
                       onBlur={() => setFocusedField(null)}
                       keyboardType="phone-pad"
@@ -221,13 +223,13 @@ export default function SignInScreen() {
               )}
 
               <TouchableOpacity
-                style={[styles.primaryBtn, loginMutation.isPending && styles.primaryBtnDisabled]}
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
                 onPress={handleLogin}
                 activeOpacity={0.9}
-                disabled={loginMutation.isPending}
+                disabled={loading}
                 testID="login-btn"
               >
-                {loginMutation.isPending ? (
+                {loading ? (
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
                   <Text style={styles.primaryBtnText}>
@@ -235,6 +237,7 @@ export default function SignInScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
+              {!!apiError && <Text style={styles.apiErrorText}>{apiError}</Text>}
 
               <TouchableOpacity
                 style={styles.otpToggle}
@@ -409,6 +412,14 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   primaryBtnDisabled: { opacity: 0.6 },
+  apiErrorText: {
+    fontFamily: THEME.font.medium,
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: ERROR_COLOR,
+    textAlign: 'center',
+    marginTop: 10,
+  },
   otpToggle: {
     flexDirection: 'row',
     alignItems: 'center',
