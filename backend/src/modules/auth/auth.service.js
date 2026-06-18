@@ -13,6 +13,11 @@ const {
   findReferralCode,
   createReferral,
   saveRefreshToken,
+  findUserForLogin,
+  insertRefreshToken,
+  findUserWithActiveProfile,
+  revokeUserRefreshTokensByDevice,
+  getUserInterests,
 } = require('./auth.model');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
@@ -125,42 +130,88 @@ console.log(('password', password));
   };
 }
 
-async function login(body) {
-  const { email, password } = body;
+async function loginUser(data) {
+  const { identifier, password, device_info } = data;
 
-  const user = await findUserForLogin(email);
+  const identifierType = identifier.includes('@') ? 'email' : 'phone';
+  const user = await findUserWithActiveProfile(identifier, identifierType);
   if (!user) {
-    throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
-  }
-
-  if (!user.is_active) {
-    throw new AppError('Account disabled', 403, 'ACCOUNT_DISABLED');
+    throw new AppError('Invalid credentials', 401);
   }
 
   const passwordMatch = await bcrypt.compare(password, user.password_hash);
   if (!passwordMatch) {
-    throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
+    throw new AppError('Invalid credentials', 401);
   }
 
+  if (!user.is_verified) {
+    throw new AppError('Please verify your email before logging in', 403);
+  }
+
+  const client = await getClient();
+  let rawRefreshToken;
+  try {
+    await client.query('BEGIN');
+
+    if (device_info) {
+      await revokeUserRefreshTokensByDevice(client, user.user_id, device_info);
+    }
+
+    rawRefreshToken = `${crypto.randomUUID()}-${Date.now()}`;
+    const tokenHash = await bcrypt.hash(rawRefreshToken, 12);
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
+
+    await client.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [user.user_id, tokenHash, device_info ?? null, expiresAt]
+    );
+
+    await client.query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.user_id]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    throw err;
+  }
+  client.release();
+
+  const interests = await getUserInterests(user.user_id, user.profile_id);
+
   const accessToken = jwt.sign(
-    { user_id: user.id, email: user.email, role: user.role },
+    {
+      userId: user.user_id,
+      activeProfileId: user.active_profile_id,
+      profileType: user.profile_type,
+    },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN }
-  );
-  const refreshToken = jwt.sign(
-    { user_id: user.id },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN }
+    { expiresIn: '15m' }
   );
 
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
-  await insertRefreshToken(user.id, refreshToken, expiresAt, null, null);
-
-  return {
-    accessToken,
-    refreshToken,
-    user: { id: user.id, email: user.email, role: user.role },
+  const safeUser = {
+    id: user.user_id,
+    email: user.email,
+    phone: user.phone,
+    isVerified: user.is_verified,
+    activeProfileId: user.active_profile_id,
   };
+
+  const safeProfile = {
+    id: user.profile_id,
+    profileType: user.profile_type,
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url,
+    bio: user.bio,
+    city: user.city,
+    state: user.state,
+    country: user.country,
+    latitude: user.latitude,
+    longitude: user.longitude,
+    locationLabel: user.location_label,
+  };
+
+  return { accessToken, refreshToken: rawRefreshToken, user: safeUser, profile: safeProfile, interests };
 }
 
-module.exports = { registerUser, login };
+module.exports = { registerUser, loginUser };

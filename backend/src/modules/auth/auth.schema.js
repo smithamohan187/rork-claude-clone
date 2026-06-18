@@ -25,8 +25,17 @@ const registerSchema = Joi.object({
 });
 
 const loginSchema = Joi.object({
-  email: Joi.string().trim().lowercase().email().required(),
-  password: Joi.string().required(),
+  identifier: Joi.string().trim().required().custom((value, helpers) => {
+    if (value.includes('@')) {
+      const { error } = Joi.string().email().validate(value.toLowerCase());
+      if (error) return helpers.error('any.invalid');
+      return value.toLowerCase();
+    }
+    if (value.length < 10 || value.length > 15) return helpers.error('any.invalid');
+    return value;
+  }).messages({ 'any.invalid': 'Please provide a valid email or phone number (10–15 digits)' }),
+  password: Joi.string().min(8).required(),
+  device_info: Joi.string().max(255).optional(),
 });
 
 module.exports = { registerSchema, loginSchema };

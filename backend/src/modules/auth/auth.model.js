@@ -81,6 +81,82 @@ async function saveRefreshToken(client, { userId, token }) {
   );
 }
 
+async function findUserForLogin(email) {
+  
+  const { rows } = await query(
+    `SELECT u.id, u.email, u.password_hash, p.profile_type, p.is_active
+     FROM users u
+     INNER JOIN profiles p ON p.user_id = u.id
+     WHERE u.email = $1
+     LIMIT 1`,
+    [email]
+  );
+  return rows[0] ?? null;
+}
+
+async function insertRefreshToken(userId, token, expiresAt, deviceInfo, ipAddress) {
+  await query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, device_info, ip_address)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, token, expiresAt, deviceInfo ?? null, ipAddress ?? null]
+  );
+}
+
+async function findUserWithActiveProfile(identifier, identifierType) {
+  const column = identifierType === 'email' ? 'u.email' : 'u.phone';
+  const { rows } = await query(
+    `SELECT
+       u.id AS user_id,
+       u.email,
+       u.phone,
+       u.password_hash,
+       u.is_verified,
+       u.is_active,
+       u.active_profile_id,
+       p.id AS profile_id,
+       p.profile_type,
+       p.display_name,
+       p.avatar_url,
+       p.bio,
+       p.city,
+       p.state,
+       p.country,
+       p.latitude,
+       p.longitude,
+       p.location_label,
+       p.is_active AS profile_is_active
+     FROM users u
+     JOIN profiles p ON p.id = u.active_profile_id
+     WHERE ${column} = $1
+       AND u.is_active = TRUE
+       AND p.is_active = TRUE`,
+    [identifier]
+  );
+  return rows[0] ?? null;
+}
+
+async function revokeUserRefreshTokensByDevice(client, userId, deviceInfo) {
+  await client.query(
+    `UPDATE refresh_tokens
+     SET revoked_at = NOW()
+     WHERE user_id = $1
+       AND device_info = $2
+       AND revoked_at IS NULL`,
+    [userId, deviceInfo]
+  );
+}
+
+async function getUserInterests(userId, profileId) {
+  const { rows } = await query(
+    `SELECT ic.id, ic.name, ic.icon
+     FROM profile_interests pi
+     JOIN interest_categories ic ON ic.id = pi.interest_id
+     WHERE pi.profile_id = $1`,
+    [profileId]
+  );
+  return rows;
+}
+
 module.exports = {
   findUserByEmail,
   findUserByPhone,
@@ -91,4 +167,9 @@ module.exports = {
   findReferralCode,
   createReferral,
   saveRefreshToken,
+  findUserForLogin,
+  insertRefreshToken,
+  findUserWithActiveProfile,
+  revokeUserRefreshTokensByDevice,
+  getUserInterests,
 };

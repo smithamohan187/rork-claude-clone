@@ -52,25 +52,8 @@ async function insertUserInterests(client, profileId, interestAreaIds) {
   );
 }
 
-async function insertRefreshToken(userId, token, expiresAt, deviceInfo, ipAddress) {
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token, expires_at, device_info, ip_address)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, token, expiresAt, deviceInfo ?? null, ipAddress ?? null]
-  );
-}
 
-async function findUserForLogin(email) {
-  const { rows } = await query(
-    `SELECT u.id, u.email, u.password_hash, u.role, p.is_active
-     FROM users u
-     INNER JOIN profiles p ON p.user_id = u.id
-     WHERE u.email = $1
-     LIMIT 1`,
-    [email]
-  );
-  return rows[0] ?? null;
-}
+
 
 module.exports = {
   findUserByEmail,

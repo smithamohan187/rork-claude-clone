@@ -1,5 +1,5 @@
-const { signup, login, registerUser } = require('./auth.service');
-const { registerSchema } = require('./auth.schema');
+const { registerUser, loginUser } = require('./auth.service');
+const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
 const { ok } = require('../../utils/apiResponse');
 
@@ -7,8 +7,32 @@ const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
 const loginHandler = asyncHandler(async (req, res) => {
-  const data = await login(req.body);
-  res.status(200).json(ok(data));
+  const { error, value } = loginSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    throw new AppError(error.details.map((d) => d.message).join('; '), 400);
+  }
+
+  const result = await loginUser(value);
+
+  res
+    .cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    })
+    .status(200)
+    .json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        user: result.user,
+        profile: result.profile,
+        interests: result.interests,
+      },
+    });
 });
 
 const signupHandler = asyncHandler(async (req, res) => {
