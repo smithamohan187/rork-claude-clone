@@ -1,122 +1,125 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { getClient } = require('../../config/database');
 const { AppError } = require('../../middleware/errorHandler');
 const {
-  findUserByEmail,
-  findUserByPhone,
-  findProfileByReferralCode,
-  insertUser,
-  insertProfile,
-  insertUserInterests,
-  insertRefreshToken,
-  findUserForLogin,
-} = require('./auth.queries');
+  findUserByEmail: findUserByEmailNew,
+  findUserByPhone: findUserByPhoneNew,
+  createUser,
+  createProfile,
+  setActiveProfile,
+  insertProfileInterests,
+  findReferralCode,
+  createReferral,
+  saveRefreshToken,
+} = require('./auth.model');
 
-const SALT_ROUNDS = 12;
-console.log('jwt secret', process.env.JWT_SECRET);
-console.log('refresh token secret', process.env.REFRESH_TOKEN_SECRET);
-console.log('jwt expires in', process.env.JWT_EXPIRES_IN);
-console.log('refresh token expires in', process.env.REFRESH_TOKEN_EXPIRES_IN);
-//const ACCESS_TOKEN_EXPIRY = '15m';
-//const REFRESH_TOKEN_EXPIRY = '30d';
+const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
 const REFRESH_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
-async function signup(body, deviceInfo, ipAddress) {
+async function registerUser(data) {
   const {
-    full_name,
-    alias_name,
     email,
     phone,
     password,
-    location,
-    interest_area_ids,
+    display_name,
+    city,
+    state,
+    country,
+    latitude,
+    longitude,
+    location_label,
+    interests,
     referral_code,
-  } = body;
-
-  // Step 2 — Uniqueness checks
-  const existingByEmail = await findUserByEmail(email);
+  } = data.body;
+  
+  const existingByEmail = await findUserByEmailNew(email);
   if (existingByEmail) {
-    throw new AppError('Email already registered', 409, 'EMAIL_TAKEN');
+    throw new AppError('Email already registered', 409);
   }
   if (phone) {
-    const existingByPhone = await findUserByPhone(phone);
+    const existingByPhone = await findUserByPhoneNew(phone);
     if (existingByPhone) {
-      throw new AppError('Phone already registered', 409, 'PHONE_TAKEN');
+      throw new AppError('Phone already registered', 409);
     }
   }
-
-  // Step 3 — Referral code lookup (silent on not found)
-  let referredByProfileId = null;
-
-  // Step 4 — Hash password
+console.log(('password', password));
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-  // Step 5 — DB transaction
   const client = await getClient();
-  let user, profile;
+  let user, profile, accessToken, rawRefreshToken;
   try {
     await client.query('BEGIN');
 
-    if (referral_code) {
-      const referrer = await findProfileByReferralCode(client, referral_code);
-      if (referrer) referredByProfileId = referrer.id;
+    user = await createUser(client, {
+      email,
+      phone,
+      passwordHash,
+      pendingReferralCode: referral_code ?? null,
+    });
+
+    profile = await createProfile(client, {
+      userId: user.id,
+      displayName: display_name,
+      city,
+      state,
+      country,
+      latitude,
+      longitude,
+      locationLabel: location_label,
+    });
+
+    await setActiveProfile(client, user.id, profile.id);
+
+    if (Array.isArray(interests) && interests.length > 0) {
+      await insertProfileInterests(client, profile.id, interests);
     }
 
-    user = await insertUser(client, email, phone, passwordHash);
-    profile = await insertProfile(
-      client,
-      user.id,
-      full_name.trim(),
-      alias_name,
-      location,
-      referredByProfileId
+    if (referral_code) {
+      const referralCodeRow = await findReferralCode(client, referral_code);
+      if (referralCodeRow) {
+        await createReferral(client, {
+          referralCodeId: referralCodeRow.id,
+          referrerUserId: referralCodeRow.owner_user_id,
+          referredUserId: user.id,
+          type: referralCodeRow.type,
+        });
+      }
+    }
+
+    rawRefreshToken = `${crypto.randomUUID()}-${Date.now()}`;
+
+    accessToken = jwt.sign(
+      { userId: user.id, activeProfileId: profile.id, profileType: 'personal' },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
     );
 
-    if (Array.isArray(interest_area_ids) && interest_area_ids.length > 0) {
-      await insertUserInterests(client, profile.id, interest_area_ids);
-    }
+    await saveRefreshToken(client, { userId: user.id, token: rawRefreshToken });
 
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
-    throw err;
-  } finally {
     client.release();
+    throw err;
   }
+  client.release();
 
-  // Step 6 — Generate tokens
-  const accessToken = jwt.sign(
-    { user_id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN }
-  );
-  const refreshToken = jwt.sign(
-    { user_id: user.id },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN }
-  );
-
-  // Step 7 — Store refresh token
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
-  await insertRefreshToken(user.id, refreshToken, expiresAt, deviceInfo, ipAddress);
-
-  // Step 8 — Return
   return {
     accessToken,
-    refreshToken,
+    refreshToken: rawRefreshToken,
     user: {
       id: user.id,
       email: user.email,
       phone: user.phone,
-      role: user.role,
     },
     profile: {
       id: profile.id,
-      full_name: profile.full_name,
-      alias_name: profile.alias_name,
-      location: profile.location,
-      referral_code: profile.referral_code,
+      display_name: profile.display_name,
+      city: profile.city,
+      state: profile.state,
+      country: profile.country,
       profile_type: profile.profile_type,
     },
   };
@@ -160,4 +163,4 @@ async function login(body) {
   };
 }
 
-module.exports = { signup, login };
+module.exports = { registerUser, login };
