@@ -1,4 +1,4 @@
-const { registerUser, loginUser } = require('./auth.service');
+const { registerUser, loginUser, logout } = require('./auth.service');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
 const { ok } = require('../../utils/apiResponse');
@@ -84,4 +84,13 @@ const registerHandler = asyncHandler(async (req, res) => {
     });
 });
 
-module.exports = { signupHandler, loginHandler };
+const logoutHandler = asyncHandler(async (req, res, next) => {
+  try {
+    await logout(req.user.userId, req.body.refreshToken);
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = { signupHandler, loginHandler, logoutHandler };

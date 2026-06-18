@@ -18,6 +18,10 @@ const {
   findUserWithActiveProfile,
   revokeUserRefreshTokensByDevice,
   getUserInterests,
+  insertLoginRefreshToken,
+  touchUserUpdatedAt,
+  findActiveRefreshTokensByUser,
+  revokeRefreshTokenById,
 } = require('./auth.model');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
@@ -161,13 +165,9 @@ async function loginUser(data) {
     const tokenHash = await bcrypt.hash(rawRefreshToken, 12);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
-    await client.query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at)
-       VALUES ($1, $2, $3, $4)`,
-      [user.user_id, tokenHash, device_info ?? null, expiresAt]
-    );
+    await insertLoginRefreshToken(client, { userId: user.user_id, tokenHash, deviceInfo: device_info, expiresAt });
 
-    await client.query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.user_id]);
+    await touchUserUpdatedAt(client, user.user_id);
 
     await client.query('COMMIT');
   } catch (err) {
@@ -214,4 +214,23 @@ async function loginUser(data) {
   return { accessToken, refreshToken: rawRefreshToken, user: safeUser, profile: safeProfile, interests };
 }
 
-module.exports = { registerUser, loginUser };
+async function logout(userId, refreshToken) {
+  const rows = await findActiveRefreshTokensByUser(userId);
+
+  let matchedId = null;
+  for (const row of rows) {
+    const match = await bcrypt.compare(refreshToken, row.token_hash);
+    if (match) {
+      matchedId = row.id;
+      break;
+    }
+  }
+
+  if (!matchedId) return { success: true };
+
+  await revokeRefreshTokenById(matchedId, userId);
+
+  return { success: true };
+}
+
+module.exports = { registerUser, loginUser, logout };

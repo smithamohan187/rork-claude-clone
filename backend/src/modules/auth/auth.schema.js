@@ -38,4 +38,8 @@ const loginSchema = Joi.object({
   device_info: Joi.string().max(255).optional(),
 });
 
-module.exports = { registerSchema, loginSchema };
+const logoutSchema = Joi.object({
+  refreshToken: Joi.string().required(),
+});
+
+module.exports = { registerSchema, loginSchema, logoutSchema };

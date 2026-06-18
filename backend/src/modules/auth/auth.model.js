@@ -157,6 +157,35 @@ async function getUserInterests(userId, profileId) {
   return rows;
 }
 
+async function insertLoginRefreshToken(client, { userId, tokenHash, deviceInfo, expiresAt }) {
+  await client.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_info, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, tokenHash, deviceInfo ?? null, expiresAt]
+  );
+}
+
+async function touchUserUpdatedAt(client, userId) {
+  await client.query('UPDATE users SET updated_at = NOW() WHERE id = $1', [userId]);
+}
+
+async function findActiveRefreshTokensByUser(userId) {
+  const { rows } = await query(
+    `SELECT id, token_hash
+     FROM refresh_tokens
+     WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+    [userId]
+  );
+  return rows;
+}
+
+async function revokeRefreshTokenById(id, userId) {
+  await query(
+    'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2',
+    [id, userId]
+  );
+}
+
 module.exports = {
   findUserByEmail,
   findUserByPhone,
@@ -172,4 +201,8 @@ module.exports = {
   findUserWithActiveProfile,
   revokeUserRefreshTokensByDevice,
   getUserInterests,
+  insertLoginRefreshToken,
+  touchUserUpdatedAt,
+  findActiveRefreshTokensByUser,
+  revokeRefreshTokenById,
 };
