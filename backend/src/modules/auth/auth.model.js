@@ -27,12 +27,12 @@ async function createUser(client, { email, phone, passwordHash, pendingReferralC
   return rows[0];
 }
 
-async function createProfile(client, { userId, displayName, city, state, country, latitude, longitude, locationLabel }) {
+async function createProfile(client, { userId, displayName, location, state, country, latitude, longitude, locationLabel }) {
   const { rows } = await client.query(
     `INSERT INTO profiles (user_id, profile_type, display_name, city, state, country, latitude, longitude, location_label)
      VALUES ($1, 'personal', $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, user_id, profile_type, display_name, city, state, country, latitude, longitude, location_label, created_at`,
-    [userId, displayName, city, state, country ?? 'IN', latitude ?? null, longitude ?? null, locationLabel ?? null]
+    [userId, displayName, location, state, country ?? 'IN', latitude ?? null, longitude ?? null, locationLabel ?? null]
   );
   return rows[0];
 }

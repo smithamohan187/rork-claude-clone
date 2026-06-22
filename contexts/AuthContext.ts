@@ -216,6 +216,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     setAuthUser(user);
+    console.log('[Auth] loginWithTokens success, user:', user);
     return user;
   }, []);
 

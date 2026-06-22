@@ -13,9 +13,9 @@ const registerSchema = Joi.object({
       'string.pattern.base':
         'Password must contain at least one uppercase letter, one number, and one special character',
     }),
-  display_name: Joi.string().min(2).max(100).required(),
-  city: Joi.string().required(),
-  state: Joi.string().required(),
+  full_name: Joi.string().min(2).max(100).required(),
+  location: Joi.string().optional(),
+  state: Joi.string().optional(),
   country: Joi.string().default('IN').optional(),
   latitude: Joi.number().min(-90).max(90).optional(),
   longitude: Joi.number().min(-180).max(180).optional(),

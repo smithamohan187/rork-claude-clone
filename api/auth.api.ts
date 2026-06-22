@@ -55,7 +55,8 @@ function extractAuthTokens(data: AuthTokens): { accessToken: string | null; refr
 export const authApi = {
 
   // Register a new account — stores both tokens on success
-  async signup(payload: SignupPayload): Promise<ApiResult<AuthTokens>> {
+ /* async signup(payload: SignupPayload): Promise<ApiResult<AuthTokens>> {
+    console.log('[authApi] signup payload:', payload);
     const result = await apiClient.post<AuthTokens>('/auth/signup', payload);
     if (result.success && result.data) {
       const { accessToken, refreshToken } = extractAuthTokens(result.data);
@@ -67,7 +68,7 @@ export const authApi = {
       console.log('[authApi] signup success, userId:', result.data.userId);
     }
     return result;
-  },
+  },*/
 
   // Log in — stores both tokens on success
   async login(payload: LoginPayload): Promise<ApiResult<AuthTokens>> {

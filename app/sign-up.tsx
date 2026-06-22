@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,11 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Snackbar } from 'react-native-paper';
 import { THEME } from '@/theme/tokens';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
-import { authApi } from '@/api/auth.api';
-import { setAuthToken, setRefreshToken } from '@/api/client';
+import { useSignUp } from '@/hooks/useSignUp';
+import { fetchCategories, Category } from '@/api/services/categoriesService';
 
 const PRIMARY      = THEME.colors.primary;
 const PRIMARY_DARK = THEME.colors.primaryDark;
@@ -37,64 +38,46 @@ const STRENGTH_COLORS = {
 } as const;
 const STRENGTH_LABELS = { 0: '', 1: 'Weak', 2: 'Fair', 3: 'Good', 4: 'Strong' } as const;
 
-const INTEREST_CATEGORIES = [
-  'Food & Dining',
-  'Shopping & Fashion',
-  'Health & Fitness',
-  'Beauty & Wellness',
-  'Entertainment',
-  'Travel & Tourism',
-  'Technology',
-  'Home & Garden',
-  'Sports & Recreation',
-  'Education',
-  'Automotive',
-  'Finance & Banking',
-];
+const SPECIAL_CHAR_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
 const AUTH_BG = require('../assets/images/auth-bg.png');
 
-type StrengthLevel = 0 | 1 | 2 | 3 | 4;
-
-function computeStrength(pw: string): StrengthLevel {
-  if (pw.length === 0) return 0;
-  if (pw.length < 6) return 1;
-  const hasUpper   = /[A-Z]/.test(pw);
-  const hasLower   = /[a-z]/.test(pw);
-  const hasNumber  = /[0-9]/.test(pw);
-  const hasSpecial = /[^a-zA-Z0-9]/.test(pw);
-  if (pw.length >= 8 && hasUpper && hasLower && hasNumber && hasSpecial) return 4;
-  if (/[a-zA-Z]/.test(pw) && hasNumber) return 3;
-  return 2;
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-
 export default function SignUpScreen() {
-  const router  = useRouter();
-  const insets  = useSafeAreaInsets();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  // Form fields
-  const [fullName, setFullName]               = useState('');
-  const [email, setEmail]                     = useState('');
-  const [phoneNumber, setPhoneNumber]         = useState('');
-  const [password, setPassword]               = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [location, setLocation]               = useState('');
-  const [interests, setInterests]             = useState<string[]>([]);
-  const [referralCode, setReferralCode]       = useState('');
-  const [showPassword, setShowPassword]       = useState(false);
-  const [showConfirm, setShowConfirm]         = useState(false);
-  const [focusedField, setFocusedField]       = useState<string | null>(null);
-  const [submitted, setSubmitted]             = useState(false);
+  const {
+    fullName,    setFullName,
+    email,       setEmail,
+    phoneNumber, setPhoneNumber,
+    password,    setPassword,
+    confirmPassword, setConfirmPassword,
+    location,    setLocation,
+    interests,
+    referralCode, setReferralCode,
+    showPassword, setShowPassword,
+    showConfirm,  setShowConfirm,
+    focusedField,
+    strength,
+    nameError, emailError, passwordError, confirmError,
+    loading, authError, registrationSucceeded,
+    handleRegister,
+    toggleInterest,
+    inputFocus,
+    inputBlur,
+    clearOnChange,
+  } = useSignUp();
 
-  // Registration state — managed locally so finally() always resets it
-  const [loading, setLoading]   = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [debugInfo, setDebugInfo] = useState('');
+  // ── Local validation state ────────────────────────────────────────────────
+  const [phoneError, setPhoneError]               = useState('');
+  const [localPasswordError, setLocalPasswordError] = useState('');
+  const [snackbarVisible, setSnackbarVisible]     = useState(false);
 
+  // ── Dynamic categories ────────────────────────────────────────────────────
+  const [categories, setCategories]           = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+
+  // ── Animations ────────────────────────────────────────────────────────────
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
   useEffect(() => {
@@ -104,86 +87,51 @@ export default function SignUpScreen() {
     ]).start();
   }, []);
 
-  const strength = useMemo(() => computeStrength(password), [password]);
-
-  const nameError     = submitted && fullName.trim().length === 0 ? 'Full name is required' : '';
-  const emailError    = submitted && !isValidEmail(email) ? 'Enter a valid email address' : '';
-  const passwordError = submitted
-    ? password.length < 6 ? 'Password must be at least 6 characters'
-      : strength < 2 ? 'Password is too weak' : ''
-    : '';
-  const confirmError = submitted && confirmPassword !== password ? 'Passwords do not match' : '';
-
-  const toggleInterest = useCallback((cat: string) => {
-    setInterests(prev =>
-      prev.includes(cat) ? prev.filter(i => i !== cat) : [...prev, cat],
-    );
+  // ── Fetch interest categories on mount ────────────────────────────────────
+  useEffect(() => {
+    setCategoriesLoading(true);
+    fetchCategories()
+      .then(setCategories)
+      .catch(err => { if (__DEV__) console.error('[sign-up] fetchCategories error:', err); })
+      .finally(() => setCategoriesLoading(false));
   }, []);
 
-  // ── Registration handler ────────────────────────────────────────────────────
-  const handleRegister = useCallback(async () => {
-    if (loading) return;
+  // ── Show snackbar on successful registration ──────────────────────────────
+  useEffect(() => {
+    if (registrationSucceeded) setSnackbarVisible(true);
+  }, [registrationSucceeded]);
 
-    setSubmitted(true);
-    setAuthError('');
-    setDebugInfo('');
+  const handleSnackbarDismiss = () => {
+    setSnackbarVisible(false);
+    router.replace('/(tabs)/feed' as never);
+  };
 
-    // Client-side validation — bail out without touching loading state
-    if (fullName.trim().length === 0) return;
-    if (!isValidEmail(email)) return;
-    if (password.length < 6 || computeStrength(password) < 2) return;
-    if (confirmPassword !== password) return;
-
-    setLoading(true);
-
-    try {
-      setDebugInfo('Step 1/4 — Sending registration request…');
-      const result = await authApi.signup({
-        email:         email.trim().toLowerCase(),
-        password,
-        full_name:     fullName.trim(),
-        phone:         phoneNumber.trim() || undefined,
-        location:      location.trim()   || undefined,
-        interests:     interests.length  ? interests : undefined,
-        referral_code: referralCode.trim().toUpperCase() || undefined,
-      });
-
-      if (!result.success || !result.data) {
-        const msg = result.error ?? 'Registration failed. Please try again.';
-        setDebugInfo(`Error: ${msg}`);
-        setAuthError(msg);
-        return; // finally still runs
-      }
-
-      setDebugInfo('Step 2/4 — Storing access token…');
-      await setAuthToken(result.data.accessToken);
-
-      setDebugInfo('Step 3/4 — Storing refresh token…');
-      await setRefreshToken(result.data.refreshToken);
-
-      setDebugInfo('Step 4/4 — Success! Navigating to home…');
-      // Replace immediately — no Alert blocking the thread
-      router.replace('/(tabs)/feed' as never);
-
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unexpected error. Please try again.';
-      console.error('[SignUp] handleRegister error:', msg, err);
-      setDebugInfo(`Error: ${msg}`);
-      setAuthError(msg);
-    } finally {
-      // Always re-enable the button so the screen is never frozen
-      setLoading(false);
+  // ── Local submit wrapper — runs extra validation before calling hook ───────
+  const handleSubmit = () => {
+    // Phone validation (optional field — only validate if non-empty)
+    const stripped = phoneNumber.replace(/\D/g, '');
+    if (stripped.length > 0 && stripped.length !== 10) {
+      setPhoneError('Phone number must be exactly 10 digits');
+      return;
     }
-  }, [
-    loading, fullName, email, phoneNumber,
-    password, confirmPassword, location, interests, referralCode, router,
-  ]);
+    setPhoneError('');
 
-  const inputFocus    = (field: string) => () => setFocusedField(field);
-  const inputBlur     = () => setFocusedField(null);
-  const clearOnChange = (setter: (v: string) => void) => (v: string) => {
-    setter(v);
-    if (submitted) setSubmitted(false);
+    // Password validation (new stricter rules)
+    if (password.length < 8) {
+      setLocalPasswordError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setLocalPasswordError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!SPECIAL_CHAR_RE.test(password)) {
+      setLocalPasswordError('Password must contain at least one special character');
+      return;
+    }
+    setLocalPasswordError('');
+
+    handleRegister();
   };
 
   return (
@@ -263,7 +211,7 @@ export default function SignUpScreen() {
                 <Text style={styles.inputLabel}>
                   Phone Number<Text style={styles.optionalTag}> (Optional)</Text>
                 </Text>
-                <View style={[styles.inputWrap, focusedField === 'phone' && styles.inputWrapFocused]}>
+                <View style={[styles.inputWrap, focusedField === 'phone' && styles.inputWrapFocused, !!phoneError && styles.inputWrapError]}>
                   <View style={styles.countryCode}>
                     <Text style={styles.countryCodeText}>+91</Text>
                   </View>
@@ -272,12 +220,16 @@ export default function SignUpScreen() {
                     placeholder="98765 43210"
                     placeholderTextColor={TEXT_TERTIARY}
                     value={phoneNumber}
-                    onChangeText={(t) => setPhoneNumber(t.replace(/\D/g, ''))}
+                    onChangeText={(t) => {
+                      setPhoneNumber(t.replace(/\D/g, ''));
+                      if (phoneError) setPhoneError('');
+                    }}
                     onFocus={inputFocus('phone')}
                     onBlur={inputBlur}
                     keyboardType="phone-pad"
                   />
                 </View>
+                {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
               </View>
 
               <View style={styles.divider} />
@@ -290,13 +242,16 @@ export default function SignUpScreen() {
                 <Text style={styles.inputLabel}>
                   Password<Text style={styles.required}> *</Text>
                 </Text>
-                <View style={[styles.inputWrap, focusedField === 'password' && styles.inputWrapFocused, !!passwordError && styles.inputWrapError]}>
+                <View style={[styles.inputWrap, focusedField === 'password' && styles.inputWrapFocused, !!(localPasswordError || passwordError) && styles.inputWrapError]}>
                   <TextInput
                     style={styles.input}
                     placeholder="Create a password"
                     placeholderTextColor={TEXT_TERTIARY}
                     value={password}
-                    onChangeText={clearOnChange(setPassword)}
+                    onChangeText={(v) => {
+                      clearOnChange(setPassword)(v);
+                      if (localPasswordError) setLocalPasswordError('');
+                    }}
                     onFocus={inputFocus('password')}
                     onBlur={inputBlur}
                     secureTextEntry={!showPassword}
@@ -318,7 +273,9 @@ export default function SignUpScreen() {
                     </Text>
                   </View>
                 )}
-                {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
+                {!!(localPasswordError || passwordError) && (
+                  <Text style={styles.errorText}>{localPasswordError || passwordError}</Text>
+                )}
               </View>
 
               {/* Confirm Password */}
@@ -376,19 +333,23 @@ export default function SignUpScreen() {
                 </Text>
                 <Text style={styles.helperText}>Select all that apply</Text>
                 <View style={styles.chipsWrap}>
-                  {INTEREST_CATEGORIES.map(cat => {
-                    const selected = interests.includes(cat);
-                    return (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[styles.chip, selected && styles.chipSelected]}
-                        onPress={() => toggleInterest(cat)}
-                        activeOpacity={0.75}
-                      >
-                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{cat}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {categoriesLoading ? (
+                    <ActivityIndicator size="small" color={PRIMARY} />
+                  ) : (
+                    categories.map(cat => {
+                      const selected = interests.includes(cat.id);
+                      return (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[styles.chip, selected && styles.chipSelected]}
+                          onPress={() => toggleInterest(cat.id)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{cat.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
                 </View>
               </View>
 
@@ -425,7 +386,7 @@ export default function SignUpScreen() {
               {/* Submit */}
               <TouchableOpacity
                 style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-                onPress={handleRegister}
+                onPress={handleSubmit}
                 activeOpacity={0.9}
                 disabled={loading}
               >
@@ -438,11 +399,6 @@ export default function SignUpScreen() {
                   <Text style={styles.primaryBtnText}>Create Account</Text>
                 )}
               </TouchableOpacity>
-
-              {/* Debug progress — visible step-by-step trace */}
-              {!!debugInfo && (
-                <Text style={styles.debugInfo} testID="debug-info">{debugInfo}</Text>
-              )}
 
               <TouchableOpacity
                 style={styles.loginLink}
@@ -458,6 +414,14 @@ export default function SignUpScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={handleSnackbarDismiss}
+        duration={3000}
+      >
+        Registration successful! Welcome to TouchPoints.
+      </Snackbar>
     </ImageBackground>
   );
 }
@@ -663,18 +627,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#FFF',
-  },
-
-  /* Debug info — step-by-step trace shown below the button */
-  debugInfo: {
-    fontFamily: THEME.font.regular,
-    fontSize: 11,
-    fontWeight: '400' as const,
-    color: '#888888',
-    marginTop: 10,
-    paddingHorizontal: 4,
-    lineHeight: 16,
-    textAlign: 'center',
   },
 
   /* Footer */
