@@ -100,7 +100,14 @@ axiosInstance.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config as AxiosRequestConfig & { _isRetry?: boolean };
-    if (err.response?.status === 401 && !original._isRetry) {
+
+    // ✅ Skip interceptor for auth endpoints
+    const requestUrl = original?.url ?? '';
+    const isAuthRoute = requestUrl.includes('/auth/login') ||
+                        requestUrl.includes('/auth/signup') ||
+                        requestUrl.includes('/auth/refresh');
+
+    if (err.response?.status === 401 && !original._isRetry && !isAuthRoute) {
       original._isRetry = true;
       const refreshed = await tryRefreshAccessToken();
       if (refreshed) return axiosInstance(original);

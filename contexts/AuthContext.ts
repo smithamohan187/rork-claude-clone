@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { signOut } from '@/api/services/authService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import createContextHook from '@nkzw/create-context-hook';
 import { testUsers, currentBusinessUser } from '@/mocks/data';
@@ -70,6 +72,7 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [accountType, setAccountType] = useState<AccountType>('personal');
   const [hasOnboarded, setHasOnboarded] = useState<boolean>(true);
   const [hasBusinessProfile, setHasBusinessProfile] = useState<boolean>(true);
@@ -220,23 +223,40 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return user;
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<void> => {
+  /*const login = useCallback(async (email: string, password: string): Promise<void> => {
     const result = await authApi.login({ email, password });
     if (!result.success || !result.data) {
       throw new Error(result.error ?? 'Login failed');
     }
     await loginWithTokens(result.data, email);
-  }, [loginWithTokens]);
+  }, [loginWithTokens]);*/
 
   const logout = useCallback(async (): Promise<void> => {
     try {
-      await authApi.logout();
-    } catch {
+      const storedRefreshToken = await getRefreshToken();
+      if (storedRefreshToken) await signOut(storedRefreshToken);
+    } catch (err) {
+      if (__DEV__) console.warn('[AuthContext] logout backend call failed:', err);
+    } finally {
       await clearTokens();
+      await AsyncStorage.multiRemove([
+        ACCOUNT_TYPE_KEY,
+        ONBOARDED_KEY,
+        HAS_BUSINESS_PROFILE_KEY,
+        BUSINESS_PROFILE_DATA_KEY,
+        IS_ADMIN_KEY,
+        LAST_ACTIVE_PROFILE_KEY,
+      ]);
+      setAuthUser(null);
+      setAccountType('personal');
+      setHasOnboarded(true);
+      setHasBusinessProfile(false);
+      setBusinessProfileData(null);
+      setIsAdmin(false);
+      setTestUserIndex(0);
+      router.replace('/sign-in');
     }
-    setAuthUser(null);
-    setAccountType('personal');
-  }, []);
+  }, [router]);
 
   const loginAsAdmin = useCallback(async () => {
     setIsAdmin(true);
@@ -424,7 +444,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     isAuthenticated: !!authUser,
     authUser,
     loginWithTokens,
-    login,
     logout,
     switchAccount,
     loginAsAdmin,

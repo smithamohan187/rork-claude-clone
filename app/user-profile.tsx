@@ -76,9 +76,11 @@ export default function UserProfileScreen() {
     personalUser,
     activeProfile,
     businessProfileData,
+    logout,
   } = useAuth();
 
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false);
+  const [loggingOut, setLoggingOut] = useState<boolean>(false);
   const [showBadgeModal, setShowBadgeModal] = useState<boolean>(false);
   const ownBusinessKey = (businessProfileData?.username || mockBusinessSignUpData.username || 'self');
   const [businessTypeSettings, setLocalBusinessTypeSettings] = useState(() => getBusinessTypeSettings(ownBusinessKey));
@@ -134,11 +136,12 @@ export default function UserProfileScreen() {
     setShowLogoutDialog(true);
   }, []);
 
-  const confirmLogout = useCallback(() => {
+  const confirmLogout = useCallback(async () => {
     setShowLogoutDialog(false);
-    console.log('[UserProfile] User logged out, navigating to login');
-    router.replace('/' as any);
-  }, [router]);
+    setLoggingOut(true);
+    await logout();
+    setLoggingOut(false);
+  }, [logout]);
 
   return (
     <View style={styles.root}>
@@ -637,9 +640,10 @@ export default function UserProfileScreen() {
             <Button
               onPress={confirmLogout}
               textColor="#ED4956"
+              disabled={loggingOut}
               testID="logout-confirm"
             >
-              Log Out
+              {loggingOut ? 'Logging out…' : 'Log Out'}
             </Button>
           </Dialog.Actions>
         </Dialog>

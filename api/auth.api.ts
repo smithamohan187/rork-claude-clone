@@ -18,11 +18,11 @@ export type SignupPayload = {
   referral_code?: string;
 };
 
-export type LoginPayload = {
+/*export type LoginPayload = {
   email:    string;
   password: string;
 };
-
+*/
 export type AuthTokens = {
   userId:        string;
   profileId?:    string;
@@ -44,12 +44,12 @@ export type SessionResponse = {
   profile?:   Record<string, unknown>;
 };
 
-function extractAuthTokens(data: AuthTokens): { accessToken: string | null; refreshToken: string | null } {
+/*function extractAuthTokens(data: AuthTokens): { accessToken: string | null; refreshToken: string | null } {
   return {
     accessToken: data.accessToken ?? data.tokens?.accessToken ?? null,
     refreshToken: data.refreshToken ?? data.tokens?.refreshToken ?? null,
   };
-}
+}*/
 
 // ── Auth API ──────────────────────────────────────────────────────────────────
 export const authApi = {
@@ -71,7 +71,7 @@ export const authApi = {
   },*/
 
   // Log in — stores both tokens on success
-  async login(payload: LoginPayload): Promise<ApiResult<AuthTokens>> {
+  /*async login(payload: LoginPayload): Promise<ApiResult<AuthTokens>> {
     try {
       const result = await apiClient.post<AuthTokens>(
         '/auth/login',
@@ -131,7 +131,7 @@ export const authApi = {
   // Send OTP to email or phone
   async sendOtp(payload: { identifier: string; type: 'email' | 'phone' }): Promise<ApiResult<{ ok: true }>> {
     return apiClient.post<{ ok: true }>('/auth/otp/send', payload);
-  },
+  },*/
 
   // Fetch the current user from the server (validates access token)
   async getSession(): Promise<ApiResult<SessionResponse>> {

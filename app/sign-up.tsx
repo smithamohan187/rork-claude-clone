@@ -38,7 +38,7 @@ const STRENGTH_COLORS = {
 } as const;
 const STRENGTH_LABELS = { 0: '', 1: 'Weak', 2: 'Fair', 3: 'Good', 4: 'Strong' } as const;
 
-const SPECIAL_CHAR_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
+//const SPECIAL_CHAR_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
 const AUTH_BG = require('../assets/images/auth-bg.png');
 
@@ -117,7 +117,7 @@ export default function SignUpScreen() {
     setPhoneError('');
 
     // Password validation (new stricter rules)
-    if (password.length < 8) {
+    /*if (password.length < 8) {
       setLocalPasswordError('Password must be at least 8 characters');
       return;
     }
@@ -128,7 +128,7 @@ export default function SignUpScreen() {
     if (!SPECIAL_CHAR_RE.test(password)) {
       setLocalPasswordError('Password must contain at least one special character');
       return;
-    }
+    }*/
     setLocalPasswordError('');
 
     handleRegister();

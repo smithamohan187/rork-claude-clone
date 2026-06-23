@@ -139,6 +139,7 @@ async function loginUser(data) {
 
   const identifierType = identifier.includes('@') ? 'email' : 'phone';
   const user = await findUserWithActiveProfile(identifier, identifierType);
+  console.log('User found for login:', user);
   if (!user) {
     throw new AppError('Invalid credentials', 401);
   }

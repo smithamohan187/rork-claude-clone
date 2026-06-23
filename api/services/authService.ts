@@ -11,3 +11,19 @@ export async function signUp(payload: SignupPayload): Promise<SignUpResponse> {
   }
   return result.data;
 }
+
+export interface SignInPayload {
+  identifier: string;
+  password: string;
+}
+export async function signIn(payload: SignInPayload): Promise<SignUpResponse> {
+  const result = await apiClient.post<SignUpResponse>('/auth/login', payload);
+  if (!result.success || !result.data) {
+    throw new Error(result.error ?? 'Login failed. Please try again.');
+  }
+  return result.data;
+}
+
+export async function signOut(refreshToken: string): Promise<void> {
+  await apiClient.post('/auth/logout', { refreshToken });
+}

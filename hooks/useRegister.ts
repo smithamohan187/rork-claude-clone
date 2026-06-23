@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+/*import { useCallback, useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { authApi, type SignupPayload } from '@/api/auth.api';
 
@@ -112,3 +112,4 @@ export function useRegister(options?: UseRegisterOptions) {
     reset:           mutation.reset,
   };
 }
+*/
