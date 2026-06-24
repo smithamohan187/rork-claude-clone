@@ -28,7 +28,8 @@ import { BusinessNudgeBanner } from '@/components/feed/BusinessNudgeBanner';
 import { usePosts } from '@/contexts/PostsContext';
 import type { BusinessPost } from '@/mocks/posts';
 import { FeedSkeleton } from '@/components/feed/FeedSkeleton';
-import apiClient from '@/services/apiClient';
+// TODO: restore when business profile check is wired to real API
+// import apiClient from '@/services/apiClient';
 import { useCoupons } from '@/contexts/CouponContext';
 import { FullScreenFeedViewer, type ViewerEntry } from '@/components/feed/FullScreenFeedViewer';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -90,23 +91,9 @@ export default function PersonalisedFeedScreen() {
   const { unreadCount } = useNotifications();
   useEffect(() => {
     const checkNudge = async () => {
-      try {
-        const dismissed = await AsyncStorage.getItem('business_nudge_dismissed');
-        if (dismissed) return;
-
-        const { data: userData } = await apiClient.getCurrentUser();
-        if (!userData) return;
-
-        const { data: profile } = await apiClient.get<{ id: string }>(
-          'profiles',
-          { user_id: userData.id, profile_type: 'business' as never },
-          { maybeSingle: true },
-        );
-
-        if (!profile) setShowBusinessNudge(true);
-      } catch {
-        // Suppress — banner stays hidden if checks fail
-      }
+      // TODO: restore when business profile check is wired to real API
+      // Previously used old Supabase apiClient to check for a business profile row.
+      // For now, showBusinessNudge stays true (already the default).
     };
     checkNudge();
   }, []);
@@ -406,6 +393,7 @@ const header = useMemo(() => {
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
+      {/* TODO: ActiveProfileBadge inside UnifiedTopHeader still imports from AuthContext1 — migrate components/ActiveProfileBadge.tsx separately */}
       <UnifiedTopHeader
         searchEnabled
         searchActive={searchActive}

@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Animated,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,18 +42,10 @@ import {
 } from 'lucide-react-native';
 import { Modal as RNModal } from 'react-native';
 import { Snackbar } from 'react-native-paper';
-import {
-  getBusinessTypeSettings,
-  setBusinessTypeSettings,
-} from '@/services/businessTypeRegistry';
-import { mockBusinessSignUpData } from '@/mocks/data';
 import { useRouter } from 'expo-router';
-import { useAuth1 } from '@/contexts/AuthContext1';
-import ProfileSwitcherPill from '@/components/ProfileSwitcherPill';
-import ProfileContextBanner from '@/components/ProfileContextBanner';
+import { useAuth } from '@/contexts/AuthContext';
 import { BadgeCard, BadgeDetailModal } from '@/components/badges';
 import { getBadgeForPoints, NO_BADGE_ICON } from '@/config/badgeTiers';
-import { getTrustedFriendsSummary } from '@/app/my-referrals';
 
 const PURPLE = '#1A5C35';
 const PURPLE_LIGHT = '#00B246';
@@ -72,54 +63,33 @@ export default function UserProfileScreen() {
       return false;
     }
   })();
-  console.log("use Auth() in UserProfileScreen", useAuth1());
-  const {
-    authUser,
-    activeProfile,
-    businessProfileData,
-    logout,
-  } = useAuth1();
+  const { authUser, accountType, logout } = useAuth();
 
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false);
   const [loggingOut, setLoggingOut] = useState<boolean>(false);
   const [showBadgeModal, setShowBadgeModal] = useState<boolean>(false);
-  const ownBusinessKey = (businessProfileData?.username || mockBusinessSignUpData.username || 'self');
-  const [businessTypeSettings, setLocalBusinessTypeSettings] = useState(() => getBusinessTypeSettings(ownBusinessKey));
-  const isGoodwillBusiness = businessTypeSettings.businessType === 'goodwill';
   const [switchSheetStep, setSwitchSheetStep] = useState<0 | 1 | 2>(0);
   const [snackbar, setSnackbar] = useState<string>('');
-  const contentFadeAnim = useRef(new Animated.Value(1)).current;
-  const prevProfileTypeRef = useRef<string>(activeProfile.type);
 
-  useEffect(() => {
-    if (prevProfileTypeRef.current !== activeProfile.type) {
-      prevProfileTypeRef.current = activeProfile.type;
-      contentFadeAnim.setValue(0);
-      Animated.timing(contentFadeAnim, {
-        toValue: 1,
-        duration: 280,
-        useNativeDriver: true,
-      }).start();
-      console.log('[UserProfile] Cross-fade animation triggered for', activeProfile.type);
-    }
-  }, [activeProfile.type, contentFadeAnim]);
+  // Stub consts — replace when business module is wired
+  const isGoodwillBusiness = false;
+  const ownBusinessKey = 'self';
+  const businessTypeSettings = { businessType: 'goodwill' as const };
+  const setLocalBusinessTypeSettings = (_: typeof businessTypeSettings) => {};
 
-  const currentAvatar = activeProfile.avatarUrl;
-  const currentName = activeProfile.displayName;
-  const isBusinessActive = activeProfile.type === 'business';
-
-  const currentEmail = isBusinessActive
-    ? (businessProfileData?.email || 'business@touchpoint.com')
-    : (personalUser.email || 'alex.rivera@email.com');
+  const isBusinessActive = accountType === 'business';
+  const currentAvatar = authUser?.avatar ?? null;
+  const currentName = authUser?.name ?? authUser?.email ?? '';
+  const currentEmail = authUser?.email ?? '';
 
   const memberSince = isBusinessActive ? 'Business since March 2025' : 'Member since January 2025';
 
-  const personalBadge = getBadgeForPoints(personalUser.points);
+  const personalBadge = getBadgeForPoints(0);
   const personalBadgeIcon = personalBadge?.icon ?? NO_BADGE_ICON;
   const personalBadgeColor = personalBadge?.colors.text ?? '#A8B0BA';
 
   const personalStats = [
-    { label: 'Total Points', value: personalUser.points.toLocaleString(), icon: Star, color: '#F59E0B' },
+    { label: 'Total Points', value: (0).toLocaleString(), icon: Star, color: '#F59E0B' },
     { label: 'Subscribed', value: '7', icon: Store, color: '#0D9488' },
     { label: 'Redeemed', value: '12', icon: Gift, color: '#EC4899' },
     { label: 'Badge', value: personalBadge ? personalBadge.label : '—', icon: personalBadgeIcon, color: personalBadgeColor },
@@ -173,15 +143,11 @@ export default function UserProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.switcherWrap}>
-          <ProfileSwitcherPill />
-          <ProfileContextBanner profileType={isBusinessActive ? 'business' : 'personal'} />
-        </View>
-        <Animated.View style={{ opacity: contentFadeAnim }}>
+        <View>
         <View style={styles.avatarSection}>
           <Surface style={styles.avatarRing} elevation={3}>
             <Image
-              source={{ uri: currentAvatar }}
+              source={{ uri: currentAvatar ?? '' }}
               style={styles.avatarImage}
               testID="user-profile-avatar"
             />
@@ -219,43 +185,18 @@ export default function UserProfileScreen() {
 
         {!isBusinessActive && (
           <BadgeCard
-            points={personalUser.points}
+            points={0}
             onPress={() => setShowBadgeModal(true)}
             testID="profile-badge-card"
           />
         )}
-
-        {!isBusinessActive && (() => {
-          const tf = getTrustedFriendsSummary();
-          return (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/my-referrals' as any)}
-              style={styles.referralStrip}
-              testID="trusted-friends-stat-chip"
-            >
-              <View style={styles.referralStripIcon}>
-                <Users2 size={20} color="#00B246" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.referralStripTitle}>
-                  Trusted Friends: {tf.count}
-                </Text>
-                <Text style={styles.referralStripSubtitle}>
-                  {tf.pointsEarned} pts earned · Tap to view →
-                </Text>
-              </View>
-              <ChevronRight size={18} color="#00B246" />
-            </TouchableOpacity>
-          );
-        })()}
 
         <Surface style={styles.settingsCard} elevation={1}>
           <Text style={styles.settingsSectionTitle}>Settings</Text>
 
           {isBusinessActive ? (
             <>
-              {isGoodwillBusiness ? (
+              {false && (isGoodwillBusiness ? (
                 <>
                   <View style={styles.goodwillBadgeWrap} testID="goodwill-business-badge">
                     <View style={styles.goodwillBadgeChip}>
@@ -283,7 +224,7 @@ export default function UserProfileScreen() {
                   </TouchableOpacity>
                   <Divider style={styles.divider} />
                 </>
-              ) : null}
+              ) : null)}
               <List.Item
                 title="Business Settings"
                 description="Manage your business profile"
@@ -609,13 +550,13 @@ export default function UserProfileScreen() {
         </Surface>
 
         <Text style={styles.footerText}>TouchPoint v1.0.0</Text>
-        </Animated.View>
+        </View>
       </ScrollView>
 
       <BadgeDetailModal
         visible={showBadgeModal}
         onDismiss={() => setShowBadgeModal(false)}
-        currentPoints={personalUser.points}
+        currentPoints={0}
       />
 
       <Portal>
@@ -650,102 +591,102 @@ export default function UserProfileScreen() {
         </Dialog>
       </Portal>
 
-      <RNModal
-        visible={switchSheetStep > 0}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setSwitchSheetStep(0)}
-      >
-        <View style={styles.switchSheetOverlay}>
-          <TouchableOpacity style={styles.switchSheetBackdrop} activeOpacity={1} onPress={() => setSwitchSheetStep(0)} />
-          <View style={styles.switchSheetCard}>
-            <TouchableOpacity
-              style={styles.switchSheetClose}
-              onPress={() => setSwitchSheetStep(0)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              testID="switch-sheet-close"
-            >
-              <XIcon size={18} color="#6B7A8D" />
-            </TouchableOpacity>
-            <View style={styles.switchSheetIconWrap}>
+      {false && (
+        <RNModal
+          visible={switchSheetStep > 0}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setSwitchSheetStep(0)}
+        >
+          <View style={styles.switchSheetOverlay}>
+            <TouchableOpacity style={styles.switchSheetBackdrop} activeOpacity={1} onPress={() => setSwitchSheetStep(0)} />
+            <View style={styles.switchSheetCard}>
+              <TouchableOpacity
+                style={styles.switchSheetClose}
+                onPress={() => setSwitchSheetStep(0)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                testID="switch-sheet-close"
+              >
+                <XIcon size={18} color="#6B7A8D" />
+              </TouchableOpacity>
+              <View style={styles.switchSheetIconWrap}>
+                {switchSheetStep === 1 ? (
+                  <ArrowUpCircle size={28} color={PURPLE} />
+                ) : (
+                  <Gift size={28} color={PURPLE} />
+                )}
+              </View>
               {switchSheetStep === 1 ? (
-                <ArrowUpCircle size={28} color={PURPLE} />
+                <>
+                  <Text style={styles.switchSheetTitle}>Switch to Points & Rewards Business?</Text>
+                  <Text style={styles.switchSheetBody}>
+                    Once switched, you can set up a full loyalty program for your members. This includes points, reward tiers, and a rewards catalog.
+                  </Text>
+                  <View style={styles.switchSheetActions}>
+                    <TouchableOpacity
+                      style={[styles.switchSheetBtn, styles.switchSheetBtnGhost]}
+                      onPress={() => setSwitchSheetStep(0)}
+                      activeOpacity={0.85}
+                      testID="switch-sheet-cancel"
+                    >
+                      <Text style={styles.switchSheetBtnGhostText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.switchSheetBtn, styles.switchSheetBtnPrimary]}
+                      onPress={() => setSwitchSheetStep(2)}
+                      activeOpacity={0.85}
+                      testID="switch-sheet-continue"
+                    >
+                      <Text style={styles.switchSheetBtnPrimaryText}>Continue</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
               ) : (
-                <Gift size={28} color={PURPLE} />
+                <>
+                  <Text style={styles.switchSheetTitle}>Let&apos;s set up your rewards program</Text>
+                  <Text style={styles.switchSheetBody}>
+                    Before your members can start earning, you&apos;ll need to configure:
+                  </Text>
+                  <View style={styles.switchSheetList}>
+                    <Text style={styles.switchSheetListItem}>🔹 Points rules — how members earn points</Text>
+                    <Text style={styles.switchSheetListItem}>🔹 Reward tiers — Silver, Gold, Platinum etc.</Text>
+                    <Text style={styles.switchSheetListItem}>🔹 Rewards catalog — what members can redeem</Text>
+                  </View>
+                  <View style={styles.switchSheetActions}>
+                    <TouchableOpacity
+                      style={[styles.switchSheetBtn, styles.switchSheetBtnGhost]}
+                      onPress={() => {
+                        const next = { ...businessTypeSettings, businessType: 'points_based' as const };
+                        setLocalBusinessTypeSettings(next);
+                        setSwitchSheetStep(0);
+                        setSnackbar('Switched to Points & Rewards! Set up your rewards program anytime from Settings.');
+                      }}
+                      activeOpacity={0.85}
+                      testID="switch-sheet-later"
+                    >
+                      <Text style={styles.switchSheetBtnGhostText}>Do It Later</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.switchSheetBtn, styles.switchSheetBtnPrimary]}
+                      onPress={() => {
+                        const next = { ...businessTypeSettings, businessType: 'points_based' as const };
+                        setLocalBusinessTypeSettings(next);
+                        setSwitchSheetStep(0);
+                        router.push('/reward-configuration' as any);
+                      }}
+                      activeOpacity={0.85}
+                      testID="switch-sheet-setup"
+                    >
+                      <Text style={styles.switchSheetBtnPrimaryText}>Set Up Now</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
               )}
             </View>
-            {switchSheetStep === 1 ? (
-              <>
-                <Text style={styles.switchSheetTitle}>Switch to Points & Rewards Business?</Text>
-                <Text style={styles.switchSheetBody}>
-                  Once switched, you can set up a full loyalty program for your members. This includes points, reward tiers, and a rewards catalog.
-                </Text>
-                <View style={styles.switchSheetActions}>
-                  <TouchableOpacity
-                    style={[styles.switchSheetBtn, styles.switchSheetBtnGhost]}
-                    onPress={() => setSwitchSheetStep(0)}
-                    activeOpacity={0.85}
-                    testID="switch-sheet-cancel"
-                  >
-                    <Text style={styles.switchSheetBtnGhostText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.switchSheetBtn, styles.switchSheetBtnPrimary]}
-                    onPress={() => setSwitchSheetStep(2)}
-                    activeOpacity={0.85}
-                    testID="switch-sheet-continue"
-                  >
-                    <Text style={styles.switchSheetBtnPrimaryText}>Continue</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.switchSheetTitle}>Let&apos;s set up your rewards program</Text>
-                <Text style={styles.switchSheetBody}>
-                  Before your members can start earning, you&apos;ll need to configure:
-                </Text>
-                <View style={styles.switchSheetList}>
-                  <Text style={styles.switchSheetListItem}>🔹 Points rules — how members earn points</Text>
-                  <Text style={styles.switchSheetListItem}>🔹 Reward tiers — Silver, Gold, Platinum etc.</Text>
-                  <Text style={styles.switchSheetListItem}>🔹 Rewards catalog — what members can redeem</Text>
-                </View>
-                <View style={styles.switchSheetActions}>
-                  <TouchableOpacity
-                    style={[styles.switchSheetBtn, styles.switchSheetBtnGhost]}
-                    onPress={() => {
-                      const next = { ...businessTypeSettings, businessType: 'points_based' as const };
-                      setBusinessTypeSettings(ownBusinessKey, next);
-                      setLocalBusinessTypeSettings(next);
-                      setSwitchSheetStep(0);
-                      setSnackbar('Switched to Points & Rewards! Set up your rewards program anytime from Settings.');
-                    }}
-                    activeOpacity={0.85}
-                    testID="switch-sheet-later"
-                  >
-                    <Text style={styles.switchSheetBtnGhostText}>Do It Later</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.switchSheetBtn, styles.switchSheetBtnPrimary]}
-                    onPress={() => {
-                      const next = { ...businessTypeSettings, businessType: 'points_based' as const };
-                      setBusinessTypeSettings(ownBusinessKey, next);
-                      setLocalBusinessTypeSettings(next);
-                      setSwitchSheetStep(0);
-                      router.push('/reward-configuration' as any);
-                    }}
-                    activeOpacity={0.85}
-                    testID="switch-sheet-setup"
-                  >
-                    <Text style={styles.switchSheetBtnPrimaryText}>Set Up Now</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
           </View>
-        </View>
-      </RNModal>
+        </RNModal>
+      )}
 
       <Snackbar
         visible={!!snackbar}

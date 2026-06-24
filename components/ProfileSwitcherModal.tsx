@@ -6,16 +6,11 @@ import {
   Modal,
   Animated,
   Pressable,
-  TouchableOpacity,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { CheckCircle2, Circle } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSnackbar } from '@/contexts/SnackbarContext';
-import type { ProfileEntry } from '@/types';
+
 
 interface Props {
   visible: boolean;
@@ -23,8 +18,7 @@ interface Props {
 }
 
 export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
-  const { activeProfile, profiles, switchProfile } = useAuth();
-  const { showSnackbar } = useSnackbar();
+  useAuth(); // keep for future profile fields
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
@@ -65,26 +59,6 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
     });
   }, [backdropAnim, sheetAnim, onDismiss]);
 
-  const handleSelect = useCallback(
-    async (profile: ProfileEntry) => {
-      if (profile.id === activeProfile.id) {
-        handleClose();
-        return;
-      }
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      handleClose();
-      setTimeout(async () => {
-        try {
-          await switchProfile(profile.id);
-          showSnackbar(`Switched to ${profile.displayName}`);
-        } catch (err) {
-          console.log('[ProfileSwitcherModal] switch error', err);
-        }
-      }, 220);
-    },
-    [activeProfile.id, switchProfile, showSnackbar, handleClose],
-  );
-
   const sheetTranslateY = sheetAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [400, 0],
@@ -111,34 +85,7 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
             <Text style={styles.title}>Switch Profile</Text>
             <View style={styles.divider} />
 
-            {profiles.map((profile) => {
-              const isActive = profile.id === activeProfile.id;
-              const isPersonal = profile.type === 'personal';
-              return (
-                <TouchableOpacity
-                  key={profile.id}
-                  style={styles.row}
-                  onPress={() => handleSelect(profile)}
-                  activeOpacity={0.7}
-                  testID={`switcher-modal-row-${profile.id}`}
-                >
-                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
-                  <View style={styles.info}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {profile.displayName}
-                    </Text>
-                    <Text style={styles.subtitle}>
-                      {isPersonal ? 'Personal Account' : 'Business Profile'}
-                    </Text>
-                  </View>
-                  {isActive ? (
-                    <CheckCircle2 size={24} color={Colors.primary} />
-                  ) : (
-                    <Circle size={24} color={Colors.textTertiary} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+            {/* TODO: restore when business profile module is built — profiles list mapped activeProfile/switchProfile from mock AuthContext */}
           </Animated.View>
         </View>
       </View>

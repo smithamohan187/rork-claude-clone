@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { useAuth } from '@/contexts/AuthContext1';
+import { useAuth } from '@/contexts/AuthContext';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
 
 function firstName(name: string, max: number = 10): string {
@@ -17,10 +17,12 @@ interface Props {
 }
 
 export default function ActiveProfileBadge({ testID }: Props) {
-  const { activeProfile, profiles } = useAuth();
+  const { authUser } = useAuth();
   const [open, setOpen] = useState<boolean>(false);
 
-  const hasMultiple = profiles.length > 1;
+  const hasMultiple = false; // TODO: restore when business profile module is built
+  const displayName = authUser?.name ?? authUser?.email ?? '';
+  const avatarUrl = authUser?.avatar ?? '';
 
   const handlePress = useCallback(() => {
     if (!hasMultiple) return;
@@ -40,16 +42,16 @@ export default function ActiveProfileBadge({ testID }: Props) {
           styles.badge,
           pressed && hasMultiple && styles.badgePressed,
         ]}
-        accessibilityLabel={`Active profile ${activeProfile.displayName}. ${hasMultiple ? 'Tap to switch profile.' : ''}`}
+        accessibilityLabel={`Active profile ${displayName}. ${hasMultiple ? 'Tap to switch profile.' : ''}`}
         testID={testID ?? 'active-profile-badge'}
       >
         <Image
-          source={{ uri: activeProfile.avatarUrl }}
+          source={{ uri: avatarUrl }}
           style={styles.avatar}
           contentFit="cover"
         />
         <Text style={styles.name} numberOfLines={1}>
-          {firstName(activeProfile.displayName)}
+          {firstName(displayName)}
         </Text>
         {hasMultiple ? (
           <ChevronDown size={14} color={Colors.textSecondary} style={styles.chevron} />
