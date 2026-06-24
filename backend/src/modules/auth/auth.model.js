@@ -186,6 +186,78 @@ async function revokeRefreshTokenById(id, userId) {
   );
 }
 
+// ── Refresh token rotation helpers ───────────────────────────────────────────
+
+// Fast lookup for SHA-256-hashed tokens (issued by /auth/refresh endpoint)
+async function getActiveRefreshTokenByHash(tokenHash) {
+  const { rows } = await query(
+    `SELECT id, user_id, token_hash
+     FROM refresh_tokens
+     WHERE token_hash = $1
+       AND revoked_at IS NULL
+       AND expires_at > NOW()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return rows[0] ?? null;
+}
+
+// Fallback scan for bcrypt-hashed tokens (issued by /auth/login endpoint)
+async function getAllActiveRefreshTokens() {
+  const { rows } = await query(
+    `SELECT id, user_id, token_hash
+     FROM refresh_tokens
+     WHERE revoked_at IS NULL
+       AND expires_at > NOW()
+     ORDER BY created_at DESC
+     LIMIT 500`,
+    []
+  );
+  return rows;
+}
+
+// Fetch user + active profile for JWT generation
+async function getUserByIdWithProfile(userId) {
+  const { rows } = await query(
+    `SELECT
+       u.id           AS user_id,
+       u.email,
+       u.phone,
+       u.active_profile_id,
+       p.id           AS profile_id,
+       p.profile_type
+     FROM users u
+     JOIN profiles p ON p.id = u.active_profile_id
+     WHERE u.id = $1
+       AND u.is_active = TRUE
+       AND p.is_active = TRUE`,
+    [userId]
+  );
+  return rows[0] ?? null;
+}
+
+async function getSessionByUserId(userId) {
+  const { rows } = await query(
+    `SELECT
+       u.id           AS user_id,
+       u.email,
+       u.phone,
+       p.id           AS profile_id,
+       p.profile_type,
+       p.display_name,
+       p.avatar_url
+     FROM users u
+     JOIN profiles p ON p.user_id = u.id
+     WHERE u.id = $1
+       AND p.profile_type = 'personal'
+       AND p.is_active = TRUE
+       AND u.is_active = TRUE
+     LIMIT 1`,
+    [userId]
+  );
+  return rows[0] ?? null;
+}
+
 module.exports = {
   findUserByEmail,
   findUserByPhone,
@@ -205,4 +277,8 @@ module.exports = {
   touchUserUpdatedAt,
   findActiveRefreshTokensByUser,
   revokeRefreshTokenById,
+  getActiveRefreshTokenByHash,
+  getAllActiveRefreshTokens,
+  getUserByIdWithProfile,
+  getSessionByUserId,
 };

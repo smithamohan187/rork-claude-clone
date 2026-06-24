@@ -70,7 +70,7 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
   return session.success ? toAuthUser(session.data) : null;
 }
 
-export const [AuthProvider, useAuth] = createContextHook(() => {
+export const [AuthProvider, useAuth1] = createContextHook(() => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [accountType, setAccountType] = useState<AccountType>('personal');
@@ -165,7 +165,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const result = await apiClient.post<AuthRefreshResponse>(
           '/auth/refresh',
           { refreshToken },
-          { _isRetry: true },
+          { _isRetry: true } as any,
         );
         const { accessToken, refreshToken: nextRefreshToken } = getTokens(result.data);
 
@@ -199,8 +199,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, type);
   }, []);
 
+  const updateAuthUser = useCallback((updates: Partial<AuthUser>) => {
+    setAuthUser(prev => {
+      if (!prev) return prev;
+      return { ...prev, ...updates };
+    });
+  }, []);
+
   const loginWithTokens = useCallback(async (data: AuthTokens, fallbackEmail?: string): Promise<AuthUser> => {
     const { accessToken, refreshToken } = getTokens(data);
+    console.log('[Auth] loginWithTokens: received tokens:', { accessToken, refreshToken }); 
     if (!accessToken || !refreshToken) {
       throw new Error('Login response did not include auth tokens');
     }
@@ -208,11 +216,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     setAccessToken(accessToken);
     await setRefreshToken(refreshToken);
 
-    const user =
-      toAuthUser(data.user) ??
-      await fetchCurrentUser() ??
-      (data.userId ? { id: data.userId, email: fallbackEmail } : null);
-
+  const user =
+    toAuthUser(data.user) ??
+    (data.userId ? { id: data.userId, email: fallbackEmail } : null) ??
+    await fetchCurrentUser();
     if (!user) {
       await clearTokens();
       throw new Error('Login response did not include user details');
@@ -345,21 +352,44 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const currentPersonalUser = testUsers[testUserIndex];
   const activeUser: User = isAdmin ? adminUser : (accountType === 'personal' ? currentPersonalUser : businessUser);
-  const currentUser: User = authUser
+  /*const currentUser: User = authUser
     ? {
         ...activeUser,
         ...authUser,
         name: authUser.name ?? authUser.full_name ?? activeUser.name,
         avatar: authUser.avatar ?? activeUser.avatar,
       }
-    : activeUser;
+    : activeUser;*/
+    // ── When logged in: merge real auth data over current profile
+// ── When logged out: fall back to mock (for RORK preview only) ───
+
+const currentUser: User = authUser
+  ? {
+      ...activeUser,
+      ...authUser,
+      name: authUser.name ?? authUser.full_name ?? activeUser.name,
+      avatar: authUser.avatar ?? activeUser.avatar,
+      accountType: authUser.accountType ?? activeUser.accountType,
+      username: authUser.username ?? activeUser.username,
+      bio: authUser.bio ?? activeUser.bio,
+      followers: authUser.followers ?? activeUser.followers,
+      following: authUser.following ?? activeUser.following,
+      points: authUser.points ?? activeUser.points,
+      phone: authUser.phone ?? activeUser.phone,
+      email: authUser.email ?? activeUser.email,
+      website: authUser.website ?? activeUser.website,
+      address: authUser.address ?? activeUser.address,
+      category: authUser.category ?? activeUser.category,
+      hours: authUser.hours ?? activeUser.hours,
+    }
+  : activeUser;  // logged out → mock user is fine for RORK preview
 
   const profiles: ProfileEntry[] = [
     {
-      id: currentPersonalUser.id,
-      type: 'personal',
-      displayName: currentPersonalUser.name,
-      avatarUrl: currentPersonalUser.avatar,
+      id:          authUser?.id ?? currentPersonalUser.id,
+      type:        'personal',
+      displayName: authUser?.name ?? authUser?.full_name ?? currentPersonalUser.name,
+      avatarUrl:   authUser?.avatar ?? currentPersonalUser.avatar,
     },
     ...(hasBusinessProfile
       ? [
@@ -460,5 +490,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     switchProfile,
     restoreLastProfile,
     setPersonalAsActive,
+    updateAuthUser,
   };
 });

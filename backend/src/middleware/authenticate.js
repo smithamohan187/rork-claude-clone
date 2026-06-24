@@ -3,8 +3,10 @@ const { fail } = require('../utils/apiResponse');
 const { logger } = require('../utils/logger');
 
 function authenticate(req, res, next) {
+  console.log("req.headers:", req.headers);
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  console.log("Token:", token);
   if (!token) {
     return res.status(401).json(fail('No token provided'));
   }

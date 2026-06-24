@@ -49,7 +49,7 @@ import {
 } from '@/services/businessTypeRegistry';
 import { mockBusinessSignUpData } from '@/mocks/data';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth1 } from '@/contexts/AuthContext1';
 import ProfileSwitcherPill from '@/components/ProfileSwitcherPill';
 import ProfileContextBanner from '@/components/ProfileContextBanner';
 import { BadgeCard, BadgeDetailModal } from '@/components/badges';
@@ -72,12 +72,13 @@ export default function UserProfileScreen() {
       return false;
     }
   })();
+  console.log("use Auth() in UserProfileScreen", useAuth1());
   const {
-    personalUser,
+    authUser,
     activeProfile,
     businessProfileData,
     logout,
-  } = useAuth();
+  } = useAuth1();
 
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false);
   const [loggingOut, setLoggingOut] = useState<boolean>(false);

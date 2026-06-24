@@ -22,7 +22,11 @@ const {
   touchUserUpdatedAt,
   findActiveRefreshTokensByUser,
   revokeRefreshTokenById,
-} = require('./auth.model');
+  getActiveRefreshTokenByHash,
+  getAllActiveRefreshTokens,
+  getUserByIdWithProfile,
+  getSessionByUserId,
+ } = require('./auth.model');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
 const REFRESH_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
@@ -234,4 +238,58 @@ async function logout(userId, refreshToken) {
   return { success: true };
 }
 
-module.exports = { registerUser, loginUser, logout };
+async function refreshAccessToken(incomingToken) {
+  // Fast path: SHA-256 lookup for tokens issued by this endpoint
+  const sha256Hash = crypto.createHash('sha256').update(incomingToken).digest('hex');
+  let tokenRecord = await getActiveRefreshTokenByHash(sha256Hash);
+
+  // Slow path: bcrypt scan for tokens issued by the login endpoint
+  if (!tokenRecord) {
+    const allActive = await getAllActiveRefreshTokens();
+    for (const row of allActive) {
+      const match = await bcrypt.compare(incomingToken, row.token_hash);
+      if (match) { tokenRecord = row; break; }
+    }
+  }
+
+  if (!tokenRecord) {
+    throw new AppError('Invalid or expired refresh token', 401);
+  }
+
+  // Rotate: revoke the old token immediately before issuing a new one
+  await revokeRefreshTokenById(tokenRecord.id, tokenRecord.user_id);
+
+  // Load user + active profile for JWT payload (same shape as loginUser)
+  const user = await getUserByIdWithProfile(tokenRecord.user_id);
+  if (!user) {
+    throw new AppError('User not found', 401);
+  }
+
+  // New access token — identical payload to loginUser
+  const accessToken = jwt.sign(
+    {
+      userId:          user.user_id,
+      activeProfileId: user.active_profile_id,
+      profileType:     user.profile_type,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+
+  // New refresh token — stored as SHA-256 hash for direct lookup next time
+  const newRawToken  = `${crypto.randomUUID()}-${Date.now()}`;
+  const newTokenHash = crypto.createHash('sha256').update(newRawToken).digest('hex');
+  const expiresAt    = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
+
+  await insertRefreshToken(user.user_id, newTokenHash, expiresAt);
+
+  return { accessToken, refreshToken: newRawToken };
+}
+
+async function getSession(userId) {
+  const session = await getSessionByUserId(userId);
+  if (!session) throw new AppError('Session not found', 404);
+  return session;
+}
+
+module.exports = { registerUser, loginUser, logout, refreshAccessToken, getSession };

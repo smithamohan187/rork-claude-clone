@@ -42,6 +42,7 @@ export default function SignInScreen() {
     identifier, setIdentifier,
     password, setPassword,
     identifierError, passwordError,
+    mode,
     loading, authError,
     handleLogin,
   } = useSignIn();
@@ -99,7 +100,7 @@ export default function SignInScreen() {
                     onChangeText={setIdentifier}
                     onFocus={() => setFocusedField('identifier')}
                     onBlur={() => setFocusedField(null)}
-                    keyboardType="email-address"
+                    keyboardType={mode === 'phone' ? 'phone-pad' : 'email-address'}
                     autoCapitalize="none"
                     autoCorrect={false}
                     testID="identifier-input"

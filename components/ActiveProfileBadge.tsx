@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext1';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
 
 function firstName(name: string, max: number = 10): string {

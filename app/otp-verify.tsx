@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
-import { sendOtp, verifyOtp } from '@/services/authService';
+//import { sendOtp, verifyOtp } from '@/services/authService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 

@@ -100,7 +100,7 @@ axiosInstance.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config as AxiosRequestConfig & { _isRetry?: boolean };
-
+    console.warn('[apiClient] request failed', err.message, 'url:', original?.url, 'status:', err.response?.status);
     // ✅ Skip interceptor for auth endpoints
     const requestUrl = original?.url ?? '';
     const isAuthRoute = requestUrl.includes('/auth/login') ||

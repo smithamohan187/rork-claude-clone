@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
-import { sendPasswordResetEmail } from '@/services/authService';
+//import { sendPasswordResetEmail } from '@/services/authService';
 import { ArrowLeft, Mail, ArrowRight } from 'lucide-react-native';
 
 const ACCENT = '#1A5C35';

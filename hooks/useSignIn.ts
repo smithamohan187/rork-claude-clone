@@ -20,7 +20,7 @@ function detectMode(val: string): InputMode {
 }
 
 export function useSignIn() {
-  const { loginWithTokens, restoreLastProfile } = useAuth();
+  const { loginWithTokens} = useAuth();
   const router = useRouter();
 
   const [identifier, setIdentifier] = useState('');
@@ -36,6 +36,7 @@ export function useSignIn() {
     if (identifier.trim().length === 0) return 'Email or phone number is required';
     if (mode === 'email' && !isValidEmail(identifier)) return 'Enter a valid email address';
     if (mode === 'phone' && !isValidPhone(identifier)) return 'Enter a valid 10-digit phone number';
+    if (mode === 'unknown') return 'Enter a valid email or phone number';
     return '';
   }, [submitted, identifier, mode]);
 
@@ -67,8 +68,9 @@ export function useSignIn() {
 
       const data = await signIn(payload);
       await loginWithTokens(data, mode === 'email' ? identifier.trim().toLowerCase() : undefined);
-      await restoreLastProfile();
-      router.replace('/(tabs)/feed' as never);
+      //await restoreLastProfile();
+      //router.replace('/my-profile' as never);
+      router.replace('/profile' as never);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
       if (__DEV__) console.error('[useSignIn] handleLogin error:', err);
@@ -76,7 +78,7 @@ export function useSignIn() {
     } finally {
       setLoading(false);
     }
-  }, [identifier, password, mode, loginWithTokens, restoreLastProfile, router]);
+  }, [identifier, password, mode, loginWithTokens, router]);
 
   return {
     identifier,

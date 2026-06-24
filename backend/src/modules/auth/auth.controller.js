@@ -1,7 +1,7 @@
-const { registerUser, loginUser, logout } = require('./auth.service');
+const { registerUser, loginUser, logout, refreshAccessToken, getSession } = require('./auth.service');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
-const { ok } = require('../../utils/apiResponse');
+const { ok, fail } = require('../../utils/apiResponse');
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -93,4 +93,34 @@ const logoutHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
-module.exports = { signupHandler, loginHandler, logoutHandler };
+const refreshHandler = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(400).json(fail('Refresh token is required'));
+  }
+  const result = await refreshAccessToken(refreshToken);
+  return res.status(200).json(ok({
+    accessToken:  result.accessToken,
+    refreshToken: result.refreshToken,
+  }));
+});
+
+const sessionHandler = asyncHandler(async (req, res) => {
+  try {
+    const result = await getSession(req.user.userId);
+    return res.status(200).json(ok({
+      user_id:      result.user_id,
+      email:        result.email,
+      phone:        result.phone,
+      profile_id:   result.profile_id,
+      profile_type: result.profile_type,
+      display_name: result.display_name,
+      avatar_url:   result.avatar_url,
+    }));
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json(fail(err.message));
+    return res.status(500).json(fail('Failed to fetch session'));
+  }
+});
+
+module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler };
