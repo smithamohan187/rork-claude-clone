@@ -12,3 +12,11 @@ export async function fetchCategories(): Promise<Category[]> {
   }
   return result.data;
 }
+
+export async function fetchBusinessCategories(): Promise<Category[]> {
+  const result = await apiClient.get<Category[]>('/categories/business');
+  if (!result.success || !result.data) {
+    throw new Error(result.error ?? 'Failed to fetch business categories');
+  }
+  return result.data;
+}

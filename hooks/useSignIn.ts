@@ -70,7 +70,7 @@ export function useSignIn() {
       await loginWithTokens(data, mode === 'email' ? identifier.trim().toLowerCase() : undefined);
       //await restoreLastProfile();
       //router.replace('/my-profile' as never);
-      router.replace('/profile' as never);
+      router.replace('/feed' as never);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
       if (__DEV__) console.error('[useSignIn] handleLogin error:', err);

@@ -1,7 +1,11 @@
-const { getAllCategories } = require('./categories.model');
+const { getAllCategories, getAllBusinessCategories } = require('./categories.model');
 
 async function fetchAllCategories() {
   return getAllCategories();
 }
 
-module.exports = { fetchAllCategories };
+async function fetchAllBusinessCategories() {
+  return getAllBusinessCategories();
+}
+
+module.exports = { fetchAllCategories, fetchAllBusinessCategories };

@@ -7,4 +7,11 @@ async function getAllCategories() {
   return rows;
 }
 
-module.exports = { getAllCategories };
+async function getAllBusinessCategories() {
+  const { rows } = await query(
+    'SELECT id, name FROM business_categories WHERE is_active = true ORDER BY sort_order ASC, name ASC'
+  );
+  return rows;
+}
+
+module.exports = { getAllCategories, getAllBusinessCategories };

@@ -57,7 +57,6 @@ async function registerUser(data) {
       throw new AppError('Phone already registered', 409);
     }
   }
-console.log(('password', password));
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
   const client = await getClient();
@@ -143,7 +142,6 @@ async function loginUser(data) {
 
   const identifierType = identifier.includes('@') ? 'email' : 'phone';
   const user = await findUserWithActiveProfile(identifier, identifierType);
-  console.log('User found for login:', user);
   if (!user) {
     throw new AppError('Invalid credentials', 401);
   }
@@ -220,20 +218,22 @@ async function loginUser(data) {
 }
 
 async function logout(userId, refreshToken) {
-  const rows = await findActiveRefreshTokensByUser(userId);
+  // Fast path: SHA-256 lookup for tokens issued by /auth/refresh
+  const sha256Hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  let tokenRecord = await getActiveRefreshTokenByHash(sha256Hash);
 
-  let matchedId = null;
-  for (const row of rows) {
-    const match = await bcrypt.compare(refreshToken, row.token_hash);
-    if (match) {
-      matchedId = row.id;
-      break;
+  // Slow path: bcrypt scan for tokens issued by /auth/login
+  if (!tokenRecord) {
+    const rows = await findActiveRefreshTokensByUser(userId);
+    for (const row of rows) {
+      const match = await bcrypt.compare(refreshToken, row.token_hash);
+      if (match) { tokenRecord = row; break; }
     }
   }
 
-  if (!matchedId) return { success: true };
+  if (!tokenRecord) return { success: true };
 
-  await revokeRefreshTokenById(matchedId, userId);
+  await revokeRefreshTokenById(tokenRecord.id, userId);
 
   return { success: true };
 }

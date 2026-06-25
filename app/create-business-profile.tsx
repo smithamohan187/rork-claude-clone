@@ -11,21 +11,19 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Switch,
+  ActivityIndicator,
   type ViewToken,
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
   Camera,
   Building2,
   Phone,
-  Mail,
   Globe,
   MapPin,
   Clock,
@@ -35,44 +33,31 @@ import {
   Sparkles,
   Store,
   FileText,
-  Search,
   ShieldCheck,
-  Star,
   PenLine,
   ImagePlus,
   X,
   MessagesSquare,
   Ban,
   Share2,
+  Gift,
+  HandHeart,
+  Trophy,
+  Info,
+  Link2,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
-import { useAuth } from '@/contexts/AuthContext';
-import { mockBusinessSignUpData, googleBusinessProfiles } from '@/mocks/data';
-import {
-  getBusinessReferralSettings,
-  setBusinessReferralSettings,
-  normaliseWebsiteUrl,
-} from '@/services/businessReferralRegistry';
-import {
-  getBusinessTypeSettings,
-  setBusinessTypeSettings,
-  isValidInhouseReferralUrl,
-  type BusinessType,
-} from '@/services/businessTypeRegistry';
-import { AlertTriangle, Gift, HandHeart, Trophy, Info, Link2 } from 'lucide-react-native';
-import BizComSubscription from '@/components/BizComSubscription';
-import type { BusinessProfileData } from '@/types';
-
-const CATEGORIES = BUSINESS_CATEGORIES;
+import { useCreateBusiness, type BusinessType } from '@/hooks/useCreateBusiness';
 
 const STEPS = [
-  { title: 'Business Info', icon: Store },
+  { title: 'Basics', icon: Store },
   { title: 'Contact', icon: Phone },
-  { title: 'Details', icon: Tag },
-  { title: 'Review', icon: FileText },
-  { title: 'Subscribe', icon: Sparkles },
+  { title: 'Hours', icon: Clock },
+  { title: 'Referral', icon: Gift },
+  { title: 'Media', icon: ImagePlus },
 ];
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const SLIDE_CARD_WIDTH = Dimensions.get('window').width - 32;
 const SLIDE_GAP = 12;
@@ -104,140 +89,64 @@ const FEATURE_SLIDES = [
   },
 ];
 
-interface LocalBusinessProfileData extends BusinessProfileData {
-  businessPhoto: string;
-  businessLogo: string;
-}
-
-type CreationMethod = 'none' | 'manual' | 'google';
+type CreationMethod = 'none' | 'manual';
 
 export default function CreateBusinessProfileScreen() {
   const router = useRouter();
-  const { completeBusinessProfile } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
-  const formAnchorRef = useRef<View>(null);
   const methodScrollRef = useRef<ScrollView>(null);
-  const methodAnchorRef = useRef<View>(null);
   const [creationMethod, setCreationMethod] = useState<CreationMethod>('none');
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  const scrollToForm = useCallback(() => {
-    formAnchorRef.current?.measureLayout(
-      scrollRef.current?.getInnerViewNode?.() as unknown as number ?? -1,
-      (_x: number, y: number) => {
-        scrollRef.current?.scrollTo({ y: y - 20, animated: true });
-      },
-      () => {
-        scrollRef.current?.scrollTo({ y: 400, animated: true });
-      },
-    );
-  }, []);
-
-  const scrollToMethods = useCallback(() => {
-    methodAnchorRef.current?.measureLayout(
-      methodScrollRef.current?.getInnerViewNode?.() as unknown as number ?? -1,
-      (_x: number, y: number) => {
-        methodScrollRef.current?.scrollTo({ y: y - 20, animated: true });
-      },
-      () => {
-        methodScrollRef.current?.scrollTo({ y: 500, animated: true });
-      },
-    );
-  }, []);
-
-  const onSlideViewableChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems.length === 0) return;
-    const first = viewableItems[0];
-    if (typeof first.index === 'number') {
-      setActiveSlideIndex(first.index);
-    }
-  }).current;
-
-  const slideViewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
-
-  const [googleSearch, setGoogleSearch] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const methodFadeAnim = useRef(new Animated.Value(1)).current;
 
-  const ownBusinessKey = mockBusinessSignUpData.username || 'self';
-  const seededType = getBusinessTypeSettings(ownBusinessKey);
+  const {
+    currentStep,
+    errors,
+    loading,
+    apiError,
+    setApiError,
+    // Step 1
+    businessName, setBusinessName,
+    businessType, setBusinessType,
+    categoryId, setCategoryId,
+    description, setDescription,
+    businessCategories,
+    // Step 2
+    phone, setPhone,
+    website, setWebsite,
+    address, setAddress,
+    country, onCountryChange, onCountrySelect, countrySuggestions,
+    state,   onStateChange,   onStateSelect,   stateSuggestions,
+    city,    onCityChange,    onCitySelect,    citySuggestions,
+    // Step 3
+    hours, updateHour,
+    // Step 4
+    inhouseReferral, setInhouseReferral,
+    inhouseReferralUrl, setInhouseReferralUrl,
+    // Step 5
+    logoUri, coverUri,
+    pickLogo, pickCover,
+    // Navigation
+    goNext: hookGoNext,
+    goBack: hookGoBack,
+    submit,
+  } = useCreateBusiness();
 
-  const [formData, setFormData] = useState<LocalBusinessProfileData>({
-    name: mockBusinessSignUpData.name,
-    username: mockBusinessSignUpData.username,
-    bio: mockBusinessSignUpData.bio,
-    avatar: mockBusinessSignUpData.avatar,
-    businessPhoto: '',
-    businessLogo: '',
-    phone: mockBusinessSignUpData.phone,
-    email: mockBusinessSignUpData.email,
-    website: mockBusinessSignUpData.website,
-    address: mockBusinessSignUpData.address,
-    category: mockBusinessSignUpData.category,
-    hours: mockBusinessSignUpData.hours,
-    referralOptIn: getBusinessReferralSettings(ownBusinessKey).optIn,
-  });
+  const onSlideViewableChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length === 0) return;
+    const first = viewableItems[0];
+    if (typeof first.index === 'number') setActiveSlideIndex(first.index);
+  }).current;
 
-  const [businessType, setBusinessTypeState] = useState<BusinessType | null>(null);
-  const [referralOptedOut, setReferralOptedOut] = useState<boolean>(seededType.referralOptedOut);
-  const [inhouseReferralUrl, setInhouseReferralUrl] = useState<string>(seededType.inhouseReferralUrl ?? '');
-  const [businessTypeError, setBusinessTypeError] = useState<string>('');
-  const [inhouseUrlError, setInhouseUrlError] = useState<string>('');
+  const slideViewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  const [errors, setErrors] = useState<Partial<Record<keyof LocalBusinessProfileData, string>>>({});
-
-  const updateField = useCallback((field: keyof LocalBusinessProfileData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
-  }, [errors]);
-
-  const pickImage = useCallback(async (field: 'businessPhoto' | 'businessLogo') => {
-    try {
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
-          return;
-        }
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: field === 'businessLogo' ? [1, 1] : [16, 9],
-        quality: 0.8,
-      });
-      console.log('Image picker result:', JSON.stringify(result));
-      if (!result.canceled && result.assets && result.assets[0]) {
-        console.log('Setting image for', field, ':', result.assets[0].uri);
-        setFormData(prev => ({ ...prev, [field]: result.assets[0].uri }));
-        setErrors(prev => {
-          const next = { ...prev };
-          delete next[field];
-          return next;
-        });
-      }
-    } catch (error) {
-      console.log('Image picker error:', error);
-      Alert.alert('Error', 'Could not open image picker. Please try again.');
-    }
-  }, []);
-
-  const removeImage = useCallback((field: 'businessPhoto' | 'businessLogo') => {
-    setFormData(prev => ({ ...prev, [field]: '' }));
-  }, []);
-
-  const animateProgress = useCallback((step: number) => {
+  const animateProgress = useCallback((stepIndex: number) => {
     Animated.spring(progressAnim, {
-      toValue: step / (STEPS.length - 1),
+      toValue: stepIndex / (STEPS.length - 1),
       useNativeDriver: false,
       tension: 50,
       friction: 9,
@@ -259,64 +168,22 @@ export default function CreateBusinessProfileScreen() {
     });
   }, [fadeAnim]);
 
-  const validateStep = useCallback((step: number): boolean => {
-    const newErrors: Partial<Record<keyof LocalBusinessProfileData, string>> = {};
-
-    if (step === 0) {
-      if (!formData.name.trim()) newErrors.name = 'Business name is required';
-      if (!formData.username.trim()) newErrors.username = 'Username is required';
-      if (formData.username && !/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-        newErrors.username = 'Only letters, numbers, and underscores';
-      }
-    } else if (step === 1) {
-      if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
-      if (!formData.email.trim()) newErrors.email = 'Email is required';
-      if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-        newErrors.email = 'Enter a valid email';
-      }
-    } else if (step === 2) {
-      if (!businessType) {
-        setBusinessTypeError('Please select a business type to continue.');
-      } else {
-        setBusinessTypeError('');
-      }
-      if (!formData.category) newErrors.category = 'Select a category';
-      if (referralOptedOut && !isValidInhouseReferralUrl(inhouseReferralUrl)) {
-        setInhouseUrlError('Please enter a valid URL (must start with http:// or https://)');
-      } else {
-        setInhouseUrlError('');
-      }
-    }
-
-    setErrors(newErrors);
-    const stepHasInlineErrors = step === 2 && (
-      !businessType || (referralOptedOut && !isValidInhouseReferralUrl(inhouseReferralUrl))
-    );
-    return Object.keys(newErrors).length === 0 && !stepHasInlineErrors;
-  }, [formData, businessType, referralOptedOut, inhouseReferralUrl]);
-
   const goNext = useCallback(() => {
-    if (!validateStep(currentStep)) return;
-
-    if (currentStep < STEPS.length - 1) {
-      animateTransition(() => {
-        const next = currentStep + 1;
-        setCurrentStep(next);
-        animateProgress(next);
-      });
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-    }
-  }, [currentStep, validateStep, animateTransition, animateProgress]);
+    animateTransition(() => {
+      hookGoNext();
+      animateProgress(currentStep); // currentStep is old value; after hookGoNext it'll be +1
+    });
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [animateTransition, hookGoNext, animateProgress, currentStep]);
 
   const goBack = useCallback(() => {
-    if (currentStep > 0) {
+    if (currentStep > 1) {
       animateTransition(() => {
-        const prev = currentStep - 1;
-        setCurrentStep(prev);
-        animateProgress(prev);
+        hookGoBack();
+        animateProgress(currentStep - 2);
       });
       scrollRef.current?.scrollTo({ y: 0, animated: true });
-    } else if (creationMethod !== 'none') {
+    } else {
       Animated.timing(methodFadeAnim, {
         toValue: 0,
         duration: 120,
@@ -329,18 +196,16 @@ export default function CreateBusinessProfileScreen() {
           useNativeDriver: true,
         }).start();
       });
-    } else {
-      router.back();
     }
-  }, [currentStep, creationMethod, animateTransition, animateProgress, router, methodFadeAnim]);
+  }, [currentStep, animateTransition, hookGoBack, animateProgress, methodFadeAnim]);
 
-  const handleSelectMethod = useCallback((method: CreationMethod) => {
+  const handleSelectManual = useCallback(() => {
     Animated.timing(methodFadeAnim, {
       toValue: 0,
       duration: 120,
       useNativeDriver: true,
     }).start(() => {
-      setCreationMethod(method);
+      setCreationMethod('manual');
       Animated.timing(methodFadeAnim, {
         toValue: 1,
         duration: 200,
@@ -348,73 +213,6 @@ export default function CreateBusinessProfileScreen() {
       }).start();
     });
   }, [methodFadeAnim]);
-
-  const filteredGoogleProfiles = googleBusinessProfiles.filter(p =>
-    p.name.toLowerCase().includes(googleSearch.toLowerCase()) ||
-    p.category.toLowerCase().includes(googleSearch.toLowerCase()) ||
-    p.address.toLowerCase().includes(googleSearch.toLowerCase())
-  );
-
-  const handleSubmit = useCallback(async () => {
-    try {
-      const profileData: BusinessProfileData = {
-        name: formData.name,
-        username: formData.username,
-        bio: formData.bio,
-        avatar: formData.avatar,
-        businessPhoto: formData.businessPhoto,
-        businessLogo: formData.businessLogo,
-        phone: formData.phone,
-        email: formData.email,
-        website: formData.website,
-        address: formData.address,
-        category: formData.category,
-        hours: formData.hours,
-        referralOptIn: formData.referralOptIn ?? true,
-      };
-      const submitKey = formData.username?.trim() || 'self';
-      setBusinessReferralSettings(submitKey, {
-        optIn: formData.referralOptIn ?? true,
-        website: normaliseWebsiteUrl(formData.website) ?? undefined,
-      });
-      if (businessType) {
-        setBusinessTypeSettings(submitKey, {
-          businessType,
-          referralOptedOut,
-          inhouseReferralUrl: referralOptedOut ? inhouseReferralUrl.trim() : undefined,
-        });
-      }
-      await completeBusinessProfile(profileData);
-      console.log('[CreateBusinessProfile] Business profile created, moving to subscription step');
-      animateTransition(() => {
-        const next = currentStep + 1;
-        setCurrentStep(next);
-        animateProgress(next);
-      });
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-    } catch (error) {
-      console.log('[CreateBusinessProfile] Error creating profile:', error);
-      Alert.alert('Error', 'Failed to create business profile. Please try again.');
-    }
-  }, [formData, completeBusinessProfile, currentStep, animateTransition, animateProgress, businessType, referralOptedOut, inhouseReferralUrl]);
-
-  const handleSubscriptionComplete = useCallback(() => {
-    console.log('[CreateBusinessProfile] Subscription setup complete');
-    Alert.alert(
-      'Welcome to TouchPoint!',
-      `Your business "${formData.name}" is set up with a BizCom subscription. Your 3-month free trial has started.`,
-      [{ text: 'Go to Dashboard', onPress: () => router.replace('/(tabs)/feed' as any) }]
-    );
-  }, [formData.name, router]);
-
-  const handleSubscriptionSkip = useCallback(() => {
-    console.log('[CreateBusinessProfile] Subscription skipped');
-    Alert.alert(
-      'Profile Created!',
-      `Your business "${formData.name}" has been set up. You can set up your subscription later from settings.`,
-      [{ text: 'Continue', onPress: () => router.replace('/(tabs)/feed' as any) }]
-    );
-  }, [formData.name, router]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -429,30 +227,19 @@ export default function CreateBusinessProfileScreen() {
       <View style={styles.stepsRow}>
         {STEPS.map((step, index) => {
           const StepIcon = step.icon;
-          const isActive = index === currentStep;
-          const isCompleted = index < currentStep;
+          const stepNum = index + 1;
+          const isActive = stepNum === currentStep;
+          const isCompleted = stepNum < currentStep;
           return (
             <View key={step.title} style={styles.stepDot}>
-              <View
-                style={[
-                  styles.dotCircle,
-                  isActive && styles.dotActive,
-                  isCompleted && styles.dotCompleted,
-                ]}
-              >
+              <View style={[styles.dotCircle, isActive && styles.dotActive, isCompleted && styles.dotCompleted]}>
                 {isCompleted ? (
                   <Check size={12} color="#fff" />
                 ) : (
                   <StepIcon size={14} color={isActive ? '#fff' : Colors.textTertiary} />
                 )}
               </View>
-              <Text
-                style={[
-                  styles.stepLabel,
-                  isActive && styles.stepLabelActive,
-                  isCompleted && styles.stepLabelCompleted,
-                ]}
-              >
+              <Text style={[styles.stepLabel, isActive && styles.stepLabelActive, isCompleted && styles.stepLabelCompleted]}>
                 {step.title}
               </Text>
             </View>
@@ -462,168 +249,8 @@ export default function CreateBusinessProfileScreen() {
     </View>
   );
 
-  const renderInput = (
-    field: keyof LocalBusinessProfileData,
-    label: string,
-    icon: React.ElementType,
-    placeholder: string,
-    options?: {
-      multiline?: boolean;
-      keyboardType?: TextInput['props']['keyboardType'];
-      autoCapitalize?: TextInput['props']['autoCapitalize'];
-      maxLength?: number;
-    }
-  ) => {
-    const Icon = icon;
-    const hasError = !!errors[field];
-    return (
-      <View style={styles.inputGroup}>
-        <View style={styles.inputLabelRow}>
-          <Icon size={16} color={hasError ? Colors.error : Colors.navyLight} />
-          <Text style={[styles.inputLabel, hasError && styles.inputLabelError]}>{label}</Text>
-        </View>
-        <TextInput
-          style={[
-            styles.textInput,
-            options?.multiline && styles.textInputMultiline,
-            hasError && styles.textInputError,
-          ]}
-          value={typeof formData[field] === 'string' ? formData[field] : ''}
-          onChangeText={(v) => updateField(field, v)}
-          placeholder={placeholder}
-          placeholderTextColor={Colors.textTertiary}
-          multiline={options?.multiline}
-          keyboardType={options?.keyboardType}
-          autoCapitalize={options?.autoCapitalize ?? 'sentences'}
-          maxLength={options?.maxLength}
-          textAlignVertical={options?.multiline ? 'top' : 'center'}
-        />
-        {hasError && <Text style={styles.errorText}>{errors[field]}</Text>}
-        {field === 'bio' && (
-          <Text style={styles.charCount}>{formData.bio.length}/160</Text>
-        )}
-      </View>
-    );
-  };
-
-  const renderStep0 = () => (
-    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
-      <View style={styles.stepHeader}>
-        <Building2 size={28} color={Colors.navyDark} />
-        <Text style={styles.stepTitle}>Let&apos;s set up your business</Text>
-        <Text style={styles.stepSubtitle}>Tell us about your business so customers can find you</Text>
-      </View>
-
-      <TouchableOpacity style={styles.avatarPicker} activeOpacity={0.7}>
-        {formData.avatar ? (
-          <Image source={{ uri: formData.avatar }} style={styles.avatarImage} />
-        ) : (
-          <View style={styles.avatarPlaceholder}>
-            <Camera size={28} color={Colors.navyLight} />
-            <Text style={styles.avatarText}>Add Logo</Text>
-          </View>
-        )}
-        <View style={styles.avatarBadge}>
-          <Camera size={12} color="#fff" />
-        </View>
-      </TouchableOpacity>
-
-      {renderInput('name', 'Business Name', Store, 'e.g. Rivera Coffee Co.')}
-      {renderInput('username', 'Username', Building2, 'e.g. riveracoffee', {
-        autoCapitalize: 'none',
-      })}
-      {renderInput('bio', 'Bio / Tagline', Sparkles, 'Describe your business in a few words...', {
-        multiline: true,
-        maxLength: 160,
-      })}
-
-      <View style={styles.uploadSection}>
-        <View style={styles.inputLabelRow}>
-          <ImagePlus size={16} color={Colors.navyLight} />
-          <Text style={styles.inputLabel}>Business Photo</Text>
-        </View>
-        <Text style={styles.uploadHint}>Upload a photo that represents your business (e.g. storefront, workspace)</Text>
-        {formData.businessPhoto ? (
-          <View style={styles.uploadedImageWrap}>
-            <Image source={{ uri: formData.businessPhoto }} style={styles.uploadedBusinessPhoto} contentFit="cover" />
-            <TouchableOpacity
-              style={styles.removeImageBtn}
-              onPress={() => removeImage('businessPhoto')}
-              activeOpacity={0.7}
-            >
-              <X size={14} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.uploadPhotoBox}
-            onPress={() => pickImage('businessPhoto')}
-            activeOpacity={0.7}
-          >
-            <Camera size={24} color={Colors.navyLight} />
-            <Text style={styles.uploadPhotoText}>Tap to upload business photo</Text>
-            <Text style={styles.uploadPhotoSubtext}>Recommended: 16:9 landscape</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.uploadSection}>
-        <View style={styles.inputLabelRow}>
-          <ImagePlus size={16} color={Colors.navyLight} />
-          <Text style={styles.inputLabel}>Business Logo</Text>
-        </View>
-        <Text style={styles.uploadHint}>Upload your business logo for branding across your profile</Text>
-        {formData.businessLogo ? (
-          <View style={styles.uploadedLogoWrap}>
-            <Image source={{ uri: formData.businessLogo }} style={styles.uploadedLogo} contentFit="cover" />
-            <TouchableOpacity
-              style={styles.removeImageBtn}
-              onPress={() => removeImage('businessLogo')}
-              activeOpacity={0.7}
-            >
-              <X size={14} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.uploadLogoBox}
-            onPress={() => pickImage('businessLogo')}
-            activeOpacity={0.7}
-          >
-            <Camera size={22} color={Colors.navyLight} />
-            <Text style={styles.uploadPhotoText}>Tap to upload logo</Text>
-            <Text style={styles.uploadPhotoSubtext}>Recommended: Square (1:1)</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </Animated.View>
-  );
-
-  const renderStep1 = () => (
-    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
-      <View style={styles.stepHeader}>
-        <Phone size={28} color={Colors.navyDark} />
-        <Text style={styles.stepTitle}>Contact Information</Text>
-        <Text style={styles.stepSubtitle}>How can customers reach you?</Text>
-      </View>
-
-      {renderInput('phone', 'Phone Number', Phone, '+1 (555) 000-0000', {
-        keyboardType: 'phone-pad',
-      })}
-      {renderInput('email', 'Business Email', Mail, 'hello@yourbusiness.com', {
-        keyboardType: 'email-address',
-        autoCapitalize: 'none',
-      })}
-      {renderInput('website', 'Website (optional)', Globe, 'www.yourbusiness.com', {
-        autoCapitalize: 'none',
-        keyboardType: 'url',
-      })}
-      {renderInput('address', 'Address (optional)', MapPin, '123 Main St, City, State')}
-    </Animated.View>
-  );
-
   const renderBusinessTypeSelector = () => {
-    const cards: { type: BusinessType; title: string; tagline: string; icon: React.ElementType; emoji: string; bullets: { ok: boolean; text: string }[]; footer: string }[] = [
+    const cards: { type: 'goodwill' | 'incentivised'; title: string; tagline: string; icon: React.ElementType; emoji: string; bullets: { ok: boolean; text: string }[]; footer: string }[] = [
       {
         type: 'goodwill',
         emoji: '🤝',
@@ -640,7 +267,7 @@ export default function CreateBusinessProfileScreen() {
         footer: 'Perfect for businesses that want presence without a gamified loyalty program.',
       },
       {
-        type: 'points_based',
+        type: 'incentivised',
         emoji: '🏆',
         title: 'Points & Rewards Business',
         tagline: 'Reward customers with points, tiers, and redeemable rewards.',
@@ -656,7 +283,7 @@ export default function CreateBusinessProfileScreen() {
       },
     ];
     return (
-      <View style={styles.btSection} testID="business-type-section">
+      <View style={styles.btSection}>
         <Text style={styles.btHeading}>Choose Your Business Type</Text>
         <Text style={styles.btSub}>This determines how you engage your customers on TouchPoint.</Text>
         <View style={styles.btCardsWrap}>
@@ -668,17 +295,13 @@ export default function CreateBusinessProfileScreen() {
                 key={c.type}
                 style={[styles.btCard, selected && styles.btCardSelected]}
                 activeOpacity={0.85}
-                onPress={() => {
-                  setBusinessTypeState(c.type);
-                  setBusinessTypeError('');
-                }}
-                testID={`business-type-${c.type}`}
+                onPress={() => setBusinessType(c.type as BusinessType)}
               >
-                {selected ? (
+                {selected && (
                   <View style={styles.btCheckBadge}>
                     <Check size={12} color="#fff" />
                   </View>
-                ) : null}
+                )}
                 <View style={styles.btCardHeader}>
                   <Text style={styles.btEmoji}>{c.emoji}</Text>
                   <Icon size={18} color={selected ? Colors.navyDark : Colors.navyLight} />
@@ -688,9 +311,7 @@ export default function CreateBusinessProfileScreen() {
                 <View style={styles.btBulletList}>
                   {c.bullets.map((b) => (
                     <View key={b.text} style={styles.btBulletRow}>
-                      <Text style={[styles.btBulletIcon, { color: b.ok ? '#10B981' : '#EF4444' }]}>
-                        {b.ok ? '✓' : '✕'}
-                      </Text>
+                      <Text style={[styles.btBulletIcon, { color: b.ok ? '#10B981' : '#EF4444' }]}>{b.ok ? '✓' : '✕'}</Text>
                       <Text style={styles.btBulletText}>{b.text}</Text>
                     </View>
                   ))}
@@ -700,90 +321,281 @@ export default function CreateBusinessProfileScreen() {
             );
           })}
         </View>
-        {!!businessTypeError && (
-          <Text style={styles.btError} testID="business-type-error">{businessTypeError}</Text>
-        )}
+        {!!errors.businessType && <Text style={styles.btError}>{errors.businessType}</Text>}
       </View>
+    );
+  };
+
+  const renderStep1 = () => {
+    const selectedCategory = businessCategories.find(c => c.id === categoryId);
+    return (
+      <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+        <View style={styles.stepHeader}>
+          <Building2 size={28} color={Colors.navyDark} />
+          <Text style={styles.stepTitle}>Business Basics</Text>
+          <Text style={styles.stepSubtitle}>Tell us the essentials about your business</Text>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <View style={styles.inputLabelRow}>
+            <Store size={16} color={errors.businessName ? Colors.error : Colors.navyLight} />
+            <Text style={[styles.inputLabel, !!errors.businessName && styles.inputLabelError]}>Business Name *</Text>
+          </View>
+          <TextInput
+            style={[styles.textInput, !!errors.businessName && styles.textInputError]}
+            value={businessName}
+            onChangeText={setBusinessName}
+            placeholder="e.g. Rivera Coffee Co."
+            placeholderTextColor={Colors.textTertiary}
+            autoCapitalize="words"
+          />
+          {!!errors.businessName && <Text style={styles.errorText}>{errors.businessName}</Text>}
+        </View>
+
+        {renderBusinessTypeSelector()}
+
+        <View style={styles.inputGroup}>
+          <View style={styles.inputLabelRow}>
+            <Tag size={16} color={errors.categoryId ? Colors.error : Colors.navyLight} />
+            <Text style={[styles.inputLabel, !!errors.categoryId && styles.inputLabelError]}>Category *</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.categorySelector, !!errors.categoryId && styles.textInputError]}
+            onPress={() => setShowCategoryPicker(v => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.categorySelectorText, !selectedCategory && styles.categorySelectorPlaceholder]}>
+              {selectedCategory ? selectedCategory.name : 'Select a category'}
+            </Text>
+            <ChevronRight size={18} color={Colors.textTertiary} style={{ transform: [{ rotate: showCategoryPicker ? '90deg' : '0deg' }] }} />
+          </TouchableOpacity>
+          {!!errors.categoryId && <Text style={styles.errorText}>{errors.categoryId}</Text>}
+        </View>
+
+        {showCategoryPicker && (
+          <View style={styles.categoryList}>
+            <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
+              {businessCategories.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[styles.categoryItem, categoryId === cat.id && styles.categoryItemSelected]}
+                  onPress={() => { setCategoryId(cat.id); setShowCategoryPicker(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.categoryItemText, categoryId === cat.id && styles.categoryItemTextSelected]}>{cat.name}</Text>
+                  {categoryId === cat.id && <Check size={16} color={Colors.navyDark} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        <View style={styles.inputGroup}>
+          <View style={styles.inputLabelRow}>
+            <FileText size={16} color={Colors.navyLight} />
+            <Text style={styles.inputLabel}>Description (optional)</Text>
+          </View>
+          <TextInput
+            style={[styles.textInput, styles.textInputMultiline]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Briefly describe what your business offers..."
+            placeholderTextColor={Colors.textTertiary}
+            multiline
+            maxLength={500}
+            textAlignVertical="top"
+          />
+        </View>
+      </Animated.View>
     );
   };
 
   const renderStep2 = () => (
     <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
       <View style={styles.stepHeader}>
-        <Tag size={28} color={Colors.navyDark} />
-        <Text style={styles.stepTitle}>Business Details</Text>
-        <Text style={styles.stepSubtitle}>Help customers understand what you offer</Text>
+        <Phone size={28} color={Colors.navyDark} />
+        <Text style={styles.stepTitle}>Contact & Location</Text>
+        <Text style={styles.stepSubtitle}>How can customers find and reach you?</Text>
       </View>
-
-      {renderBusinessTypeSelector()}
 
       <View style={styles.inputGroup}>
         <View style={styles.inputLabelRow}>
-          <Tag size={16} color={errors.category ? Colors.error : Colors.navyLight} />
-          <Text style={[styles.inputLabel, errors.category && styles.inputLabelError]}>Category</Text>
+          <Phone size={16} color={errors.phone ? Colors.error : Colors.navyLight} />
+          <Text style={[styles.inputLabel, !!errors.phone && styles.inputLabelError]}>Phone (optional)</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.categorySelector, errors.category && styles.textInputError]}
-          onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.categorySelectorText,
-              !formData.category && styles.categorySelectorPlaceholder,
-            ]}
-          >
-            {formData.category || 'Select a category'}
-          </Text>
-          <ChevronRight
-            size={18}
-            color={Colors.textTertiary}
-            style={{ transform: [{ rotate: showCategoryPicker ? '90deg' : '0deg' }] }}
-          />
-        </TouchableOpacity>
-        {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+        <TextInput
+          style={[styles.textInput, !!errors.phone && styles.textInputError]}
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="+1 (555) 000-0000"
+          placeholderTextColor={Colors.textTertiary}
+          keyboardType="phone-pad"
+        />
+        {!!errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
       </View>
 
-      {showCategoryPicker && (
-        <View style={styles.categoryList}>
-          <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.categoryItem,
-                  formData.category === cat && styles.categoryItemSelected,
-                ]}
-                onPress={() => {
-                  updateField('category', cat);
-                  setShowCategoryPicker(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.categoryItemText,
-                    formData.category === cat && styles.categoryItemTextSelected,
-                  ]}
-                >
-                  {cat}
-                </Text>
-                {formData.category === cat && <Check size={16} color={Colors.navyDark} />}
+      <View style={styles.inputGroup}>
+        <View style={styles.inputLabelRow}>
+          <Globe size={16} color={errors.website ? Colors.error : Colors.navyLight} />
+          <Text style={[styles.inputLabel, !!errors.website && styles.inputLabelError]}>Website (optional)</Text>
+        </View>
+        <TextInput
+          style={[styles.textInput, !!errors.website && styles.textInputError]}
+          value={website}
+          onChangeText={setWebsite}
+          placeholder="https://yourbusiness.com"
+          placeholderTextColor={Colors.textTertiary}
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+        {!!errors.website && <Text style={styles.errorText}>{errors.website}</Text>}
+      </View>
+
+      <View style={styles.inputGroup}>
+        <View style={styles.inputLabelRow}>
+          <MapPin size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>Address (optional)</Text>
+        </View>
+        <TextInput
+          style={styles.textInput}
+          value={address}
+          onChangeText={setAddress}
+          placeholder="123 Main St"
+          placeholderTextColor={Colors.textTertiary}
+        />
+      </View>
+
+      <View style={[styles.inputGroup, { zIndex: 30 }]}>
+        <View style={styles.inputLabelRow}>
+          <MapPin size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>Country (optional)</Text>
+        </View>
+        <TextInput
+          style={styles.textInput}
+          value={country}
+          onChangeText={onCountryChange}
+          placeholder="Start typing country..."
+          placeholderTextColor={Colors.textTertiary}
+          autoCapitalize="words"
+        />
+        {countrySuggestions.length > 0 && (
+          <View style={styles.suggestionList}>
+            {countrySuggestions.map(c => (
+              <TouchableOpacity key={c.isoCode} style={styles.suggestionItem} onPress={() => onCountrySelect(c)}>
+                <Text style={styles.suggestionText}>{c.name}</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
+        )}
+      </View>
+
+      <View style={[styles.inputGroup, { zIndex: 20 }]}>
+        <View style={styles.inputLabelRow}>
+          <MapPin size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>State (optional)</Text>
         </View>
-      )}
+        <TextInput
+          style={styles.textInput}
+          value={state}
+          onChangeText={onStateChange}
+          placeholder="Start typing state..."
+          placeholderTextColor={Colors.textTertiary}
+          autoCapitalize="words"
+        />
+        {stateSuggestions.length > 0 && (
+          <View style={styles.suggestionList}>
+            {stateSuggestions.map(s => (
+              <TouchableOpacity key={s.isoCode} style={styles.suggestionItem} onPress={() => onStateSelect(s)}>
+                <Text style={styles.suggestionText}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
-      {renderInput('hours', 'Business Hours (optional)', Clock, 'e.g. Mon–Fri 9am–5pm')}
-
-      {renderReferralToggle()}
+      <View style={[styles.inputGroup, { zIndex: 10 }]}>
+        <View style={styles.inputLabelRow}>
+          <MapPin size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>City (optional)</Text>
+        </View>
+        <TextInput
+          style={styles.textInput}
+          value={city}
+          onChangeText={onCityChange}
+          placeholder="Start typing city..."
+          placeholderTextColor={Colors.textTertiary}
+          autoCapitalize="words"
+        />
+        {citySuggestions.length > 0 && (
+          <View style={styles.suggestionList}>
+            {citySuggestions.map(c => (
+              <TouchableOpacity key={c.name} style={styles.suggestionItem} onPress={() => onCitySelect(c)}>
+                <Text style={styles.suggestionText}>{c.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
     </Animated.View>
   );
 
-  const renderReferralToggle = () => {
-    return (
-      <View style={styles.referralSection} testID="referral-program-section">
+  const renderStep3 = () => (
+    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+      <View style={styles.stepHeader}>
+        <Clock size={28} color={Colors.navyDark} />
+        <Text style={styles.stepTitle}>Business Hours</Text>
+        <Text style={styles.stepSubtitle}>Set your opening hours for each day (optional)</Text>
+      </View>
+
+      {hours.map((h, index) => (
+        <View key={h.day_of_week} style={styles.hoursRow}>
+          <Text style={styles.hoursDay}>{DAYS[h.day_of_week]}</Text>
+          <Switch
+            value={!h.is_closed}
+            onValueChange={(v) => updateHour(index, { is_closed: !v })}
+            trackColor={{ false: '#D6D3E0', true: Colors.navyDark }}
+            thumbColor={Platform.OS === 'android' ? (!h.is_closed ? '#fff' : '#f4f3f4') : undefined}
+            ios_backgroundColor="#D6D3E0"
+          />
+          {!h.is_closed ? (
+            <View style={styles.hoursTimeRow}>
+              <TextInput
+                style={styles.hoursTimeInput}
+                value={h.open_time ?? ''}
+                onChangeText={(v) => updateHour(index, { open_time: v })}
+                placeholder="09:00"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+              <Text style={styles.hoursTimeSep}>–</Text>
+              <TextInput
+                style={styles.hoursTimeInput}
+                value={h.close_time ?? ''}
+                onChangeText={(v) => updateHour(index, { close_time: v })}
+                placeholder="18:00"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            </View>
+          ) : (
+            <Text style={styles.hoursClosed}>Closed</Text>
+          )}
+        </View>
+      ))}
+    </Animated.View>
+  );
+
+  const renderStep4 = () => (
+    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+      <View style={styles.stepHeader}>
+        <Gift size={28} color={Colors.navyDark} />
+        <Text style={styles.stepTitle}>Referral Settings</Text>
+        <Text style={styles.stepSubtitle}>Choose how your customers refer others</Text>
+      </View>
+
+      <View style={styles.referralSection}>
         <View style={styles.referralHeader}>
           <Gift size={16} color={Colors.navyLight} />
           <Text style={styles.referralTitle}>Referral Program</Text>
@@ -793,271 +605,124 @@ export default function CreateBusinessProfileScreen() {
             <Text style={styles.referralRowLabel}>Use Your In-House Referral Program</Text>
           </View>
           <Switch
-            value={referralOptedOut}
+            value={inhouseReferral}
             onValueChange={(v) => {
-              setReferralOptedOut(v);
-              setFormData((prev) => ({ ...prev, referralOptIn: !v }));
-              if (!v) {
-                setInhouseReferralUrl('');
-                setInhouseUrlError('');
-              }
-              console.log('[CreateBusinessProfile] referralOptedOut ->', v);
+              setInhouseReferral(v);
+              if (!v) setInhouseReferralUrl('');
             }}
             trackColor={{ false: '#D6D3E0', true: Colors.navyDark }}
-            thumbColor={Platform.OS === 'android' ? (referralOptedOut ? '#fff' : '#f4f3f4') : undefined}
+            thumbColor={Platform.OS === 'android' ? (inhouseReferral ? '#fff' : '#f4f3f4') : undefined}
             ios_backgroundColor="#D6D3E0"
-            testID="referral-opt-out-switch"
           />
         </View>
         <Text style={styles.referralHelper}>
-          {referralOptedOut
-            ? 'Your members will be directed to your own in-house referral program instead. TouchPoint referral tracking and point rewards will not apply.'
+          {inhouseReferral
+            ? 'Your members will be directed to your own in-house referral program. TouchPoint referral tracking and point rewards will not apply.'
             : 'By default, your members refer others through the TouchPoint referral program and both parties earn points automatically.'}
         </Text>
-        {referralOptedOut ? (
-          <View style={styles.inhouseWrap} testID="inhouse-referral-section">
+
+        {inhouseReferral && (
+          <View style={styles.inhouseWrap}>
             <View style={styles.inhouseInfoBanner}>
               <Info size={14} color="#B7791F" />
               <Text style={styles.inhouseInfoText}>
-                When you opt out, your members will not be able to refer others through the TouchPoint referral program. Instead, referrals will be redirected to your own in-house referral program.
+                When you opt in, referrals will be redirected to your own in-house referral program instead of TouchPoint.
               </Text>
             </View>
             <View style={styles.inputLabelRow}>
-              <Link2 size={16} color={inhouseUrlError ? Colors.error : Colors.navyLight} />
-              <Text style={[styles.inputLabel, !!inhouseUrlError && styles.inputLabelError]}>Your In-House Referral Program URL</Text>
+              <Link2 size={16} color={errors.inhouseReferralUrl ? Colors.error : Colors.navyLight} />
+              <Text style={[styles.inputLabel, !!errors.inhouseReferralUrl && styles.inputLabelError]}>Your In-House Referral URL *</Text>
             </View>
             <TextInput
-              style={[styles.textInput, !!inhouseUrlError && styles.textInputError]}
+              style={[styles.textInput, !!errors.inhouseReferralUrl && styles.textInputError]}
               value={inhouseReferralUrl}
-              onChangeText={(v) => {
-                setInhouseReferralUrl(v);
-                if (inhouseUrlError) setInhouseUrlError('');
-              }}
+              onChangeText={setInhouseReferralUrl}
               placeholder="https://yourbusiness.com/refer"
               placeholderTextColor={Colors.textTertiary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
-              testID="inhouse-referral-url-input"
             />
-            <Text style={styles.inhouseHelper}>
-              Members will be redirected to this URL when they attempt to refer someone through TouchPoint.
-            </Text>
-            {!!inhouseUrlError && <Text style={styles.errorText}>{inhouseUrlError}</Text>}
+            {!!errors.inhouseReferralUrl && <Text style={styles.errorText}>{errors.inhouseReferralUrl}</Text>}
           </View>
-        ) : null}
-      </View>
-    );
-  };
-
-  const renderStep3 = () => (
-    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
-      <View style={styles.stepHeader}>
-        <Sparkles size={28} color={Colors.navyDark} />
-        <Text style={styles.stepTitle}>Review Your Profile</Text>
-        <Text style={styles.stepSubtitle}>Make sure everything looks good</Text>
-      </View>
-
-      <View style={styles.reviewCard}>
-        <View style={styles.reviewAvatarRow}>
-          {formData.avatar ? (
-            <Image source={{ uri: formData.avatar }} style={styles.reviewAvatar} />
-          ) : (
-            <View style={[styles.reviewAvatar, styles.reviewAvatarPlaceholder]}>
-              <Store size={24} color={Colors.navyLight} />
-            </View>
-          )}
-          <View style={styles.reviewNameBlock}>
-            <Text style={styles.reviewName}>{formData.name || 'Business Name'}</Text>
-            <Text style={styles.reviewUsername}>@{formData.username || 'username'}</Text>
-          </View>
-        </View>
-
-        {formData.bio ? (
-          <Text style={styles.reviewBio}>{formData.bio}</Text>
-        ) : null}
-
-        <View style={styles.reviewDivider} />
-
-        <View style={styles.reviewDetails}>
-          {formData.category ? (
-            <ReviewRow icon={Tag} label="Category" value={formData.category} />
-          ) : null}
-          {formData.phone ? (
-            <ReviewRow icon={Phone} label="Phone" value={formData.phone} />
-          ) : null}
-          {formData.email ? (
-            <ReviewRow icon={Mail} label="Email" value={formData.email} />
-          ) : null}
-          {formData.website ? (
-            <ReviewRow icon={Globe} label="Website" value={formData.website} />
-          ) : null}
-          {formData.address ? (
-            <ReviewRow icon={MapPin} label="Address" value={formData.address} />
-          ) : null}
-          {formData.hours ? (
-            <ReviewRow icon={Clock} label="Hours" value={formData.hours} />
-          ) : null}
-          {businessType ? (
-            <ReviewRow
-              icon={businessType === 'goodwill' ? HandHeart : Trophy}
-              label="Business Type"
-              value={businessType === 'goodwill' ? 'Goodwill Business' : 'Points & Rewards Business'}
-            />
-          ) : null}
-          <ReviewRow
-            icon={Gift}
-            label="Referral Program"
-            value={referralOptedOut ? `Opted out — redirects to ${inhouseReferralUrl || 'in-house URL'}` : 'Joined — TouchPoint referrals enabled'}
-          />
-        </View>
+        )}
       </View>
     </Animated.View>
   );
 
-  const renderStep4 = () => (
+  const renderStep5 = () => (
     <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
-      <BizComSubscription
-        onComplete={handleSubscriptionComplete}
-        onSkip={handleSubscriptionSkip}
-        businessName={formData.name}
-      />
+      <View style={styles.stepHeader}>
+        <ImagePlus size={28} color={Colors.navyDark} />
+        <Text style={styles.stepTitle}>Business Media</Text>
+        <Text style={styles.stepSubtitle}>Add your logo and a cover photo (optional)</Text>
+      </View>
+
+      <View style={styles.uploadSection}>
+        <View style={styles.inputLabelRow}>
+          <ImagePlus size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>Business Logo</Text>
+        </View>
+        <Text style={styles.uploadHint}>Upload your business logo — square format recommended</Text>
+        {logoUri ? (
+          <View style={styles.uploadedLogoWrap}>
+            <Image source={{ uri: logoUri }} style={styles.uploadedLogo} contentFit="cover" />
+            <TouchableOpacity style={styles.removeImageBtn} onPress={pickLogo} activeOpacity={0.7}>
+              <X size={14} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.uploadLogoBox} onPress={pickLogo} activeOpacity={0.7}>
+            <Camera size={22} color={Colors.navyLight} />
+            <Text style={styles.uploadPhotoText}>Tap to upload logo</Text>
+            <Text style={styles.uploadPhotoSubtext}>Recommended: 1:1 square</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.uploadSection}>
+        <View style={styles.inputLabelRow}>
+          <ImagePlus size={16} color={Colors.navyLight} />
+          <Text style={styles.inputLabel}>Cover Photo</Text>
+        </View>
+        <Text style={styles.uploadHint}>Upload a photo that represents your business (e.g. storefront, workspace)</Text>
+        {coverUri ? (
+          <View style={styles.uploadedImageWrap}>
+            <Image source={{ uri: coverUri }} style={styles.uploadedBusinessPhoto} contentFit="cover" />
+            <TouchableOpacity style={styles.removeImageBtn} onPress={pickCover} activeOpacity={0.7}>
+              <X size={14} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.uploadPhotoBox} onPress={pickCover} activeOpacity={0.7}>
+            <Camera size={24} color={Colors.navyLight} />
+            <Text style={styles.uploadPhotoText}>Tap to upload cover photo</Text>
+            <Text style={styles.uploadPhotoSubtext}>Recommended: 16:9 landscape</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {!!apiError && (
+        <View style={styles.apiErrorBanner}>
+          <Text style={styles.apiErrorText}>{apiError}</Text>
+          <TouchableOpacity onPress={() => setApiError(null)}>
+            <X size={16} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
+      )}
     </Animated.View>
   );
 
   const renderCurrentStep = () => {
     switch (currentStep) {
-      case 0: return renderStep0();
       case 1: return renderStep1();
       case 2: return renderStep2();
       case 3: return renderStep3();
       case 4: return renderStep4();
+      case 5: return renderStep5();
       default: return null;
     }
   };
-
-  const renderMethodSelection = () => (
-    <Animated.View style={[styles.methodSelectionWrap, { opacity: methodFadeAnim }]}>
-      <TouchableOpacity
-        style={styles.methodCard}
-        activeOpacity={0.7}
-        onPress={() => handleSelectMethod('manual')}
-      >
-        <View style={styles.methodCardIconWrap}>
-          <View style={[styles.methodCardIcon, { backgroundColor: Colors.navyDark + '10' }]}> 
-            <PenLine size={24} color={Colors.navyDark} />
-          </View>
-        </View>
-        <View style={styles.methodCardContent}>
-          <Text style={styles.methodCardTitle}>Create New Profile</Text>
-          <Text style={styles.methodCardDesc}>
-            Build your business profile from scratch with your own details, logo, and information
-          </Text>
-        </View>
-        <ChevronRight size={20} color={Colors.textTertiary} />
-      </TouchableOpacity>
-
-      <View style={styles.methodDividerRow}>
-        <View style={styles.methodDividerLine} />
-        <Text style={styles.methodDividerText}>OR</Text>
-        <View style={styles.methodDividerLine} />
-      </View>
-
-      <TouchableOpacity
-        style={[styles.methodCard, styles.methodCardGoogle]}
-        activeOpacity={0.7}
-        onPress={() => handleSelectMethod('google')}
-      >
-        <View style={styles.methodCardIconWrap}>
-          <View style={[styles.methodCardIcon, { backgroundColor: '#4285F4' + '12' }]}> 
-            <ShieldCheck size={24} color="#4285F4" />
-          </View>
-        </View>
-        <View style={styles.methodCardContent}>
-          <Text style={styles.methodCardTitle}>Claim Google Business</Text>
-          <Text style={styles.methodCardDesc}>
-            Import and verify your existing Google Business Profile to get started faster
-          </Text>
-        </View>
-        <ChevronRight size={20} color={Colors.textTertiary} />
-      </TouchableOpacity>
-
-      <View style={styles.methodInfoBanner}>
-        <Sparkles size={16} color={Colors.navyLight} />
-        <Text style={styles.methodInfoText}>
-          Claiming your Google profile imports your reviews, photos, and business details automatically
-        </Text>
-      </View>
-    </Animated.View>
-  );
-
-  const renderGoogleClaimFlow = () => (
-    <View style={styles.googleFlowWrap}>
-      <View style={styles.googleSearchHeader}>
-        <Text style={styles.googleSearchTitle}>Find Your Business</Text>
-        <Text style={styles.googleSearchSubtitle}>
-          Search for your business on Google to claim and import your profile
-        </Text>
-      </View>
-
-      <View style={styles.googleSearchBar}>
-        <Search size={18} color={Colors.textTertiary} />
-        <TextInput
-          style={styles.googleSearchInput}
-          value={googleSearch}
-          onChangeText={setGoogleSearch}
-          placeholder="Search by name, category, or location..."
-          placeholderTextColor={Colors.textTertiary}
-          autoCapitalize="none"
-        />
-      </View>
-
-      <ScrollView
-        style={styles.googleResultsScroll}
-        contentContainerStyle={styles.googleResultsContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredGoogleProfiles.map((profile) => (
-          <TouchableOpacity
-            key={profile.id}
-            style={styles.googleResultCard}
-            activeOpacity={0.7}
-            onPress={() => router.push(`/claim-business/${profile.id}` as any)}
-          >
-            <Image
-              source={{ uri: profile.photo }}
-              style={styles.googleResultImage}
-              contentFit="cover"
-            />
-            <View style={styles.googleResultInfo}>
-              <Text style={styles.googleResultName} numberOfLines={1}>{profile.name}</Text>
-              <View style={styles.googleResultRating}>
-                <Star size={12} color="#FBBF24" fill="#FBBF24" />
-                <Text style={styles.googleResultRatingText}>{profile.rating}</Text>
-                <Text style={styles.googleResultReviews}>({profile.reviewCount.toLocaleString()})</Text>
-              </View>
-              <View style={styles.googleResultDetail}>
-                <MapPin size={11} color={Colors.textTertiary} />
-                <Text style={styles.googleResultDetailText} numberOfLines={1}>{profile.address}</Text>
-              </View>
-              <Text style={styles.googleResultCategory}>{profile.category}</Text>
-            </View>
-            <View style={styles.googleClaimBadge}>
-              <Text style={styles.googleClaimBadgeText}>Claim</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {filteredGoogleProfiles.length === 0 && (
-          <View style={styles.googleNoResults}>
-            <Search size={32} color={Colors.textTertiary} />
-            <Text style={styles.googleNoResultsText}>No businesses found</Text>
-            <Text style={styles.googleNoResultsSubtext}>Try a different search term</Text>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
 
   if (creationMethod === 'none') {
     return (
@@ -1077,7 +742,6 @@ export default function CreateBusinessProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* ───── Hero Banner ───── */}
           <LinearGradient
             colors={['#0F1A2E', '#152238', '#1A2F4A']}
             start={{ x: 0, y: 0 }}
@@ -1090,21 +754,15 @@ export default function CreateBusinessProfileScreen() {
               <Text style={styles.heroSubtext}>
                 Join TouchPoint and turn every customer into a loyal advocate — no noise, no spam, just results.
               </Text>
-              <TouchableOpacity
-                style={styles.heroCta}
-                activeOpacity={0.85}
-                onPress={() => handleSelectMethod('manual')}
-              >
+              <TouchableOpacity style={styles.heroCta} activeOpacity={0.85} onPress={handleSelectManual}>
                 <Text style={styles.heroCtaText}>Get Started</Text>
                 <ChevronRight size={18} color="#fff" />
               </TouchableOpacity>
             </View>
           </LinearGradient>
 
-          {/* ───── Why Businesses Love TouchPoint Slider ───── */}
           <View style={styles.featuresSliderWrap}>
             <Text style={styles.featuresSliderHeading}>Why Businesses Love TouchPoint</Text>
-
             <FlatList
               data={FEATURE_SLIDES}
               keyExtractor={(item) => item.id}
@@ -1128,40 +786,40 @@ export default function CreateBusinessProfileScreen() {
                 </View>
               )}
             />
-
             <View style={styles.sliderDotsRow}>
-              {FEATURE_SLIDES.map((_, i) => {
-                const isActive = i === activeSlideIndex;
-                return (
-                  <View
-                    key={`sdot-${i}`}
-                    style={[
-                      styles.sliderDot,
-                      isActive ? styles.sliderDotActive : styles.sliderDotInactive,
-                    ]}
-                  />
-                );
-              })}
+              {FEATURE_SLIDES.map((_, i) => (
+                <View
+                  key={`sdot-${i}`}
+                  style={[styles.sliderDot, i === activeSlideIndex ? styles.sliderDotActive : styles.sliderDotInactive]}
+                />
+              ))}
             </View>
           </View>
-        </ScrollView>
-      </View>
-    );
-  }
 
-  if (creationMethod === 'google') {
-    return (
-      <View style={styles.container}>
-        <SafeAreaView edges={['top']} style={styles.safeTop}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={goBack} style={styles.headerBtn} activeOpacity={0.7}>
-              <ArrowLeft size={22} color={Colors.bannerText} />
+          <Animated.View style={[styles.methodSelectionWrap, { opacity: methodFadeAnim }]}>
+            <TouchableOpacity style={styles.methodCard} activeOpacity={0.7} onPress={handleSelectManual}>
+              <View style={styles.methodCardIconWrap}>
+                <View style={[styles.methodCardIcon, { backgroundColor: Colors.navyDark + '10' }]}>
+                  <PenLine size={24} color={Colors.navyDark} />
+                </View>
+              </View>
+              <View style={styles.methodCardContent}>
+                <Text style={styles.methodCardTitle}>Create New Profile</Text>
+                <Text style={styles.methodCardDesc}>
+                  Build your business profile from scratch with your own details, logo, and information
+                </Text>
+              </View>
+              <ChevronRight size={20} color={Colors.textTertiary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Claim Google Business</Text>
-            <View style={styles.headerBtn} />
-          </View>
-        </SafeAreaView>
-        {renderGoogleClaimFlow()}
+
+            <View style={styles.methodInfoBanner}>
+              <Sparkles size={16} color={Colors.navyLight} />
+              <Text style={styles.methodInfoText}>
+                Complete your profile in 5 quick steps — business details, contact info, hours, referral settings, and media.
+              </Text>
+            </View>
+          </Animated.View>
+        </ScrollView>
       </View>
     );
   }
@@ -1178,11 +836,7 @@ export default function CreateBusinessProfileScreen() {
         </View>
       </SafeAreaView>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={100}>
         <ScrollView
           ref={scrollRef}
           style={styles.flex}
@@ -1190,48 +844,36 @@ export default function CreateBusinessProfileScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ───── Existing Form ───── */}
           {renderStepIndicator()}
           {renderCurrentStep()}
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {currentStep < 4 && (
-        <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
-          <View style={styles.footer}>
-            {currentStep > 0 && (
-              <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.7}>
-                <Text style={styles.backBtnText}>Back</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.nextBtn, currentStep === 0 && { flex: 1 }]}
-              onPress={currentStep === 3 ? handleSubmit : goNext}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.nextBtnText}>
-                {currentStep === 3 ? 'Create Profile' : 'Continue'}
-              </Text>
-              {currentStep < 3 && <ChevronRight size={18} color="#fff" />}
-              {currentStep === 3 && <Check size={18} color="#fff" />}
+      <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
+        <View style={styles.footer}>
+          {currentStep > 1 && (
+            <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.7}>
+              <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      )}
-    </View>
-  );
-}
-
-function ReviewRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
-  return (
-    <View style={styles.reviewRow}>
-      <View style={styles.reviewRowIcon}>
-        <Icon size={15} color={Colors.navyLight} />
-      </View>
-      <View style={styles.reviewRowContent}>
-        <Text style={styles.reviewRowLabel}>{label}</Text>
-        <Text style={styles.reviewRowValue}>{value}</Text>
-      </View>
+          )}
+          <TouchableOpacity
+            style={[styles.nextBtn, currentStep === 1 && { flex: 1 }, loading && { opacity: 0.7 }]}
+            onPress={currentStep === 5 ? submit : goNext}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.nextBtnText}>{currentStep === 5 ? 'Create Business' : 'Continue'}</Text>
+                {currentStep < 5 && <ChevronRight size={18} color="#fff" />}
+                {currentStep === 5 && <Check size={18} color="#fff" />}
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -1330,129 +972,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 17,
-  },
-  googleFlowWrap: {
-    flex: 1,
-    padding: 16,
-  },
-  googleSearchHeader: {
-    marginBottom: 16,
-  },
-  googleSearchTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  googleSearchSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-  googleSearchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-    marginBottom: 16,
-    gap: 10,
-  },
-  googleSearchInput: {
-    flex: 1,
-    paddingVertical: 13,
-    fontSize: 14,
-    color: Colors.text,
-  },
-  googleResultsScroll: {
-    flex: 1,
-  },
-  googleResultsContent: {
-    paddingBottom: 40,
-  },
-  googleResultCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    marginBottom: 10,
-    gap: 12,
-  },
-  googleResultImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-  },
-  googleResultInfo: {
-    flex: 1,
-  },
-  googleResultName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 3,
-  },
-  googleResultRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginBottom: 3,
-  },
-  googleResultRatingText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  googleResultReviews: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-  },
-  googleResultDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
-  },
-  googleResultDetailText: {
-    flex: 1,
-    fontSize: 11,
-    color: Colors.textSecondary,
-  },
-  googleResultCategory: {
-    fontSize: 11,
-    fontWeight: '500' as const,
-    color: '#4285F4',
-  },
-  googleClaimBadge: {
-    backgroundColor: '#4285F4',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  googleClaimBadgeText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
-  googleNoResults: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    gap: 8,
-  },
-  googleNoResultsText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  googleNoResultsSubtext: {
-    fontSize: 13,
-    color: Colors.textSecondary,
   },
   flex: {
     flex: 1,
@@ -1697,6 +1216,48 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: Colors.navyDark,
   },
+  hoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    gap: 12,
+  },
+  hoursDay: {
+    width: 34,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  hoursTimeRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  hoursTimeInput: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  hoursTimeSep: {
+    fontSize: 14,
+    color: Colors.textTertiary,
+  },
+  hoursClosed: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textTertiary,
+    fontStyle: 'italic',
+  },
   reviewCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
@@ -1841,10 +1402,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   referralSection: {
-    marginTop: 24,
-    paddingTop: 18,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    marginTop: 8,
   },
   referralHeader: {
     flexDirection: 'row',
@@ -2080,6 +1638,54 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#fff',
   },
+  apiErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+    gap: 10,
+  },
+  apiErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.error,
+    lineHeight: 18,
+  },
+
+  // ─── Location Autocomplete ───
+  suggestionList: {
+    position: 'absolute',
+    top: 76,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 10,
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: Colors.text,
+  },
 
   // ─── Hero Banner ───
   heroBanner: {
@@ -2097,183 +1703,92 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
-    marginBottom: 4,
   },
   heroHeadline: {
     fontSize: 26,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
+    fontWeight: '800' as const,
+    color: '#fff',
     textAlign: 'center' as const,
-    letterSpacing: -0.3,
-    lineHeight: 34,
+    letterSpacing: -0.5,
+    lineHeight: 32,
   },
   heroSubtext: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255,255,255,0.75)',
     textAlign: 'center' as const,
     lineHeight: 21,
-    maxWidth: 320,
+    maxWidth: 300,
   },
   heroCta: {
-    flexDirection: 'row' as const,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: Colors.primary,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    marginTop: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    borderRadius: 12,
     gap: 6,
-    alignSelf: 'stretch' as const,
+    marginTop: 4,
   },
   heroCtaText: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-  },
-
-  // ─── Why Businesses Love TouchPoint ───
-  featuresSection: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    paddingBottom: 20,
-    gap: 12,
-  },
-  featuresHeading: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: -0.2,
-    marginBottom: 4,
-  },
-  featureCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-  },
-  featureIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  featureCardContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  featureCardTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  featureCardDesc: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 19,
+    fontWeight: '700' as const,
+    color: '#fff',
   },
 
-  // ─── Divider + Form Heading ───
-  formSectionHeader: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+  // ─── Feature Slides ───
+  featuresSliderWrap: {
+    marginTop: 28,
+    marginBottom: 12,
   },
-  formSectionDivider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginBottom: 24,
-    marginTop: 8,
-  },
-  formSectionTitle: {
+  featuresSliderHeading: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
-    textAlign: 'center' as const,
-    letterSpacing: -0.2,
-    marginBottom: 6,
-  },
-  formSectionSubtext: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 18,
-    marginBottom: 24,
-  },
-
-  // ─── Features Slider ───
-  featuresSliderWrap: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 28,
-    paddingBottom: 20,
-  },
-  featuresSliderHeading: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: -0.2,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    letterSpacing: -0.3,
+    marginBottom: 14,
   },
   sliderListContent: {
-    paddingHorizontal: 16,
+    paddingRight: 20,
     gap: SLIDE_GAP,
   },
   slideCardOuter: {
     width: SLIDE_CARD_WIDTH,
   },
   slideCard: {
-    width: SLIDE_CARD_WIDTH,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: Colors.surface,
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 10,
   },
   slideIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#C8E6C9',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   slideTitle: {
     fontSize: 16,
     fontWeight: '700' as const,
-    color: '#1B5E20',
+    color: Colors.text,
     textAlign: 'center' as const,
     letterSpacing: -0.2,
-    marginBottom: 8,
   },
   slideDesc: {
     fontSize: 13,
-    color: '#388E3C',
+    color: Colors.textSecondary,
     textAlign: 'center' as const,
-    lineHeight: 20,
+    lineHeight: 19,
   },
   sliderDotsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 6,
     marginTop: 14,
   },
   sliderDot: {
@@ -2281,12 +1796,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   sliderDotActive: {
-    width: 16,
-    backgroundColor: '#2E7D32',
+    width: 18,
+    backgroundColor: Colors.navyDark,
   },
   sliderDotInactive: {
     width: 6,
-    backgroundColor: '#A5D6A7',
+    backgroundColor: Colors.borderLight,
   },
 });
-

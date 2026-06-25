@@ -165,6 +165,17 @@ CREATE INDEX idx_businesses_slug       ON businesses(slug);
 CREATE INDEX idx_businesses_category   ON businesses(category_id);
 CREATE INDEX idx_businesses_city       ON businesses(city);
 CREATE INDEX idx_businesses_location   ON businesses USING GIST (ll_to_earth(latitude, longitude));
+-- -------------------------------------------------------
+ALTER TABLE businesses
+  ADD COLUMN business_type VARCHAR(20) NOT NULL DEFAULT 'incentivised'
+    CHECK (business_type IN ('goodwill', 'incentivised')),
+  ADD COLUMN inhouse_referral BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN inhouse_referral_url TEXT;
+
+  ALTER TABLE businesses
+  ADD CONSTRAINT chk_inhouse_referral_url
+    CHECK (inhouse_referral = false OR inhouse_referral_url IS NOT NULL);
+ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT FALSE;
 
 -- -------------------------------------------------------
 
@@ -216,6 +227,10 @@ CREATE TABLE business_subscriptions (
 
 CREATE INDEX idx_biz_subs_business_id ON business_subscriptions(business_id);
 CREATE INDEX idx_biz_subs_status      ON business_subscriptions(status);
+
+ALTER TABLE business_subscriptions
+  ADD CONSTRAINT uq_business_subscriptions_business_id 
+  UNIQUE (business_id);
 
 -- ============================================================
 -- DOMAIN 5: CUSTOMER SUBSCRIPTIONS (Customer → Business)

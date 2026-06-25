@@ -456,7 +456,7 @@ export default function UserProfileScreen() {
                   </View>
                 )}
                 right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-                onPress={() => router.push('/edit-profile' as any)}
+                onPress={() => router.push('/my-profile' as any)}
                 style={styles.listItem}
                 titleStyle={styles.listItemTitle}
                 descriptionStyle={styles.listItemDesc}
