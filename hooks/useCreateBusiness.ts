@@ -33,6 +33,33 @@ function isValidUrl(val: string): boolean {
   return val.startsWith('http://') || val.startsWith('https://');
 }
 
+/**
+ * Converts a local image URI to a stable display URI immediately after picking.
+ * On Expo web, ImagePicker returns a blob: URL that gets revoked between renders,
+ * causing the preview image to disappear. We convert to base64 via FileReader right
+ * away so the URI remains valid for both display and upload.
+ * On native (iOS/Android), file:// URIs are stable — returned unchanged.
+ */
+async function toDisplayUri(uri: string): Promise<string> {
+  // Native file:// URIs are always stable — no conversion needed
+  if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
+
+  // Web: fetch the blob and encode it as a base64 data URI
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = reject;
+    xhr.open('GET', uri);
+    xhr.responseType = 'blob';
+    xhr.send();
+  });
+}
+
 export function useCreateBusiness() {
   const router = useRouter();
   const { updateAuthUser } = useAuth();
@@ -218,7 +245,10 @@ export function useCreateBusiness() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setLogoUri(result.assets[0].uri);
+      // Convert to stable display URI immediately — blob URLs get revoked on web
+      const displayUri = await toDisplayUri(result.assets[0].uri);
+      console.log('[pickLogo] displayUri:', displayUri);
+      setLogoUri(displayUri);
     }
   }, []);
 
@@ -230,7 +260,9 @@ export function useCreateBusiness() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setCoverUri(result.assets[0].uri);
+      // Convert to stable display URI immediately — blob URLs get revoked on web
+      const displayUri = await toDisplayUri(result.assets[0].uri);
+      setCoverUri(displayUri);
     }
   }, []);
 

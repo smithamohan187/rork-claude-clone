@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useMemo } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Dimensions,
   Animated,
   Pressable,
+  FlatList,
+  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,44 +20,41 @@ import {
   Search,
   X,
   Users,
-  Zap,
   Star,
   MapPin,
-  TrendingUp,
-  ChevronRight,
-  Compass,
+  Building2,
 } from 'lucide-react-native';
-import {
-  exploreCategories,
-  trendingBusinesses,
-  nearYouBusinesses,
-} from '@/mocks/explore';
-import type { ExploreBusiness } from '@/mocks/explore';
-import { useAuth } from '@/contexts/AuthContext';
-import MarketplaceMembersScreen from '@/components/MarketplaceMembersScreen';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import BusinessInviteBanner from '@/components/feed/BusinessInviteBanner';
-import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
+import { useBusinessDirectory } from '@/hooks/useBusinessDirectory';
+import type { BusinessDirectoryItem, BusinessCategory } from '@/api/services/businessDirectoryService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_GAP = 10;
+const GRID_GAP     = 10;
 const GRID_PADDING = 16;
-const CARD_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP) / 2;
-const NEAR_CARD_WIDTH = SCREEN_WIDTH * 0.42;
+const CARD_WIDTH   = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP) / 2;
 
-const PURPLE = '#1A5C35';
+// Colour constants — identical to marketplace screen so the screens feel cohesive
+const PURPLE       = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
 const PURPLE_FAINT = '#F7F6FB';
-const GOLD = '#E5A100';
+const GOLD         = '#E5A100';
 
+// ─── CategoryChip ────────────────────────────────────────────────────────────
+// Accepts a full BusinessCategory object or the sentinel 'all' for the All chip.
 const CategoryChip = React.memo(function CategoryChip({
-  label,
+  category,
   isActive,
   onPress,
 }: {
-  label: string;
+  category: BusinessCategory | 'all';
   isActive: boolean;
   onPress: () => void;
 }) {
+  // Derive display label and optional MaterialCommunityIcons name from the prop
+  const label    = category === 'all' ? 'All' : category.name;
+  const iconName = category === 'all' ? null  : category.icon;
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
@@ -73,19 +72,31 @@ const CategoryChip = React.memo(function CategoryChip({
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        testID={`explore-chip-${label}`}
       >
-        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
+        {/* Icon + label in a row — icon only rendered when the category has one */}
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {iconName ? (
+            <MaterialCommunityIcons
+              name={iconName as any}
+              size={14}
+              color={isActive ? '#fff' : PURPLE}
+              style={{ marginRight: 4 }}
+            />
+          ) : null}
+          <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
+        </View>
       </Pressable>
     </Animated.View>
   );
 });
 
-const TrendingCard = React.memo(function TrendingCard({
-  business,
+// ─── BusinessCard ─────────────────────────────────────────────────────────────
+// Visual structure mirrors TrendingCard from the marketplace screen.
+const BusinessCard = React.memo(function BusinessCard({
+  item,
   onPress,
 }: {
-  business: ExploreBusiness;
+  item: BusinessDirectoryItem;
   onPress: () => void;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -98,288 +109,221 @@ const TrendingCard = React.memo(function TrendingCard({
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
   }, [scaleAnim]);
 
-  const formattedSubs = business.subscribers >= 1000
-    ? `${(business.subscribers / 1000).toFixed(1)}k`
-    : `${business.subscribers}`;
+  // Format subscriber count: 1200 → '1.2k', under 1000 stays as-is
+  const formattedSubs = item.subscriber_count >= 1000
+    ? `${(item.subscriber_count / 1000).toFixed(1)}k`
+    : `${item.subscriber_count}`;
 
   return (
-    <Animated.View style={[styles.trendingCardWrap, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={[styles.cardWrap, { transform: [{ scale: scaleAnim }] }]}>
       <Pressable
-        style={styles.trendingCard}
+        style={styles.card}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        testID={`trending-card-${business.id}`}
       >
-        <View style={styles.trendingImageWrap}>
-          <Image source={{ uri: business.logo }} style={styles.trendingImage} contentFit="cover" />
-          <View style={styles.trendingOverlay} />
-          <View style={styles.trendingPointsBadge}>
-            <Zap size={10} color={GOLD} fill={GOLD} />
-            <Text style={styles.trendingPointsText}>{business.joinPoints} pts</Text>
-          </View>
-          <View style={styles.trendingRatingBadge}>
+        {/* Image area with badges */}
+        <View style={styles.cardImageWrap}>
+          {item.logo_url ? (
+            <Image source={{ uri: item.logo_url }} style={styles.cardImage} contentFit="cover" />
+          ) : (
+            // Placeholder when no logo has been uploaded yet
+            <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
+              <Building2 size={28} color={PURPLE} />
+            </View>
+          )}
+          <View style={styles.cardOverlay} />
+
+          {/* Top-left: average rating badge */}
+          <View style={styles.ratingBadge}>
             <Star size={10} color="#fff" fill="#fff" />
-            <Text style={styles.trendingRatingText}>{business.rating}</Text>
+            <Text style={styles.ratingBadgeText}>
+              {item.avg_rating != null ? item.avg_rating : 'New'}
+            </Text>
+          </View>
+
+          {/* Top-right: subscriber count badge */}
+          <View style={styles.subsBadge}>
+            <Users size={10} color={GOLD} />
+            <Text style={styles.subsBadgeText}>{formattedSubs}</Text>
           </View>
         </View>
-        <View style={styles.trendingBody}>
-          <Text style={styles.trendingName} numberOfLines={1}>{business.name}</Text>
-          <View style={[styles.trendingCatPill, { backgroundColor: business.categoryColor + '15' }]}>
-            <Text style={[styles.trendingCatText, { color: business.categoryColor }]}>{business.category}</Text>
+
+        {/* Card body */}
+        <View style={styles.cardBody}>
+          <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+
+          {/* business_type pill */}
+          <View style={styles.catPill}>
+            <Text style={styles.catPillText}>
+              {item.business_type.charAt(0).toUpperCase() + item.business_type.slice(1)}
+            </Text>
           </View>
-          <View style={styles.trendingStatsRow}>
-            <Users size={11} color="#E8F5EE" />
-            <Text style={styles.trendingSubsText}>{formattedSubs} subscribers</Text>
-          </View>
+
+          {/* City row */}
+          {item.city ? (
+            <View style={styles.metaRow}>
+              <MapPin size={11} color="#9E9E9E" />
+              <Text style={styles.metaText} numberOfLines={1}>{item.city}</Text>
+            </View>
+          ) : null}
+
+          {/* Rating count */}
+          <Text style={styles.ratingCount}>
+            {item.rating_count > 0 ? `${item.rating_count} ratings` : 'No ratings yet'}
+          </Text>
         </View>
       </Pressable>
     </Animated.View>
   );
 });
 
-const NearYouCard = React.memo(function NearYouCard({
-  business,
-  onPress,
-}: {
-  business: ExploreBusiness;
-  onPress: () => void;
-}) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  }, [scaleAnim]);
-
-  const handlePressOut = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  }, [scaleAnim]);
-
+// ─── EmptyState ───────────────────────────────────────────────────────────────
+// Identical structure to marketplace's empty state.
+function EmptyState({ onReset }: { onReset: () => void }) {
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <Pressable
-        style={styles.nearCard}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        testID={`near-card-${business.id}`}
-      >
-        <Image source={{ uri: business.logo }} style={styles.nearImage} contentFit="cover" />
-        <View style={styles.nearGradient} />
-        <View style={styles.nearContent}>
-          <Text style={styles.nearName} numberOfLines={1}>{business.name}</Text>
-          <View style={styles.nearMetaRow}>
-            <View style={styles.nearDistancePill}>
-              <MapPin size={10} color="#fff" />
-              <Text style={styles.nearDistanceText}>{business.distance}</Text>
-            </View>
-            <View style={styles.nearRatingPill}>
-              <Star size={10} color={GOLD} fill={GOLD} />
-              <Text style={styles.nearRatingText}>{business.rating}</Text>
-            </View>
-          </View>
-        </View>
-      </Pressable>
-    </Animated.View>
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIconCircle}>
+        <Search size={36} color={PURPLE} />
+      </View>
+      <Text style={styles.emptyTitle}>No businesses found</Text>
+      <Text style={styles.emptySub}>Try a different search term or category</Text>
+      <TouchableOpacity style={styles.emptyResetBtn} activeOpacity={0.75} onPress={onReset}>
+        <Text style={styles.emptyResetText}>Reset Filters</Text>
+      </TouchableOpacity>
+    </View>
   );
-});
-
-export default function ExploreScreen() {
-  const { accountType } = useAuth();
-  if (accountType === 'business') {
-    return <MarketplaceMembersScreen />;
-  }
-  return <ConsumerExploreScreen />;
 }
 
-function ConsumerExploreScreen() {
+// ─── Screen ───────────────────────────────────────────────────────────────────
+export default function BusinessDirectoryScreen() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeCategory, setActiveCategory] = useState<string>('all');
   const searchInputRef = useRef<TextInput>(null);
 
-  const filteredTrending = useMemo(() => {
-    let results = trendingBusinesses;
-    if (activeCategory !== 'all') {
-      results = results.filter(b => b.category.toLowerCase() === activeCategory);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      results = results.filter(
-        b => b.name.toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
-      );
-    }
-    return results;
-  }, [activeCategory, searchQuery]);
+  const {
+    businesses,
+    categories,
+    search,
+    activeCategory,
+    loading,
+    loadingMore,
+    error,
+    handleSearch,
+    handleCategorySelect,
+    handleLoadMore,
+  } = useBusinessDirectory();
 
-  const filteredNearYou = useMemo(() => {
-    let results = nearYouBusinesses;
-    if (activeCategory !== 'all') {
-      results = results.filter(b => b.category.toLowerCase() === activeCategory);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      results = results.filter(
-        b => b.name.toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
-      );
-    }
-    return results;
-  }, [activeCategory, searchQuery]);
-
-  const hasResults = filteredTrending.length > 0 || filteredNearYou.length > 0;
-
-  const handleBusinessPress = useCallback((business: ExploreBusiness) => {
-    console.log('[Explore] Business pressed:', business.id, business.name);
-    router.push(`/business-profile/${business.id}` as never);
+  const handleBusinessPress = useCallback((item: BusinessDirectoryItem) => {
+    if (__DEV__) console.log('[BusinessDirectory] pressed:', item.id, item.name);
+    router.push(`/business-profile/${item.id}` as never);
   }, [router]);
+
+  const handleReset = useCallback(() => {
+    handleSearch('');
+    handleCategorySelect(null);
+    searchInputRef.current?.clear();
+  }, [handleSearch, handleCategorySelect]);
+
+  // renderItem kept stable with useCallback so FlatList doesn't re-render all cards on every scroll
+  const renderItem = useCallback(({ item }: { item: BusinessDirectoryItem }) => (
+    <BusinessCard item={item} onPress={() => handleBusinessPress(item)} />
+  ), [handleBusinessPress]);
+
+  const keyExtractor = useCallback((item: BusinessDirectoryItem) => item.id, []);
 
   return (
     <View style={styles.container}>
+      {/* Header — same green SafeAreaView with rounded bottom as marketplace */}
       <SafeAreaView edges={['top']} style={styles.headerArea}>
         <View style={styles.headerRow}>
-          <HeaderAvatarTrigger />
-          <View style={styles.headerTitleBlock}>
-            <Compass size={22} color="#fff" />
-            <Text style={styles.headerTitle}>Explore</Text>
-          </View>
-          <View style={{ width: 36 }} />
+          <Building2 size={22} color="#fff" />
+          <Text style={styles.headerTitle}>Business Directory</Text>
+          <View style={{ width: 22 }} />
         </View>
 
+        {/* Search bar */}
         <View style={styles.searchWrap}>
           <Search size={18} color="#E8F5EE" />
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
-            placeholder="Search businesses, categories..."
+            placeholder="Search businesses..."
             placeholderTextColor="#E8F5EE"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+            value={search}
+            onChangeText={handleSearch}
             returnKeyType="search"
-            testID="explore-search-bar"
           />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+          {search.length > 0 && (
+            <Pressable onPress={() => handleSearch('')} hitSlop={8}>
               <X size={16} color="#E8F5EE" />
             </Pressable>
           )}
         </View>
       </SafeAreaView>
 
+      {/* Invite banner — appears between header and category chips */}
+      <BusinessInviteBanner />
+
+      {/* Category filter chips */}
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.chipScroll, { alignItems: 'center' }]}
+        style={styles.chipRow}
       >
-        <BusinessInviteBanner />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScroll}
-          style={styles.chipRow}
-        >
-          {exploreCategories.map(cat => (
-            <CategoryChip
-              key={cat.key}
-              label={cat.label}
-              isActive={activeCategory === cat.key}
-              onPress={() => {
-                setActiveCategory(cat.key);
-                console.log('[Explore] Category selected:', cat.key);
-              }}
-            />
-          ))}
-        </ScrollView>
-
-        {!hasResults ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
-              <Search size={36} color={PURPLE} />
-            </View>
-            <Text style={styles.emptyTitle}>No businesses found</Text>
-            <Text style={styles.emptySub}>
-              Try a different search term or category
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyResetBtn}
-              activeOpacity={0.75}
-              onPress={() => {
-                setSearchQuery('');
-                setActiveCategory('all');
-              }}
-            >
-              <Text style={styles.emptyResetText}>Reset Filters</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {filteredTrending.length > 0 && (
-              <>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionLeft}>
-                    <TrendingUp size={18} color={PURPLE} />
-                    <Text style={styles.sectionTitle}>Trending Businesses</Text>
-                  </View>
-                  <Pressable
-                    style={styles.seeAllBtn}
-                    hitSlop={8}
-                    onPress={() => router.push({ pathname: '/business-list' as never, params: { listType: 'trending', title: 'Trending Businesses' } } as never)}
-                    testID="see-all-trending"
-                  >
-                    <Text style={styles.seeAllText}>See All</Text>
-                    <ChevronRight size={14} color={PURPLE} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.trendingGrid}>
-                  {filteredTrending.map(biz => (
-                    <TrendingCard
-                      key={biz.id}
-                      business={biz}
-                      onPress={() => handleBusinessPress(biz)}
-                    />
-                  ))}
-                </View>
-              </>
-            )}
-
-            {filteredNearYou.length > 0 && (
-              <>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionLeft}>
-                    <MapPin size={18} color={PURPLE} />
-                    <Text style={styles.sectionTitle}>Near You</Text>
-                  </View>
-                  <Pressable
-                    style={styles.seeAllBtn}
-                    hitSlop={8}
-                    onPress={() => router.push({ pathname: '/business-list' as never, params: { listType: 'nearby', title: 'Near You' } } as never)}
-                    testID="see-all-nearby"
-                  >
-                    <Text style={styles.seeAllText}>See All</Text>
-                    <ChevronRight size={14} color={PURPLE} />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.nearScroll}
-                >
-                  {filteredNearYou.map(biz => (
-                    <NearYouCard
-                      key={biz.id}
-                      business={biz}
-                      onPress={() => handleBusinessPress(biz)}
-                    />
-                  ))}
-                </ScrollView>
-              </>
-            )}
-
-            <View style={styles.bottomSpacer} />
-          </>
-        )}
+        {/* "All" chip always first — selecting it clears the category filter */}
+        <CategoryChip
+          category="all"
+          isActive={activeCategory === null}
+          onPress={() => handleCategorySelect(null)}
+        />
+        {/* One chip per BusinessCategory; key on id (stable UUID), active when name matches */}
+        {categories.map((cat) => (
+          <CategoryChip
+            key={cat.id}
+            category={cat}
+            isActive={activeCategory === cat.name}
+            onPress={() => handleCategorySelect(cat.name)}
+          />
+        ))}
       </ScrollView>
+
+      {/* Error banner */}
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {/* Full-screen loader on initial load */}
+      {loading && businesses.length === 0 ? (
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color={PURPLE} />
+        </View>
+      ) : (
+        <FlatList
+          data={businesses}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={PURPLE} />
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            !loading ? <EmptyState onReset={handleReset} /> : null
+          }
+        />
+      )}
     </View>
   );
 }
@@ -389,6 +333,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: PURPLE_FAINT,
   },
+  // ── Header ──
   headerArea: {
     backgroundColor: PURPLE,
     borderBottomLeftRadius: 24,
@@ -403,14 +348,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
-  headerTitleBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
   headerTitle: {
     fontSize: 22,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: '#fff',
     letterSpacing: -0.3,
   },
@@ -431,15 +371,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     paddingVertical: 0,
   },
-  scrollContent: {
-    paddingBottom: 30,
-  },
+  // ── Chips ──
   chipRow: {
-    marginTop: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    height: 52,
   },
   chipScroll: {
     paddingHorizontal: 16,
+    paddingVertical: 8,
     gap: 8,
+    alignItems: 'center',
   },
   chip: {
     paddingHorizontal: 18,
@@ -455,90 +397,54 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#1A5C35',
+    fontWeight: '600',
+    color: PURPLE,
   },
   chipTextActive: {
     color: '#fff',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 14,
-  },
-  sectionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#1A1730',
-    letterSpacing: -0.3,
-  },
-  seeAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  seeAllText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: PURPLE,
-  },
-  trendingGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // ── Grid ──
+  listContent: {
     paddingHorizontal: GRID_PADDING,
-    gap: GRID_GAP,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
-  trendingCardWrap: {
+  columnWrapper: {
+    gap: GRID_GAP,
+    marginBottom: GRID_GAP,
+  },
+  // ── Card ──
+  cardWrap: {
     width: CARD_WIDTH,
   },
-  trendingCard: {
+  card: {
     backgroundColor: '#fff',
     borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: '#1A5C35',
+    shadowColor: PURPLE,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.07,
     shadowRadius: 12,
     elevation: 4,
   },
-  trendingImageWrap: {
+  cardImageWrap: {
     height: CARD_WIDTH * 0.65,
     position: 'relative',
   },
-  trendingImage: {
+  cardImage: {
     width: '100%',
     height: '100%',
   },
-  trendingOverlay: {
+  cardImagePlaceholder: {
+    backgroundColor: PURPLE_LIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.06)',
   },
-  trendingPointsBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 3,
-  },
-  trendingPointsText: {
-    fontSize: 10,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  trendingRatingBadge: {
+  ratingBadge: {
     position: 'absolute',
     top: 8,
     left: 8,
@@ -552,110 +458,92 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.6)',
   },
-  trendingRatingText: {
+  ratingBadgeText: {
     fontSize: 11,
-    fontWeight: '800' as const,
+    fontWeight: '800',
     color: '#FFD166',
   },
-  trendingBody: {
-    padding: 10,
-  },
-  trendingName: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: '#1A1730',
-    letterSpacing: -0.2,
-    marginBottom: 5,
-  },
-  trendingCatPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
-  },
-  trendingCatText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-  },
-  trendingStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  trendingSubsText: {
-    fontSize: 11,
-    fontWeight: '500' as const,
-    color: '#E8F5EE',
-  },
-  nearScroll: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  nearCard: {
-    width: NEAR_CARD_WIDTH,
-    height: NEAR_CARD_WIDTH * 1.2,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: '#1A1730',
-  },
-  nearImage: {
-    width: '100%',
-    height: '100%',
-  },
-  nearGradient: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  nearContent: {
+  subsBadge: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 12,
-  },
-  nearName: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: '#fff',
-    marginBottom: 6,
-    letterSpacing: -0.2,
-  },
-  nearMetaRow: {
+    top: 8,
+    right: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  nearDistancePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
     gap: 3,
   },
-  nearDistanceText: {
+  subsBadgeText: {
     fontSize: 10,
-    fontWeight: '600' as const,
+    fontWeight: '700',
     color: '#fff',
   },
-  nearRatingPill: {
+  cardBody: {
+    padding: 10,
+  },
+  cardName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1730',
+    letterSpacing: -0.2,
+    marginBottom: 5,
+  },
+  catPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: PURPLE_LIGHT,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  catPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: PURPLE,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 8,
     gap: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.6)',
+    marginBottom: 4,
   },
-  nearRatingText: {
+  metaText: {
     fontSize: 11,
-    fontWeight: '800' as const,
-    color: '#FFD166',
+    fontWeight: '500',
+    color: '#9E9E9E',
+    flex: 1,
   },
+  ratingCount: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#BDBDBD',
+  },
+  // ── Loading / Error ──
+  loadingCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  errorBanner: {
+    margin: 16,
+    padding: 12,
+    backgroundColor: '#FFF3F3',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#C62828',
+    textAlign: 'center',
+  },
+  // ── Empty State ──
   emptyState: {
     alignItems: 'center',
     paddingTop: 80,
@@ -672,14 +560,14 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: '#1A1730',
     marginBottom: 6,
   },
   emptySub: {
     fontSize: 14,
-    fontWeight: '400' as const,
-    color: '#E8F5EE',
+    fontWeight: '400',
+    color: '#9E9E9E',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,
@@ -692,10 +580,7 @@ const styles = StyleSheet.create({
   },
   emptyResetText: {
     fontSize: 14,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: '#fff',
-  },
-  bottomSpacer: {
-    height: 40,
   },
 });
