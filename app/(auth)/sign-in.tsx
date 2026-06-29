@@ -32,7 +32,7 @@ const TEXT_SECONDARY = '#6B6B6B';
 const TEXT_TERTIARY = '#9E9E9E';
 const ERROR_COLOR = '#D14343';
 
-const AUTH_BG = require('../assets/images/auth-bg.png');
+const AUTH_BG = require('../../assets/images/auth-bg.png');
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -185,7 +185,7 @@ export default function SignInScreen() {
 
               <TouchableOpacity
                 style={styles.signUpLink}
-                onPress={() => router.replace('/sign-up' as never)}
+                onPress={() => router.replace('/(auth)/sign-up' as never)}
                 activeOpacity={0.7}
                 testID="signup-link"
               >

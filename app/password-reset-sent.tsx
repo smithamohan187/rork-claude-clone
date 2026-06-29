@@ -70,7 +70,7 @@ export default function PasswordResetSentScreen() {
   }, [secondsLeft, resendMutation]);
 
   const handleBackToLogin = useCallback(() => {
-    router.replace('/sign-in' as never);
+    router.replace('/(auth)/sign-in' as never);
   }, [router]);
 
   const canResend = secondsLeft === 0 && !resendMutation.isPending;

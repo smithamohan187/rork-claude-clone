@@ -40,7 +40,7 @@ const STRENGTH_LABELS = { 0: '', 1: 'Weak', 2: 'Fair', 3: 'Good', 4: 'Strong' } 
 
 //const SPECIAL_CHAR_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
-const AUTH_BG = require('../assets/images/auth-bg.png');
+const AUTH_BG = require('../../assets/images/auth-bg.png');
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -402,7 +402,7 @@ export default function SignUpScreen() {
 
               <TouchableOpacity
                 style={styles.loginLink}
-                onPress={() => router.replace('/sign-in' as never)}
+                onPress={() => router.replace('/(auth)/sign-in' as never)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.loginLinkText}>

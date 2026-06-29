@@ -492,13 +492,13 @@ export default function OnboardingScreen() {
   const handleSkip = useCallback(() => {
     haptic('light');
     void completeOnboarding();
-    router.push('/sign-up');
+    router.push('/(auth)/sign-up');
   }, [router, haptic, completeOnboarding]);
 
   const handleExplore = useCallback(() => {
     haptic('medium');
     void completeOnboarding();
-    router.push('/sign-up');
+    router.push('/(auth)/sign-up');
   }, [router, haptic, completeOnboarding]);
 
   const handleFeed = useCallback(() => {
@@ -510,7 +510,7 @@ export default function OnboardingScreen() {
   const handleLogIn = useCallback(() => {
     haptic('light');
     void completeOnboarding();
-    router.push('/sign-in');
+    router.push('/(auth)/sign-in');
   }, [router, haptic, completeOnboarding]);
 
   const handleBrowseFeeds = useCallback(() => {

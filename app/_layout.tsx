@@ -174,14 +174,7 @@ function RootLayoutNav() {
         name="invite-business"
         options={{ headerShown: false, presentation: 'modal' }}
       />
-      <Stack.Screen
-        name="sign-in"
-        options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
-        name="sign-up"
-        options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen
         name="otp-request"
         options={{ headerShown: false, animation: 'slide_from_right' }}

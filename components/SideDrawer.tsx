@@ -207,7 +207,7 @@ const SideDrawer = React.memo(function SideDrawer() {
   const handleLogout = useCallback(() => {
     close();
     setTimeout(() => {
-      router.replace('/sign-in' as never);
+      router.replace('/(auth)/sign-in' as never);
     }, 180);
   }, [close, router]);
 

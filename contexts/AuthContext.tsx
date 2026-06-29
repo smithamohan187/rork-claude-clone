@@ -297,7 +297,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setAuthUser(null);
       setAccountType('personal');
 
-      router.replace('/sign-in');
+      router.replace('/(auth)/sign-in');
     }
   }, [router]);
 
