@@ -1,155 +1,320 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  TextInput,
   ScrollView,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Camera, X } from 'lucide-react-native';
-import { Snackbar } from 'react-native-paper';
-import { usePosts } from '@/contexts/PostsContext';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  TextInput,
+  HelperText,
+  Button,
+  Dialog,
+  Portal,
+  Paragraph,
+} from 'react-native-paper';
+import { ArrowLeft, ImagePlus } from 'lucide-react-native';
+import { usePost } from '@/hooks/usePosts';
+import { updatePost, uploadPostImage } from '@/api/services/postsService';
+
+async function toDisplayUri(uri: string): Promise<string> {
+  if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = reject;
+    xhr.open('GET', uri);
+    xhr.responseType = 'blob';
+    xhr.send();
+  });
+}
 
 const PURPLE = '#1A5C35';
-const CHAR_LIMIT = 500;
+const BG = '#F6F5FA';
+const TEXT_DARK = '#0F1115';
+const TEXT_MUTED = '#6B7280';
+const BORDER = '#ECECF1';
+const DANGER = '#ED4956';
+
+type Draft = { title: string; content: string };
+type Errors = { title?: string; content?: string };
 
 export default function EditPostScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getPost, updatePost } = usePosts();
-  const post = id ? getPost(id) : undefined;
+  const router = useRouter();
+  const { post: original, loading } = usePost(id ?? '');
 
-  const [text, setText] = useState<string>(post?.text ?? '');
-  const [image, setImage] = useState<string | null>(post?.image_url ?? null);
-  const [snack, setSnack] = useState<string>('');
-  const [dirty, setDirty] = useState<boolean>(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
+  const [discardVisible, setDiscardVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
-    if (!post && id) {
-      router.back();
+    if (original && !draft) {
+      setDraft({ title: original.title, content: original.content });
     }
-  }, [id, post, router]);
+  }, [original, draft]);
 
-  const charCount = text.length;
-  const overLimit = charCount > CHAR_LIMIT;
-  const canSave = text.trim().length > 0 && !overLimit;
+  const hasChanges = useMemo(() => {
+    if (!original || !draft) return false;
+    return (
+      draft.title !== original.title ||
+      draft.content !== original.content ||
+      localImageUri !== null
+    );
+  }, [draft, original, localImageUri]);
 
-  const onChangeText = useCallback((t: string) => {
-    setText(t);
-    setDirty(true);
-  }, []);
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    setDraft((d) => (d ? { ...d, [key]: value } : d));
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
 
-  const handleAddPhoto = useCallback(() => {
-    setImage(`https://picsum.photos/seed/post-${Date.now()}/600/400`);
-    setDirty(true);
-  }, []);
+  const validate = (): boolean => {
+    const e: Errors = {};
+    if (!draft?.title.trim()) e.title = 'Title is required';
+    if (!draft?.content.trim()) e.content = 'Content is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
-  const handleRemoveImage = useCallback(() => {
-    setImage(null);
-    setDirty(true);
-  }, []);
-
-  const handleBack = useCallback(() => {
-    if (!dirty) {
-      router.back();
+  const handleChangePhoto = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
       return;
     }
-    Alert.alert('Discard changes?', 'Your edits will not be saved.', [
-      { text: 'Keep Editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-    ]);
-  }, [dirty, router]);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const stable = await toDisplayUri(result.assets[0].uri);
+      setLocalImageUri(stable);
+    }
+  }, []);
 
-  const handleSave = useCallback(() => {
-    if (!canSave || !id) return;
-    updatePost(id, { text: text.trim(), image_url: image });
-    setSnack('Post updated');
-    setTimeout(() => router.back(), 350);
-  }, [canSave, id, image, router, text, updatePost]);
+  const handleRemovePhoto = useCallback(() => {
+    setLocalImageUri(null);
+  }, []);
 
-  if (!post) {
-    return <SafeAreaView style={styles.safe} />;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={TEXT_DARK} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Post</Text>
+          <View style={styles.backBtn} />
+        </View>
+        <View style={styles.missing}>
+          <ActivityIndicator color={PURPLE} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
+  if (!draft || !original) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color={TEXT_DARK} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Post</Text>
+          <View style={styles.backBtn} />
+        </View>
+        <View style={styles.missing}>
+          <Text style={styles.missingText}>Post not found.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentImageUri = localImageUri ?? original.image_url;
+
+  const handleBack = () => {
+    if (hasChanges) setDiscardVisible(true);
+    else router.back();
+  };
+
+  const handleSave = async () => {
+    if (!validate()) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    try {
+      setSaving(true);
+      await updatePost(id, { title: draft.title.trim(), content: draft.content.trim() });
+      if (localImageUri) await uploadPostImage(id, localImageUri);
+      router.back();
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save post');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.headerBtn} testID="edit-post-back">
-          <ArrowLeft size={22} color="#1A5C35" />
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn} testID="edit-post-back">
+          <ArrowLeft size={22} color={TEXT_DARK} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Post</Text>
-        <TouchableOpacity
-          onPress={handleSave}
-          style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
-          disabled={!canSave}
-          testID="edit-post-save"
-        >
-          <Text style={styles.saveBtnText}>Save</Text>
+        <TouchableOpacity onPress={handleSave} style={styles.saveBtn} disabled={saving} testID="edit-post-save">
+          {saving
+            ? <ActivityIndicator color={PURPLE} size="small" />
+            : <Text style={styles.saveText}>Save</Text>
+          }
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.bizRow}>
-            <Image source={{ uri: post.business_logo }} style={styles.bizLogo} contentFit="cover" />
-            <Text style={styles.bizName}>{post.business_name}</Text>
-          </View>
-
-          <TextInput
-            value={text}
-            onChangeText={onChangeText}
-            placeholder="Share an update, announcement, or moment…"
-            placeholderTextColor="#9aa0a6"
-            multiline
-            style={styles.textInput}
-            maxLength={CHAR_LIMIT + 60}
-            testID="edit-post-input"
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <PhotoSection
+            uri={currentImageUri}
+            onChange={handleChangePhoto}
+            onRemove={handleRemovePhoto}
           />
 
-          <View style={styles.charCountRow}>
-            <Text style={[styles.charCount, overLimit && { color: '#EF4444' }]}>
-              {charCount} / {CHAR_LIMIT}
-            </Text>
-          </View>
+          <TextInput
+            label="Title *"
+            value={draft.title}
+            onChangeText={(v) => set('title', v.slice(0, 200))}
+            mode="outlined"
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            right={<TextInput.Affix text={`${draft.title.length}/200`} />}
+            error={!!errors.title}
+            style={styles.input}
+            testID="edit-post-title"
+          />
+          <HelperText type="error" visible={!!errors.title}>{errors.title}</HelperText>
 
-          {image ? (
-            <View style={styles.imageWrap}>
-              <Image source={{ uri: image }} style={styles.image} contentFit="cover" />
-              <TouchableOpacity style={styles.imageRemove} onPress={handleRemoveImage} hitSlop={8} testID="edit-post-remove-image">
-                <X size={14} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.addPhoto} onPress={handleAddPhoto} activeOpacity={0.7} testID="edit-post-add-photo">
-              <View style={styles.addPhotoIcon}>
-                <Camera size={18} color={PURPLE} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.addPhotoTitle}>Add Photo</Text>
-                <Text style={styles.addPhotoSub}>Make your post stand out</Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          <TextInput
+            label="Content *"
+            value={draft.content}
+            onChangeText={(v) => set('content', v)}
+            mode="outlined"
+            multiline
+            numberOfLines={6}
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            error={!!errors.content}
+            style={styles.input}
+            testID="edit-post-content"
+          />
+          <HelperText type="error" visible={!!errors.content}>{errors.content}</HelperText>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Snackbar visible={!!snack} onDismiss={() => setSnack('')} duration={1800}>
-        {snack}
-      </Snackbar>
+      <Portal>
+        <Dialog
+          visible={discardVisible}
+          onDismiss={() => setDiscardVisible(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Discard changes?</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogBody}>
+              You have unsaved changes. Are you sure you want to go back?
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDiscardVisible(false)} textColor={TEXT_MUTED}>
+              Keep Editing
+            </Button>
+            <Button
+              onPress={() => {
+                setDiscardVisible(false);
+                router.back();
+              }}
+              textColor={DANGER}
+              testID="discard-confirm"
+            >
+              Discard
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
 
+function PhotoSection({
+  uri,
+  onChange,
+  onRemove,
+}: {
+  uri: string | null;
+  onChange: () => void;
+  onRemove: () => void;
+}) {
+  if (uri) {
+    return (
+      <View style={styles.photoWrap}>
+        <Image source={{ uri }} style={styles.photo} />
+        <View style={styles.photoActions}>
+          <Button
+            mode="outlined"
+            icon="image-edit-outline"
+            onPress={onChange}
+            textColor={PURPLE}
+            style={styles.photoBtn}
+          >
+            Change Photo
+          </Button>
+          <Button
+            mode="outlined"
+            icon="delete-outline"
+            onPress={onRemove}
+            textColor={DANGER}
+            style={styles.photoBtn}
+          >
+            Remove
+          </Button>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity onPress={onChange} style={styles.photoPlaceholder} testID="add-photo">
+      <ImagePlus size={32} color={TEXT_MUTED} />
+      <Text style={styles.photoPlaceholderText}>Tap to add a photo</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8F7FF' },
+  flex: { flex: 1 },
+  root: { flex: 1, backgroundColor: BG },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,64 +323,34 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#fff',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: BORDER,
   },
-  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A5C35' },
-  saveBtn: {
-    backgroundColor: PURPLE,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  saveBtnDisabled: { opacity: 0.4 },
-  saveBtnText: { color: '#fff', fontWeight: '700' },
-  bizRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16 },
-  bizLogo: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EDE9F6' },
-  bizName: { marginLeft: 10, fontSize: 15, fontWeight: '700', color: '#1A5C35' },
-  textInput: {
-    minHeight: 140,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    fontSize: 16,
-    color: '#1A5C35',
-    textAlignVertical: 'top',
-  },
-  charCountRow: { paddingHorizontal: 16, alignItems: 'flex-end' },
-  charCount: { fontSize: 12, color: '#1A5C35' },
-  imageWrap: { marginHorizontal: 16, marginTop: 12, borderRadius: 14, overflow: 'hidden', backgroundColor: '#EDE9F6' },
-  image: { width: '100%', aspectRatio: 16 / 10 },
-  imageRemove: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  backBtn: { width: 56, height: 40, alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 8 },
+  saveBtn: { width: 56, height: 40, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 8 },
+  saveText: { fontSize: 15, fontWeight: '700' as const, color: PURPLE },
+  headerTitle: { fontSize: 17, fontWeight: '700' as const, color: TEXT_DARK },
+  scroll: { padding: 16, paddingBottom: 60, gap: 0 },
+  input: { backgroundColor: '#fff' },
+  photoWrap: { marginBottom: 16 },
+  photo: { width: '100%', height: 200, borderRadius: 12, backgroundColor: BORDER },
+  photoActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  photoBtn: { flex: 1, borderColor: BORDER },
+  photoPlaceholder: {
+    height: 160,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#C4C4CC',
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  addPhoto: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
   },
-  addPhotoIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#EDE9F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  addPhotoTitle: { fontSize: 15, fontWeight: '700', color: '#1A5C35' },
-  addPhotoSub: { fontSize: 12, color: '#1A5C35', marginTop: 2 },
+  photoPlaceholderText: { color: TEXT_MUTED, fontSize: 13, fontWeight: '500' as const },
+  dialog: { backgroundColor: '#fff', borderRadius: 16 },
+  dialogTitle: { fontSize: 17, fontWeight: '700' as const, color: TEXT_DARK },
+  dialogBody: { fontSize: 14, color: TEXT_MUTED },
+  missing: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  missingText: { color: TEXT_MUTED, fontSize: 14 },
 });

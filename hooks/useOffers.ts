@@ -10,23 +10,23 @@ import {
   type CreateOfferPayload,
 } from '@/api/services/offersService';
 
-export function useOffers() {
+export function useOffers(initialFilter?: 'active' | 'expired' | 'disabled') {
   const [offers, setOffers]   = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (filter?: 'active' | 'expired' | 'disabled') => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchMyOffers();
+      const data = await fetchMyOffers(filter ?? initialFilter);
       setOffers(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load offers');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialFilter]);
 
   useEffect(() => { load(); }, [load]);
 

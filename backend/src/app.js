@@ -13,6 +13,7 @@ const businessRoutes          = require('./modules/businesses/business.routes');
 const businessDirectoryRoutes = require('./modules/businessDirectory/businessDirectory.routes');
 const offersRoutes            = require('./modules/offers/offers.routes');
 const eventsRoutes            = require('./modules/events/events.routes');
+const postsRoutes             = require('./modules/posts/posts.routes');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/businessdirectory', businessDirectoryRoutes);
 console.log('Done.');
 app.use('/offers',            offersRoutes);
 app.use('/events',            eventsRoutes);
+app.use('/posts',             postsRoutes);
 
 app.use('/api/v1', api);
 

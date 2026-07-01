@@ -103,7 +103,16 @@ async function toggleOfferStatus(offerId, newStatus) {
   return rows[0] ?? null;
 }
 
-async function getOffersByBusinessId(businessId) {
+async function getOffersByBusinessId(businessId, statusFilter) {
+  let whereExtra = '';
+  if (statusFilter === 'active') {
+    whereExtra = `AND status = 'active' AND (expires_at IS NULL OR expires_at >= NOW())`;
+  } else if (statusFilter === 'expired') {
+    whereExtra = `AND (status = 'expired' OR (expires_at IS NOT NULL AND expires_at < NOW()))`;
+  } else if (statusFilter === 'disabled') {
+    whereExtra = `AND status = 'disabled' AND (expires_at IS NULL OR expires_at >= NOW())`;
+  }
+
   const { rows } = await query(
     `SELECT *,
        CASE
@@ -113,6 +122,7 @@ async function getOffersByBusinessId(businessId) {
        END AS effective_status
      FROM offers
      WHERE business_id = $1
+     ${whereExtra}
      ORDER BY created_at DESC`,
     [businessId]
   );

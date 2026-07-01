@@ -39,6 +39,8 @@ import { useOffers } from '@/hooks/useOffers';
 import { type Offer } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
 import { type Event } from '@/api/services/eventsService';
+import { usePosts } from '@/hooks/usePosts';
+import { type Post } from '@/api/services/postsService';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -52,12 +54,25 @@ const SUCCESS = '#10B981';
 const BLUE = '#3B82F6';
 
 type TabKey = 'offers' | 'events' | 'posts';
+type OfferFilter = 'active' | 'expired' | 'disabled';
 type EventFilter = 'upcoming' | 'past' | 'cancelled';
+type PostFilter = 'active' | 'disabled';
+
+const OFFER_FILTERS: { key: OfferFilter; label: string }[] = [
+  { key: 'active',   label: 'Active' },
+  { key: 'expired',  label: 'Expired' },
+  { key: 'disabled', label: 'Disabled' },
+];
 
 const EVENT_FILTERS: { key: EventFilter; label: string }[] = [
-  { key: 'upcoming', label: 'Upcoming' },
-  { key: 'past',     label: 'Past' },
+  { key: 'upcoming',  label: 'Upcoming' },
+  { key: 'past',      label: 'Past' },
   { key: 'cancelled', label: 'Cancelled' },
+];
+
+const POST_FILTERS: { key: PostFilter; label: string }[] = [
+  { key: 'active',   label: 'Active' },
+  { key: 'disabled', label: 'Disabled' },
 ];
 
 const formatLongDate = (iso: string): string => {
@@ -139,23 +154,32 @@ const itemTitle = (item: ContentItem): string => {
 
 // Map event effective_status to a display pill
 const EVENT_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  upcoming:  { label: 'Upcoming',  color: SUCCESS, bg: SUCCESS + '15' },
-  past:      { label: 'Past',      color: '#6B7280', bg: '#E5E7EB' },
-  cancelled: { label: 'Cancelled', color: DANGER,  bg: DANGER + '15' },
+  upcoming:  { label: 'Upcoming',  color: SUCCESS,    bg: SUCCESS + '15' },
+  past:      { label: 'Past',      color: '#6B7280',  bg: '#E5E7EB' },
+  cancelled: { label: 'Cancelled', color: DANGER,     bg: DANGER + '15' },
 };
 
 export default function ManageContentScreen() {
   const router = useRouter();
-  const { posts, updateStatus, removeItem } = useManageContent();
-  const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers();
+  const { updateStatus, removeItem } = useManageContent();
+  const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
+  const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers(offerFilter);
   const [eventFilter, setEventFilter] = useState<EventFilter>('upcoming');
   const { events: realEvents, refresh: refreshEvents, cancelEvent: doCancelEvent } = useEvents(eventFilter);
+  const [postFilter, setPostFilter] = useState<PostFilter>('active');
+  const {
+    posts: realPosts,
+    toggleStatus: togglePostStatus,
+    removePost,
+    refresh: refreshPosts,
+  } = usePosts(postFilter);
 
   useFocusEffect(
     useCallback(() => {
-      refreshOffers();
+      refreshOffers(offerFilter);
       refreshEvents(eventFilter);
-    }, [refreshOffers, refreshEvents, eventFilter])
+      refreshPosts(postFilter);
+    }, [refreshOffers, offerFilter, refreshEvents, eventFilter, refreshPosts, postFilter])
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
@@ -179,20 +203,26 @@ export default function ManageContentScreen() {
     event: Event | null;
   }>({ visible: false, event: null });
 
+  const [postConfirm, setPostConfirm] = useState<{
+    visible: boolean;
+    action: 'disable' | 'enable' | 'delete' | null;
+    post: Post | null;
+  }>({ visible: false, action: null, post: null });
+
   const tabs = useMemo(
     () => [
       { key: 'offers' as const, label: 'Offers', count: realOffers.length },
       { key: 'events' as const, label: 'Events', count: realEvents.length },
-      { key: 'posts' as const, label: 'Posts', count: posts.length },
+      { key: 'posts'  as const, label: 'Posts',  count: realPosts.length },
     ],
-    [realOffers.length, realEvents.length, posts.length],
+    [realOffers.length, realEvents.length, realPosts.length],
   );
 
   const items: ContentItem[] = useMemo(() => {
     if (activeTab === 'offers') return realOffers as unknown as ContentItem[];
     if (activeTab === 'events') return realEvents as unknown as ContentItem[];
-    return posts;
-  }, [activeTab, realOffers, realEvents, posts]);
+    return [];
+  }, [activeTab, realOffers, realEvents]);
 
   const handleEditOpen = useCallback(
     (item: ContentItem) => {
@@ -251,6 +281,37 @@ export default function ManageContentScreen() {
     setCancelConfirm({ visible: false, event: null });
   }, [cancelConfirm, doCancelEvent, refreshEvents, eventFilter, showSnackbar]);
 
+  const handlePostConfirmAction = useCallback(async () => {
+    const { action, post } = postConfirm;
+    if (!post || !action) {
+      setPostConfirm({ visible: false, action: null, post: null });
+      return;
+    }
+    if (action === 'disable') {
+      try {
+        await togglePostStatus(post.id, false);
+        showSnackbar(`"${post.title}" disabled`);
+      } catch (err: unknown) {
+        showSnackbar(err instanceof Error ? err.message : 'Failed to disable post');
+      }
+    } else if (action === 'enable') {
+      try {
+        await togglePostStatus(post.id, true);
+        showSnackbar(`"${post.title}" enabled`);
+      } catch (err: unknown) {
+        showSnackbar(err instanceof Error ? err.message : 'Failed to enable post');
+      }
+    } else if (action === 'delete') {
+      try {
+        await removePost(post.id);
+        showSnackbar(`"${post.title}" deleted`);
+      } catch (err: unknown) {
+        showSnackbar(err instanceof Error ? err.message : 'Failed to delete post');
+      }
+    }
+    setPostConfirm({ visible: false, action: null, post: null });
+  }, [postConfirm, togglePostStatus, removePost, showSnackbar]);
+
   const renderTypeBadge = (type: ContentItem['type']) => {
     const map: Record<ContentItem['type'], { label: string; color: string; bg: string }> = {
       post:  { label: 'Post',  color: PURPLE,  bg: PURPLE + '14' },
@@ -284,6 +345,17 @@ export default function ManageContentScreen() {
     return (
       <View style={[styles.pill, { backgroundColor: s.bg }]}>
         <Text style={[styles.pillText, { color: s.color }]}>{s.label}</Text>
+      </View>
+    );
+  };
+
+  const renderPostStatusBadge = (isActive: boolean) => {
+    const color = isActive ? SUCCESS : '#6B7280';
+    const bg    = isActive ? SUCCESS + '15' : '#E5E7EB';
+    const label = isActive ? 'Active' : 'Disabled';
+    return (
+      <View style={[styles.pill, { backgroundColor: bg }]}>
+        <Text style={[styles.pillText, { color }]}>{label}</Text>
       </View>
     );
   };
@@ -435,10 +507,81 @@ export default function ManageContentScreen() {
     );
   };
 
+  const renderPostCard = (post: Post) => (
+    <Surface key={post.id} style={styles.card} elevation={1}>
+      <View style={styles.cardTop}>
+        {post.image_url ? (
+          <Image source={{ uri: post.image_url }} style={styles.thumb} />
+        ) : (
+          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+            <Text style={styles.thumbEmoji}>📝</Text>
+          </View>
+        )}
+        <View style={styles.cardTopText}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{post.title}</Text>
+          <View style={styles.badgeRow}>
+            {renderTypeBadge('post')}
+            {renderPostStatusBadge(post.is_active)}
+          </View>
+          {post.content ? (
+            <Text style={styles.cardDesc} numberOfLines={2}>{post.content}</Text>
+          ) : null}
+          <Text style={styles.cardSubtitle}>Posted {relativeTime(post.created_at)}</Text>
+        </View>
+      </View>
+
+      <Divider style={styles.cardDivider} />
+
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => router.push(`/edit-post/${post.id}` as any)}
+          testID={`edit-post-${post.id}`}
+        >
+          <Pencil size={16} color={PURPLE} />
+          <Text style={[styles.actionText, { color: PURPLE }]}>Edit</Text>
+        </TouchableOpacity>
+
+        <View style={styles.actionDivider} />
+
+        {post.is_active ? (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => setPostConfirm({ visible: true, action: 'disable', post })}
+            testID={`disable-post-${post.id}`}
+          >
+            <Ban size={16} color={AMBER} />
+            <Text style={[styles.actionText, { color: AMBER }]}>Disable</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => setPostConfirm({ visible: true, action: 'enable', post })}
+            testID={`enable-post-${post.id}`}
+          >
+            <CheckCircle2 size={16} color={SUCCESS} />
+            <Text style={[styles.actionText, { color: SUCCESS }]}>Enable</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.actionDivider} />
+
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => setPostConfirm({ visible: true, action: 'delete', post })}
+          testID={`delete-post-${post.id}`}
+        >
+          <Trash2 size={16} color={DANGER} />
+          <Text style={[styles.actionText, { color: DANGER }]}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </Surface>
+  );
+
   const emptyConfig = useMemo(() => {
-    if (activeTab === 'offers') return { Icon: Ticket,      label: 'Offers', emoji: '🎟', body: 'Tap ＋ Create Offer to get started.' };
+    if (activeTab === 'offers') return { Icon: Ticket,       label: 'Offers', emoji: '🎟', body: 'Tap ＋ Create Offer to get started.' };
     if (activeTab === 'events') return { Icon: CalendarDays, label: 'Events', emoji: '📅', body: 'Tap ＋ Create Event to get started.' };
-    return { Icon: FileText,    label: 'Posts',  emoji: '📝', body: 'Tap ＋ Create Offer to get started.' };
+    return { Icon: FileText,     label: 'Posts',  emoji: '📝', body: 'Tap ＋ Create Post to get started.' };
   }, [activeTab]);
 
   const confirmCopy = useMemo(() => {
@@ -457,6 +600,17 @@ export default function ManageContentScreen() {
       cta: 'Delete',
     };
   }, [confirm]);
+
+  const postConfirmCopy = useMemo(() => {
+    if (!postConfirm.action) return { title: '', body: '', cta: '', ctaColor: DANGER };
+    if (postConfirm.action === 'disable') {
+      return { title: 'Disable this post?', body: 'It will no longer be visible to subscribers.', cta: 'Disable', ctaColor: AMBER };
+    }
+    if (postConfirm.action === 'enable') {
+      return { title: 'Enable this post?', body: 'It will become visible to your subscribers.', cta: 'Enable', ctaColor: SUCCESS };
+    }
+    return { title: 'Delete this post?', body: 'This cannot be undone.', cta: 'Delete', ctaColor: DANGER };
+  }, [postConfirm.action]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -505,7 +659,38 @@ export default function ManageContentScreen() {
             <Text style={styles.createOfferText}>Create Event</Text>
           </TouchableOpacity>
         )}
+        {activeTab === 'posts' && (
+          <TouchableOpacity
+            onPress={() => router.push('/create-offer?tab=post' as any)}
+            style={styles.createOfferLink}
+            activeOpacity={0.7}
+            testID="create-post-btn"
+          >
+            <Plus size={15} color={PURPLE} />
+            <Text style={styles.createOfferText}>Create Post</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {activeTab === 'offers' && (
+        <View style={styles.filterRow}>
+          {OFFER_FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              onPress={() => {
+                setOfferFilter(f.key);
+                refreshOffers(f.key);
+              }}
+              style={[styles.filterChip, offerFilter === f.key && styles.filterChipActive]}
+              testID={`offer-filter-${f.key}`}
+            >
+              <Text style={[styles.filterChipText, offerFilter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {activeTab === 'events' && (
         <View style={styles.filterRow}>
@@ -527,19 +712,51 @@ export default function ManageContentScreen() {
         </View>
       )}
 
+      {activeTab === 'posts' && (
+        <View style={styles.filterRow}>
+          {POST_FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              onPress={() => {
+                setPostFilter(f.key);
+                refreshPosts(f.key);
+              }}
+              style={[styles.filterChip, postFilter === f.key && styles.filterChipActive]}
+              testID={`post-filter-${f.key}`}
+            >
+              <Text style={[styles.filterChipText, postFilter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {items.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyEmoji}>{emptyConfig.emoji}</Text>
-            <Text style={styles.emptyTitle}>No {emptyConfig.label} yet</Text>
-            <Text style={styles.emptyBody}>{emptyConfig.body}</Text>
-          </View>
+        {activeTab === 'posts' ? (
+          realPosts.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyEmoji}>📝</Text>
+              <Text style={styles.emptyTitle}>No Posts yet</Text>
+              <Text style={styles.emptyBody}>Tap ＋ Create Post to get started.</Text>
+            </View>
+          ) : (
+            realPosts.map((p) => renderPostCard(p))
+          )
         ) : (
-          items.map((it) => renderCard(it))
+          items.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyEmoji}>{emptyConfig.emoji}</Text>
+              <Text style={styles.emptyTitle}>No {emptyConfig.label} yet</Text>
+              <Text style={styles.emptyBody}>{emptyConfig.body}</Text>
+            </View>
+          ) : (
+            items.map((it) => renderCard(it))
+          )
         )}
       </ScrollView>
 
@@ -596,6 +813,34 @@ export default function ManageContentScreen() {
               testID="cancel-event-confirm"
             >
               Cancel Event
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      <Portal>
+        <Dialog
+          visible={postConfirm.visible}
+          onDismiss={() => setPostConfirm({ visible: false, action: null, post: null })}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{postConfirmCopy.title}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogBody}>{postConfirmCopy.body}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setPostConfirm({ visible: false, action: null, post: null })}
+              textColor={TEXT_MUTED}
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={handlePostConfirmAction}
+              textColor={postConfirmCopy.ctaColor}
+              testID="post-confirm-action"
+            >
+              {postConfirmCopy.cta}
             </Button>
           </Dialog.Actions>
         </Dialog>

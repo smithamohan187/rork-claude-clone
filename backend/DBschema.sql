@@ -251,6 +251,24 @@ CREATE INDEX idx_subscriptions_profile_id ON subscriptions(profile_id);
 CREATE INDEX idx_subscriptions_business_id ON subscriptions(business_id);
 CREATE INDEX idx_subscriptions_active ON subscriptions(business_id, is_active);
 
+-- Rating given by a customer to a business
+CREATE TABLE business_ratings (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id      UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  rating           SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  review           TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- One rating per customer profile per business
+  CONSTRAINT uq_business_rating UNIQUE (business_id, profile_id)
+);
+
+CREATE INDEX idx_business_ratings_business_id ON business_ratings(business_id);
+CREATE INDEX idx_business_ratings_profile_id  ON business_ratings(profile_id);
+
 -- ============================================================
 -- DOMAIN 6: OFFERS & EVENTS
 -- ============================================================
@@ -622,3 +640,20 @@ INSERT INTO subscription_plans (name, price_monthly, max_offers, max_events, can
   ('Free',       0,    3,  2, FALSE, FALSE, FALSE),
   ('Basic',    499,   10,  5, TRUE,  FALSE, FALSE),
   ('Pro',     1299,   NULL, NULL, TRUE, TRUE, TRUE);
+
+  CREATE TABLE posts (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  title       VARCHAR(200) NOT NULL,
+  content     TEXT NOT NULL,
+  image_url   TEXT,
+  -- is_active stored as a boolean column (not derived).
+  -- Posts have no time-based expiry, so there is no need for a CASE-computed
+  -- effective_status. This differs intentionally from the offers module which
+  -- derives 'expired' status from the expires_at timestamp.
+  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_posts_business_id ON posts(business_id);
+CREATE INDEX idx_posts_is_active ON posts(is_active);

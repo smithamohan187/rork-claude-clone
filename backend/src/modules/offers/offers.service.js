@@ -29,10 +29,10 @@ async function toggleStatus(userId, offerId, newStatus) {
   return offersModel.toggleOfferStatus(offerId, newStatus);
 }
 
-async function listMyOffers(userId) {
+async function listMyOffers(userId, filter) {
   const businessId = await offersModel.getBusinessIdByUserId(userId);
   if (!businessId) return [];
-  return offersModel.getOffersByBusinessId(businessId);
+  return offersModel.getOffersByBusinessId(businessId, filter);
 }
 
 async function getOffer(offerId) {

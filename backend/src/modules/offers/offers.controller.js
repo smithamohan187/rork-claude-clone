@@ -5,7 +5,8 @@ const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
 const listMyOffersHandler = asyncHandler(async (req, res) => {
-  const offers = await offersService.listMyOffers(req.user.userId);
+  const filter = req.query.status;
+  const offers = await offersService.listMyOffers(req.user.userId, filter);
   res.json(ok({ offers }));
 });
 

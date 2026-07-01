@@ -30,12 +30,12 @@ import {
   Check,
   Trash2,
   FileText,
-  Camera,
 } from 'lucide-react-native';
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
-import { usePosts } from '@/contexts/PostsContext';
+import { usePosts } from '@/hooks/usePosts';
+import { uploadPostImage } from '@/api/services/postsService';
 import { createOffer, uploadOfferImage, type CreateOfferPayload } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
 import { uploadEventImage } from '@/api/services/eventsService';
@@ -78,6 +78,8 @@ interface FormErrors {
   eventTitle?: string;
   eventDate?: string;
   eventEndDate?: string;
+  postTitle?: string;
+  postContent?: string;
 }
 
 const OFFER_TYPES: { value: OfferType; label: string; icon: typeof Megaphone }[] = [
@@ -96,8 +98,9 @@ export default function CreateOfferScreen() {
   );
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const [postText, setPostText] = useState<string>('');
-  const [postImage, setPostImage] = useState<string | null>(null);
+  const [postTitle, setPostTitle]     = useState<string>('');
+  const [postContent, setPostContent] = useState<string>('');
+  const [postImage, setPostImage]     = useState<string>('');
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
 
   const [offerTitle, setOfferTitle] = useState<string>('');
@@ -132,14 +135,23 @@ export default function CreateOfferScreen() {
   const handleTabChange = useCallback((value: TabMode) => {
     setActiveTab(value);
     clearErrors();
-    setOfferImage(''); // clear shared image state on every tab switch
+    setOfferImage(''); // clear shared offer/event image on every tab switch
+    setPostImage('');  // clear post image too
     if (value === 'offer') {
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventEndDate(null);
+      setPostTitle(''); setPostContent('');
     } else if (value === 'event') {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
       setDiscountPercent(''); setOfferStartDate(''); setOfferEndDate('');
       setIsActive(true);
+      setPostTitle(''); setPostContent('');
+    } else {
+      setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
+      setDiscountPercent(''); setOfferStartDate(''); setOfferEndDate('');
+      setIsActive(true);
+      setEventTitle(''); setEventDescription(''); setEventLocation('');
+      setEventDate(null); setEventEndDate(null);
     }
     Animated.spring(tabIndicatorAnim, {
       toValue: value === 'offer' ? 0 : value === 'event' ? 1 : 2,
@@ -151,15 +163,13 @@ export default function CreateOfferScreen() {
 
   const { addPost } = usePosts();
 
-  const handleSavePost = useCallback(() => {
-    const trimmed = postText.trim();
-    if (trimmed.length === 0) return;
-    addPost({ text: trimmed, image_url: postImage });
-    setPostText('');
-    setPostImage(null);
-    setSnackbarVisible(true);
-    console.log('[CreateOffer] Post published');
-  }, [postText, postImage, addPost]);
+  const validatePostForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
+    if (!postTitle.trim()) newErrors.postTitle = 'Title is required';
+    if (!postContent.trim()) newErrors.postContent = 'Content is required';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [postTitle, postContent]);
 
   const handlePickImage = useCallback(async () => {
     try {
@@ -176,14 +186,15 @@ export default function CreateOfferScreen() {
       });
       if (!result.canceled && result.assets?.[0]) {
         const stable = await toDisplayUri(result.assets[0].uri);
-        setOfferImage(stable);
+        if (activeTab === 'post') setPostImage(stable);
+        else setOfferImage(stable);
         if (__DEV__) console.log('[CreateOffer] Image selected:', stable);
       }
     } catch (err) {
       console.log('[CreateOffer] Image picker error:', err);
       Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
-  }, []);
+  }, [activeTab]);
 
   const handleRemoveImage = useCallback(() => {
     setOfferImage('');
@@ -230,7 +241,18 @@ export default function CreateOfferScreen() {
 
   const handlePublish = useCallback(async () => {
     if (activeTab === 'post') {
-      handleSavePost();
+      if (!validatePostForm()) return;
+      try {
+        setPublishing(true);
+        const post = await addPost({ title: postTitle.trim(), content: postContent.trim() });
+        if (postImage) await uploadPostImage(post.id, postImage);
+        setSnackbarVisible(true);
+        setTimeout(() => router.back(), 1200);
+      } catch (err: unknown) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create post');
+      } finally {
+        setPublishing(false);
+      }
       return;
     }
     if (activeTab === 'offer') {
@@ -285,11 +307,11 @@ export default function CreateOfferScreen() {
       }
     }
   }, [
-    activeTab, validateOfferForm, validateEventForm, router,
+    activeTab, validateOfferForm, validateEventForm, validatePostForm, router,
     offerTitle, offerDescription, offerType, discountPercent, offerImage,
     offerStartDate, offerEndDate, isActive,
-    eventTitle, eventDescription, eventLocation,
-    eventDate, eventEndDate, addEvent, handleSavePost,
+    eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, addEvent,
+    postTitle, postContent, postImage, addPost,
   ]);
 
   const renderSectionHeader = (icon: React.ReactNode, title: string) => (
@@ -516,56 +538,70 @@ export default function CreateOfferScreen() {
   const renderPostForm = () => (
     <>
       <View style={styles.section}>
-        {renderSectionHeader(<FileText size={14} color="#fff" />, 'Create a Post')}
-        <Text style={styles.postSubtitle}>Share an update or announcement</Text>
-
-        <TextInput
-          label="What's on your mind?"
-          value={postText}
-          onChangeText={(t) => {
-            if (t.length <= 500) setPostText(t);
-          }}
-          mode="outlined"
-          style={[styles.input, styles.multilineInput]}
-          outlineColor="#E8E4F0"
-          activeOutlineColor={PURPLE}
-          multiline
-          numberOfLines={4}
-          testID="post-text-input"
-          placeholder="Share an update, announcement, or moment with your subscribers..."
-          theme={{ colors: { background: '#fff' } }}
-        />
-        <Text style={styles.charCounter}>{postText.length} / 500</Text>
-      </View>
-
-      <View style={styles.section}>
-        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Photo')}
+        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
 
         {postImage ? (
           <View style={styles.imagePreviewWrap}>
             <Image source={{ uri: postImage }} style={styles.imagePreview} contentFit="cover" />
             <TouchableOpacity
               style={styles.imageRemoveBtn}
-              onPress={() => setPostImage(null)}
+              onPress={() => setPostImage('')}
               activeOpacity={0.7}
               testID="post-image-remove"
             >
-              <X size={16} color="#fff" />
+              <Trash2 size={16} color="#fff" />
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.addPhotoTile}
-            onPress={() => setPostImage(`https://picsum.photos/seed/newpost-${Date.now()}/600/400`)}
-            activeOpacity={0.8}
-            testID="post-add-photo"
+            style={styles.imageUploadArea}
+            onPress={handlePickImage}
+            activeOpacity={0.7}
+            testID="post-image-upload-area"
           >
-            <View style={styles.addPhotoIconWrap}>
-              <Camera size={18} color={PURPLE} />
+            <View style={styles.imageUploadIconWrap}>
+              <ImagePlus size={26} color={PURPLE} />
             </View>
-            <Text style={styles.addPhotoText}>Add Photo (Optional)</Text>
+            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
+            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      <View style={styles.section}>
+        {renderSectionHeader(<FileText size={14} color="#fff" />, 'Post Details')}
+
+        <TextInput
+          label="Title *"
+          value={postTitle}
+          onChangeText={(t) => { setPostTitle(t); if (errors.postTitle) setErrors(prev => ({ ...prev, postTitle: undefined })); }}
+          mode="outlined"
+          style={styles.input}
+          outlineColor={errors.postTitle ? Colors.error : '#E8E4F0'}
+          activeOutlineColor={PURPLE}
+          error={!!errors.postTitle}
+          testID="post-title-input"
+          placeholder="e.g. We're now open on Sundays!"
+          theme={{ colors: { background: '#fff' } }}
+        />
+        {errors.postTitle && <Text style={styles.errorText}>{errors.postTitle}</Text>}
+
+        <TextInput
+          label="Content *"
+          value={postContent}
+          onChangeText={(t) => { setPostContent(t); if (errors.postContent) setErrors(prev => ({ ...prev, postContent: undefined })); }}
+          mode="outlined"
+          style={[styles.input, styles.multilineInput]}
+          outlineColor={errors.postContent ? Colors.error : '#E8E4F0'}
+          activeOutlineColor={PURPLE}
+          error={!!errors.postContent}
+          multiline
+          numberOfLines={4}
+          testID="post-content-input"
+          placeholder="Share an update, announcement, or moment with your subscribers..."
+          theme={{ colors: { background: '#fff' } }}
+        />
+        {errors.postContent && <Text style={styles.errorText}>{errors.postContent}</Text>}
       </View>
     </>
   );
@@ -770,14 +806,12 @@ export default function CreateOfferScreen() {
             <Pressable
               style={[
                 styles.publishBtn,
-                (activeTab === 'post' && postText.trim().length === 0) || publishing
-                  ? styles.publishBtnDisabled
-                  : undefined,
+                publishing ? styles.publishBtnDisabled : undefined,
               ]}
               onPress={handlePublish}
               onPressIn={handlePublishPressIn}
               onPressOut={handlePublishPressOut}
-              disabled={(activeTab === 'post' && postText.trim().length === 0) || publishing}
+              disabled={publishing}
               testID="publish-btn"
             >
               {publishing ? (
@@ -788,7 +822,7 @@ export default function CreateOfferScreen() {
                 <View style={styles.publishInner}>
                   <Check size={18} color="#fff" />
                   <Text style={styles.publishLabel}>
-                    {activeTab === 'offer' ? 'Create Offer' : activeTab === 'event' ? 'Create Event' : 'Save Post'}
+                    {activeTab === 'offer' ? 'Create Offer' : activeTab === 'event' ? 'Create Event' : 'Create Post'}
                   </Text>
                 </View>
               )}
@@ -805,7 +839,7 @@ export default function CreateOfferScreen() {
         duration={3000}
         style={styles.snackbar}
       >
-        {activeTab === 'offer' ? 'Offer created!' : activeTab === 'event' ? 'Event created!' : 'Post saved'}
+        {activeTab === 'offer' ? 'Offer created!' : activeTab === 'event' ? 'Event created!' : 'Post created!'}
       </Snackbar>
 
       <DatePickerModal
