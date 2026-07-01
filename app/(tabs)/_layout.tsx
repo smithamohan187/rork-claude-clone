@@ -2,7 +2,8 @@ import React, { useMemo, useCallback } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, Compass, MessageCircle, User, Gift, LayoutDashboard, PenSquare, Users, BarChart3, Settings } from 'lucide-react-native';
+import { Home, Compass, MessageCircle, User, Gift, LayoutDashboard, Users, BarChart3, Settings } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { THEME } from '@/theme/tokens';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReferralChat } from '@/contexts/ReferralChatContext';
@@ -116,13 +117,6 @@ export default function TabLayout() {
 
   const router = useRouter();
 
-  const handlePostTabPress = useCallback((e: { preventDefault: () => void }) => {
-    if (isBusiness) {
-      e.preventDefault();
-      router.push('/create-offer');
-    }
-  }, [isBusiness, router]);
-
   const handleRewardsTabPress = useCallback((e: { preventDefault: () => void }) => {
     if (isBusiness) {
       e.preventDefault();
@@ -131,15 +125,25 @@ export default function TabLayout() {
   }, [isBusiness, router]);
 
   const messagesOptions = useMemo(() => ({
-    title: isBusiness ? 'Post' : 'Chat',
+    title: 'Chat',
+    href: isBusiness ? null : undefined,
     tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
-      <TabIcon focused={focused} color={color} Icon={isBusiness ? PenSquare : MessageCircle} />
+      <TabIcon focused={focused} color={color} Icon={MessageCircle} />
     ),
-    tabBarBadge: !isBusiness && combinedUnread > 0 ? combinedUnread : undefined,
-    tabBarBadgeStyle: !isBusiness
-      ? { backgroundColor: '#EF4444', color: '#FFFFFF', fontSize: 10, fontWeight: '600' as const }
-      : undefined,
+    tabBarBadge: combinedUnread > 0 ? combinedUnread : undefined,
+    tabBarBadgeStyle: { backgroundColor: '#EF4444', color: '#FFFFFF', fontSize: 10, fontWeight: '600' as const },
   }), [isBusiness, combinedUnread]);
+
+  const contentOptions = useMemo(() => ({
+    title: 'Content',
+    href: isBusiness ? undefined : null,
+    tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+      <View style={styles.iconWrap}>
+        <ActiveIndicator focused={focused} />
+        <MaterialCommunityIcons name="view-dashboard-outline" size={22} color={color} />
+      </View>
+    ),
+  }), [isBusiness]);
 
   const savedCount = 3;
   const showSavedDot = !isBusiness && savedCount > 0;
@@ -160,11 +164,8 @@ export default function TabLayout() {
         options={rewardsOptions}
         listeners={{ tabPress: handleRewardsTabPress }}
       />
-      <Tabs.Screen
-        name="messages"
-        options={messagesOptions}
-        listeners={{ tabPress: handlePostTabPress }}
-      />
+      <Tabs.Screen name="messages" options={messagesOptions} />
+      <Tabs.Screen name="content" options={contentOptions} />
       <Tabs.Screen name="profile" options={profileOptions} />
     </Tabs>
   );

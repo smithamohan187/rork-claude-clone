@@ -237,25 +237,63 @@ async function getUserByIdWithProfile(userId) {
 }
 
 async function getSessionByUserId(userId) {
-  const { rows } = await query(
+  // Join on active_profile_id — works for both personal and business active profiles
+  const { rows: activeRows } = await query(
     `SELECT
-       u.id           AS user_id,
+       u.id               AS user_id,
        u.email,
        u.phone,
-       p.id           AS profile_id,
+       u.active_profile_id,
+       p.id               AS profile_id,
        p.profile_type,
        p.display_name,
        p.avatar_url
      FROM users u
-     JOIN profiles p ON p.user_id = u.id
+     JOIN profiles p ON p.id = u.active_profile_id
      WHERE u.id = $1
-       AND p.profile_type = 'personal'
-       AND p.is_active = TRUE
        AND u.is_active = TRUE
+       AND p.is_active = TRUE
      LIMIT 1`,
     [userId]
   );
-  return rows[0] ?? null;
+  const activeProfile = activeRows[0] ?? null;
+  if (!activeProfile) return null;
+
+  // Fetch all profiles so the frontend can build the profile switcher
+  const { rows: allProfiles } = await query(
+    `SELECT id, profile_type, display_name, avatar_url
+     FROM profiles
+     WHERE user_id = $1
+       AND is_active = TRUE
+     ORDER BY profile_type ASC`,
+    [userId]
+  );
+
+  return { ...activeProfile, profiles: allProfiles };
+}
+
+/**
+ * Switch the user's active profile.
+ * Validates that the profile belongs to the user before updating.
+ */
+async function switchActiveProfile(userId, profileId) {
+  const { rows } = await query(
+    `SELECT id, profile_type, display_name, avatar_url
+     FROM profiles
+     WHERE id = $1
+       AND user_id = $2
+       AND is_active = TRUE
+     LIMIT 1`,
+    [profileId, userId]
+  );
+  const profile = rows[0] ?? null;
+  if (!profile) throw new Error('Profile not found or does not belong to user');
+
+  await query(
+    'UPDATE users SET active_profile_id = $1, updated_at = NOW() WHERE id = $2',
+    [profileId, userId]
+  );
+  return profile;
 }
 
 module.exports = {
@@ -281,4 +319,5 @@ module.exports = {
   getAllActiveRefreshTokens,
   getUserByIdWithProfile,
   getSessionByUserId,
+  switchActiveProfile,
 };

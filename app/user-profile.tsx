@@ -46,6 +46,9 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { BadgeCard, BadgeDetailModal } from '@/components/badges';
 import { getBadgeForPoints, NO_BADGE_ICON } from '@/config/badgeTiers';
+import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
+import ProfileSwitcherPill from '@/components/ProfileSwitcherPill';
+import ProfileContextBanner from '@/components/ProfileContextBanner';
 
 const PURPLE = '#1A5C35';
 const PURPLE_LIGHT = '#00B246';
@@ -65,6 +68,7 @@ export default function UserProfileScreen() {
   })();
   const { authUser, accountType, logout } = useAuth();
 
+  const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false);
   const [loggingOut, setLoggingOut] = useState<boolean>(false);
   const [showBadgeModal, setShowBadgeModal] = useState<boolean>(false);
@@ -144,6 +148,10 @@ export default function UserProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View>
+        {/* Pill row — shows all profiles, tapping a pill switches the active profile */}
+        <ProfileSwitcherPill />
+        {/* Context banner — tells the user which mode they're currently viewing */}
+        <ProfileContextBanner profileType={accountType} />
         <View style={styles.avatarSection}>
           <Surface style={styles.avatarRing} elevation={3}>
             <Image
@@ -166,6 +174,18 @@ export default function UserProfileScreen() {
               {memberSince}
             </Text>
           </View>
+          {/* Profile switcher trigger — tapping opens the switcher modal */}
+          <TouchableOpacity
+            style={styles.switcherTrigger}
+            onPress={() => setSwitcherVisible(true)}
+            activeOpacity={0.7}
+            testID="profile-switcher-trigger"
+          >
+            <Text style={styles.switcherTriggerText}>
+              {isBusinessActive ? '🏢 Business Profile' : '👤 Personal Profile'}
+            </Text>
+            <Text style={styles.switcherTriggerCaret}>⌄</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
@@ -307,22 +327,6 @@ export default function UserProfileScreen() {
                 titleStyle={styles.listItemTitle}
                 descriptionStyle={styles.listItemDesc}
                 testID="settings-manage-subscription"
-              />
-              <Divider style={styles.divider} />
-              <List.Item
-                title="Manage Content"
-                description="Offers, Events & Posts"
-                left={() => (
-                  <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
-                    <ClipboardList size={18} color={PURPLE} />
-                  </View>
-                )}
-                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-                onPress={() => router.push('/manage-content' as any)}
-                style={styles.listItem}
-                titleStyle={styles.listItemTitle}
-                descriptionStyle={styles.listItemDesc}
-                testID="settings-manage-content"
               />
               <Divider style={styles.divider} />
               <List.Item
@@ -696,6 +700,11 @@ export default function UserProfileScreen() {
       >
         {snackbar}
       </Snackbar>
+
+      <ProfileSwitcherModal
+        visible={switcherVisible}
+        onDismiss={() => setSwitcherVisible(false)}
+      />
 
     </View>
   );
@@ -1193,6 +1202,28 @@ const styles = StyleSheet.create({
     color: '#A0AABB',
     marginTop: 8,
     marginBottom: 20,
+  },
+  switcherTrigger: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: '#F0FBF4',
+    borderWidth: 1,
+    borderColor: '#C6E8D4',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  switcherTriggerText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#1A5C35',
+  },
+  switcherTriggerCaret: {
+    fontSize: 14,
+    color: '#1A5C35',
+    fontWeight: '700' as const,
   },
   logoutDialog: {
     backgroundColor: '#fff',

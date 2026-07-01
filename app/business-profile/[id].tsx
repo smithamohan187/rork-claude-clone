@@ -69,6 +69,8 @@ import { RatingBottomSheet } from '@/components/ratings/RatingBottomSheet';
 import { useBusinessRating, type ReviewItem } from '@/hooks/useBusinessRating';
 import { Star as StarIcon } from 'lucide-react-native';
 import { usePosts } from '@/contexts/PostsContext';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import type { BusinessProfile } from '@/api/services/businessProfileService';
 import CommentSheet from '@/components/feed/CommentSheet';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -196,6 +198,8 @@ function deriveOfferStatus(offer: OfferCard, index: number): OfferStatus {
 
 export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
+  const { business: realBusiness, loading: profileLoading, error: profileError,
+          formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
   const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
@@ -249,6 +253,29 @@ export default function BusinessProfileScreen() {
   useEffect(() => {
     setBusiness(initialBusiness);
   }, [initialBusiness]);
+
+  // Seed local state from real backend data when it arrives.
+  // We keep initialBusiness as the initial value to avoid a blank flash before the fetch resolves.
+  useEffect(() => {
+    if (!realBusiness) return;
+    setBusiness((prev) => ({
+      ...prev,
+      id:               realBusiness.id,
+      name:             realBusiness.name,
+      description:      realBusiness.description ?? '',
+      category:         realBusiness.category_name ?? '',
+      phone:            realBusiness.phone ?? '',
+      website:          realBusiness.website ?? '',
+      address:          formattedAddress,
+      hours:            formattedHours,
+      logo:             realBusiness.logo_url ?? prev.logo,
+      coverImage:       realBusiness.cover_url ?? prev.coverImage,
+      subscriberCount:  realBusiness.subscriber_count,
+      welcomePoints:    prev.welcomePoints,
+      activeOfferCount: prev.activeOfferCount,
+    }));
+    setDraft((prev) => ({ ...prev, name: realBusiness.name }));
+  }, [realBusiness, formattedAddress, formattedHours]);
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [draft, setDraft] = useState<BusinessProfileData>(initialBusiness);
@@ -432,6 +459,14 @@ export default function BusinessProfileScreen() {
       console.log('[BusinessProfile] Share error:', e);
     }
   }, [business.name]);
+
+  if (profileLoading && !business.name) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F6F5FA' }}>
+        <ActivityIndicator size="large" color="#1A5C35" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>

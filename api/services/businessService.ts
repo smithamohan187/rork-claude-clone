@@ -93,7 +93,7 @@ export async function uploadBusinessLogo(id: string, uri: string): Promise<strin
   if (__DEV__) console.log('[upload] logoUri:', uri);
   const token = getAccessToken();
   const form = await buildFormData('logo', uri);
-  const response = await fetch(`${API_BASE_URL}businesses/${id}/logo`, {
+  const response = await fetch(`${API_BASE_URL}/businesses/${id}/logo`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -107,7 +107,7 @@ export async function uploadBusinessCoverPhoto(id: string, uri: string): Promise
   const token = getAccessToken();
   const form = await buildFormData('photo', uri);
   if (__DEV__) console.log('[upload] coverUri:', uri);
-  const response = await fetch(`${API_BASE_URL}businesses/${id}/photo`, {
+  const response = await fetch(`${API_BASE_URL}/businesses/${id}/photo`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,

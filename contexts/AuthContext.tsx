@@ -21,14 +21,20 @@ import {
   getRefreshToken,
   clearTokens,
 } from '@/api/client';
-import { authApi, AuthTokens, SessionResponse } from '@/api/auth.api';
-import type { AccountType } from '@/types';
+import { authApi, AuthTokens, SessionResponse, BackendProfile } from '@/api/auth.api';
+import type { AccountType, ProfileEntry } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AsyncStorage key — the only key this context owns.
 // The refresh token key is owned by api/client.ts (cleared via clearTokens).
 // ─────────────────────────────────────────────────────────────────────────────
 const ACCOUNT_TYPE_KEY = 'account_type';
+const ACTIVE_PROFILE_ID_KEY = 'active_profile_id';
+
+// Map backend profile row to the ProfileEntry shape used by components
+function toProfileEntry(p: BackendProfile): ProfileEntry {
+  return { id: p.id, type: p.profile_type, displayName: p.display_name, avatarUrl: p.avatar_url ?? '' };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AuthUser — the shape we store in React state after login or session restore.
@@ -121,6 +127,32 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<'personal' | 'business'>('personal');
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [profiles, setProfiles] = useState<ProfileEntry[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+
+  // ── hydrateProfiles ──────────────────────────────────────────────────────
+  // Calls GET /auth/session and extracts the profiles array + active_profile_id.
+  // Must only be called when a valid access token is already in memory.
+  // Non-fatal — callers swallow errors so a failed hydration doesn't block login.
+  async function hydrateProfiles() {
+    const sessionResult = await authApi.getSession();
+    if (!sessionResult.success || !sessionResult.data) return;
+    const data = sessionResult.data as SessionResponse;
+    const backendProfiles: BackendProfile[] = data.profiles ?? [];
+    setProfiles(backendProfiles.map(toProfileEntry));
+    const aid = data.active_profile_id ?? null;
+    if (aid) {
+      setActiveProfileId(aid);
+      await AsyncStorage.setItem(ACTIVE_PROFILE_ID_KEY, aid);
+      // Derive accountType from whichever profile is currently active
+      const activeP = backendProfiles.find(p => p.id === aid);
+      if (activeP) {
+        const t: 'personal' | 'business' = activeP.profile_type === 'business' ? 'business' : 'personal';
+        setAccountType(t);
+        await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, t);
+      }
+    }
+  }
 
   // ── Session restore on app startup ───────────────────────────────────────
   // Reads the refresh token from AsyncStorage (where it was persisted at
@@ -137,6 +169,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         if (storedType === 'personal' || storedType === 'business') {
           setAccountType(storedType);
         }
+        const storedProfileId = await AsyncStorage.getItem(ACTIVE_PROFILE_ID_KEY);
+        if (storedProfileId) setActiveProfileId(storedProfileId);
       } catch {
         // If AsyncStorage fails here just leave the default 'personal'.
       }
@@ -176,6 +210,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             if (__DEV__) console.log('[AuthContext] restoreSession: fetchCurrentUser returned id:', userFromSession?.id ?? 'null');
             setAuthUser(userFromSession);
           }
+
+          // Hydrate profiles now that we have a valid access token.
+          // Non-fatal — if this fails the user can still use the app.
+          try { await hydrateProfiles(); } catch { /* non-fatal */ }
         } else {
           // Refresh call succeeded HTTP-wise but returned no access token —
           // treat this as an expired/invalid session.
@@ -230,6 +268,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       }
 
       setAuthUser(user);
+      // Login response doesn't include the profiles array — fetch session to hydrate.
+      try { await hydrateProfiles(); } catch { /* non-fatal */ }
       //console.log(user);
       if (__DEV__) console.log('[AuthContext] loginWithTokens: set authUser DETAILS:', user);
       //if (__DEV__) console.log('[AuthContext] loginWithTokens: set accessToken:', newAccess);
@@ -290,40 +330,74 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       await clearTokens();
       setAccessTokenState(null);
 
-      // Remove the account type preference so the next login starts fresh.
+      // Remove persisted preferences so the next login starts fresh.
       await AsyncStorage.removeItem(ACCOUNT_TYPE_KEY);
+      await AsyncStorage.removeItem(ACTIVE_PROFILE_ID_KEY);
 
       // Reset all React state to logged-out defaults.
       setAuthUser(null);
       setAccountType('personal');
+      setProfiles([]);
+      setActiveProfileId(null);
 
       router.replace('/(auth)/sign-in');
     }
   }, [router]);
 
-  // ── switchAccount ─────────────────────────────────────────────────────────
-  // Switches the active account view between 'personal' and 'business'.
-  // Persists the preference to AsyncStorage so it survives an app restart.
-  //
-  // What it reads:  type parameter ('personal' | 'business')
-  // What it sets:   accountType state + AsyncStorage
-  const switchAccount = useCallback(async (type: 'personal' | 'business') => {
-    setAccountType(type);
-    await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, type);
+  // ── switchProfile ─────────────────────────────────────────────────────────
+  // Switch the active profile by calling the backend.
+  // Updates active_profile_id on the server, then syncs local state.
+  // Falls back gracefully if the API call fails.
+  const switchProfile = useCallback(async (profileId: string) => {
+    try {
+      const result = await authApi.switchProfile(profileId);
+      if (result.success && result.data) {
+        const { active_profile_type, active_profile_id } = result.data;
+        setAccountType(active_profile_type);
+        setActiveProfileId(active_profile_id);
+        await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, active_profile_type);
+        await AsyncStorage.setItem(ACTIVE_PROFILE_ID_KEY, active_profile_id);
+        if (__DEV__) console.log('[AuthContext] switchProfile: switched to', active_profile_type);
+      }
+    } catch (err) {
+      if (__DEV__) console.warn('[AuthContext] switchProfile: API call failed', err);
+    }
   }, []);
 
+  // ── switchAccount ─────────────────────────────────────────────────────────
+  // Compatibility alias for ProfileSwitcherModal which switches by type name.
+  // Looks up the profile of the requested type and delegates to switchProfile.
+  // Falls back to local-only if the user has no profile of that type yet.
+  const switchAccount = useCallback(async (type: 'personal' | 'business') => {
+    const target = profiles.find(p => p.type === type);
+    if (target) {
+      await switchProfile(target.id);
+    } else {
+      // No profile of this type exists yet — update local state only
+      setAccountType(type);
+      await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, type);
+    }
+  }, [profiles, switchProfile]);
+
+  // Derived — the full ProfileEntry for whichever profile is currently active.
+  // Used by ProfileSwitcherPill to highlight the active pill.
+  const activeProfile = profiles.find(p => p.id === activeProfileId);
+
   // ── Exposed context value ─────────────────────────────────────────────────
-  // Only expose what the app actually needs. Keeping this surface small makes
-  // it easy to audit what downstream components can touch.
   return {
     authUser,
     accessToken,
     accountType,
+    activeProfileId,
+    activeProfile,       // ProfileEntry | undefined — used by ProfileSwitcherPill
+    profiles,            // ProfileEntry[] — all profiles for this user
     authLoading,
     isAuthenticated: !!authUser,
     loginWithTokens,
     updateAuthUser,
     logout,
-    switchAccount,
+    switchAccount,       // compatibility alias (type-based switching)
+    switchProfile,       // preferred: profile-id-based, calls backend
+    refreshProfiles: hydrateProfiles, // call after creating/deleting a profile
   };
 });

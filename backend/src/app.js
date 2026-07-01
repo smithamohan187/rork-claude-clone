@@ -11,6 +11,8 @@ const categoriesRoutes        = require('./modules/categories/categories.routes'
 const profileRoutes           = require('./modules/profile/profile.routes');
 const businessRoutes          = require('./modules/businesses/business.routes');
 const businessDirectoryRoutes = require('./modules/businessDirectory/businessDirectory.routes');
+const offersRoutes            = require('./modules/offers/offers.routes');
+const eventsRoutes            = require('./modules/events/events.routes');
 
 const app = express();
 
@@ -37,6 +39,8 @@ app.use('/businesses',         businessRoutes);
 console.log('Registering businessdirectory routes...');
 app.use('/businessdirectory', businessDirectoryRoutes);
 console.log('Done.');
+app.use('/offers',            offersRoutes);
+app.use('/events',            eventsRoutes);
 
 app.use('/api/v1', api);
 

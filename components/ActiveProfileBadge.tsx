@@ -17,10 +17,10 @@ interface Props {
 }
 
 export default function ActiveProfileBadge({ testID }: Props) {
-  const { authUser } = useAuth();
+  const { authUser, profiles } = useAuth();
   const [open, setOpen] = useState<boolean>(false);
 
-  const hasMultiple = false; // TODO: restore when business profile module is built
+  const hasMultiple = profiles.length > 1;
   const displayName = authUser?.name ?? authUser?.email ?? '';
   const avatarUrl = authUser?.avatar ?? '';
 

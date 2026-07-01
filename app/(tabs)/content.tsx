@@ -19,8 +19,8 @@ import {
 } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
-  ArrowLeft,
   Pencil,
+  Plus,
   Trash2,
   Ban,
   CheckCircle2,
@@ -28,6 +28,7 @@ import {
   CalendarDays,
   FileText,
   X,
+  XCircle,
 } from 'lucide-react-native';
 import {
   useManageContent,
@@ -36,6 +37,8 @@ import {
 } from '@/contexts/ManageContentContext';
 import { useOffers } from '@/hooks/useOffers';
 import { type Offer } from '@/api/services/offersService';
+import { useEvents } from '@/hooks/useEvents';
+import { type Event } from '@/api/services/eventsService';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -49,6 +52,13 @@ const SUCCESS = '#10B981';
 const BLUE = '#3B82F6';
 
 type TabKey = 'offers' | 'events' | 'posts';
+type EventFilter = 'upcoming' | 'past' | 'cancelled';
+
+const EVENT_FILTERS: { key: EventFilter; label: string }[] = [
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'past',     label: 'Past' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
 
 const formatLongDate = (iso: string): string => {
   try {
@@ -57,6 +67,21 @@ const formatLongDate = (iso: string): string => {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+};
+
+const formatDateTime = (iso: string): string => {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   } catch {
     return iso;
@@ -112,15 +137,25 @@ const itemTitle = (item: ContentItem): string => {
   return item.title;
 };
 
+// Map event effective_status to a display pill
+const EVENT_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  upcoming:  { label: 'Upcoming',  color: SUCCESS, bg: SUCCESS + '15' },
+  past:      { label: 'Past',      color: '#6B7280', bg: '#E5E7EB' },
+  cancelled: { label: 'Cancelled', color: DANGER,  bg: DANGER + '15' },
+};
+
 export default function ManageContentScreen() {
   const router = useRouter();
-  const { events, posts, updateStatus, removeItem } = useManageContent();
+  const { posts, updateStatus, removeItem } = useManageContent();
   const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers();
+  const [eventFilter, setEventFilter] = useState<EventFilter>('upcoming');
+  const { events: realEvents, refresh: refreshEvents, cancelEvent: doCancelEvent } = useEvents(eventFilter);
 
   useFocusEffect(
     useCallback(() => {
       refreshOffers();
-    }, [refreshOffers])
+      refreshEvents(eventFilter);
+    }, [refreshOffers, refreshEvents, eventFilter])
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
@@ -139,20 +174,25 @@ export default function ManageContentScreen() {
     item: ContentItem | null;
   }>({ visible: false, action: null, item: null });
 
+  const [cancelConfirm, setCancelConfirm] = useState<{
+    visible: boolean;
+    event: Event | null;
+  }>({ visible: false, event: null });
+
   const tabs = useMemo(
     () => [
       { key: 'offers' as const, label: 'Offers', count: realOffers.length },
-      { key: 'events' as const, label: 'Events', count: events.length },
+      { key: 'events' as const, label: 'Events', count: realEvents.length },
       { key: 'posts' as const, label: 'Posts', count: posts.length },
     ],
-    [realOffers.length, events.length, posts.length],
+    [realOffers.length, realEvents.length, posts.length],
   );
 
   const items: ContentItem[] = useMemo(() => {
     if (activeTab === 'offers') return realOffers as unknown as ContentItem[];
-    if (activeTab === 'events') return events;
+    if (activeTab === 'events') return realEvents as unknown as ContentItem[];
     return posts;
-  }, [activeTab, realOffers, events, posts]);
+  }, [activeTab, realOffers, realEvents, posts]);
 
   const handleEditOpen = useCallback(
     (item: ContentItem) => {
@@ -198,11 +238,24 @@ export default function ManageContentScreen() {
     setConfirm({ visible: false, action: null, item: null });
   }, [confirm, toggleStatus, removeOffer, updateStatus, removeItem, showSnackbar]);
 
+  const handleCancelEvent = useCallback(async () => {
+    const { event } = cancelConfirm;
+    if (!event) { setCancelConfirm({ visible: false, event: null }); return; }
+    try {
+      await doCancelEvent(event.id);
+      refreshEvents(eventFilter);
+      showSnackbar(`"${event.title}" cancelled`);
+    } catch (err: unknown) {
+      showSnackbar(err instanceof Error ? err.message : 'Failed to cancel event');
+    }
+    setCancelConfirm({ visible: false, event: null });
+  }, [cancelConfirm, doCancelEvent, refreshEvents, eventFilter, showSnackbar]);
+
   const renderTypeBadge = (type: ContentItem['type']) => {
     const map: Record<ContentItem['type'], { label: string; color: string; bg: string }> = {
-      post: { label: 'Post', color: PURPLE, bg: PURPLE + '14' },
+      post:  { label: 'Post',  color: PURPLE,  bg: PURPLE + '14' },
       offer: { label: 'Offer', color: SUCCESS, bg: SUCCESS + '15' },
-      event: { label: 'Event', color: BLUE, bg: BLUE + '15' },
+      event: { label: 'Event', color: BLUE,    bg: BLUE + '15' },
     };
     const t = map[type];
     return (
@@ -214,11 +267,20 @@ export default function ManageContentScreen() {
 
   const renderStatusBadge = (status: ItemStatus) => {
     const map: Record<ItemStatus, { label: string; color: string; bg: string }> = {
-      active: { label: 'Active', color: SUCCESS, bg: SUCCESS + '15' },
+      active:   { label: 'Active',   color: SUCCESS,   bg: SUCCESS + '15' },
       disabled: { label: 'Disabled', color: '#6B7280', bg: '#E5E7EB' },
-      expired: { label: 'Expired', color: DANGER, bg: DANGER + '15' },
+      expired:  { label: 'Expired',  color: DANGER,    bg: DANGER + '15' },
     };
     const s = map[status];
+    return (
+      <View style={[styles.pill, { backgroundColor: s.bg }]}>
+        <Text style={[styles.pillText, { color: s.color }]}>{s.label}</Text>
+      </View>
+    );
+  };
+
+  const renderEventStatusBadge = (effectiveStatus: string) => {
+    const s = EVENT_STATUS_MAP[effectiveStatus] ?? EVENT_STATUS_MAP.upcoming;
     return (
       <View style={[styles.pill, { backgroundColor: s.bg }]}>
         <Text style={[styles.pillText, { color: s.color }]}>{s.label}</Text>
@@ -243,15 +305,24 @@ export default function ManageContentScreen() {
       const expiresAt = (item as unknown as Offer).expires_at;
       return expiresAt ? `Valid until ${formatLongDate(expiresAt)}` : 'No expiry';
     }
-    if (item.type === 'event') return `Date: ${formatLongDate(item.date)}`;
+    if (item.type === 'event') return `${formatDateTime((item as unknown as Event).starts_at)}`;
     return `Posted ${relativeTime(item.created_at)}`;
   };
 
+  const renderEventLocation = (item: ContentItem): string | null => {
+    if (item.type !== 'event') return null;
+    return (item as unknown as Event).location ?? null;
+  };
+
   const renderCard = (item: ContentItem) => {
-    const status = getEffectiveStatus(item);
+    const isEvent = item.type === 'event';
+    const event = isEvent ? (item as unknown as Event) : null;
+    const effectiveStatus = isEvent ? event!.effective_status : null;
+    const status = !isEvent ? getEffectiveStatus(item) : null;
     const previewLines = item.type === 'post' ? 2 : 1;
     const titleText = item.type === 'post' ? item.text : item.title;
     const descText = item.type === 'post' ? '' : item.description;
+    const location = renderEventLocation(item);
 
     return (
       <Surface key={item.id} style={styles.card} elevation={1}>
@@ -263,12 +334,16 @@ export default function ManageContentScreen() {
             </Text>
             <View style={styles.badgeRow}>
               {renderTypeBadge(item.type)}
-              {renderStatusBadge(status)}
+              {isEvent
+                ? renderEventStatusBadge(effectiveStatus!)
+                : renderStatusBadge(status!)
+              }
             </View>
             {descText ? (
-              <Text style={styles.cardDesc} numberOfLines={1}>
-                {descText}
-              </Text>
+              <Text style={styles.cardDesc} numberOfLines={1}>{descText}</Text>
+            ) : null}
+            {location ? (
+              <Text style={styles.cardDesc} numberOfLines={1}>📍 {location}</Text>
             ) : null}
             <Text style={styles.cardSubtitle}>{renderSubtitle(item)}</Text>
           </View>
@@ -286,66 +361,84 @@ export default function ManageContentScreen() {
             <Text style={[styles.actionText, { color: PURPLE }]}>Edit</Text>
           </TouchableOpacity>
 
-          <View style={styles.actionDivider} />
-
-          {status === 'expired' ? (
-            <View style={styles.actionBtn}>
-              <Text style={styles.expiredLabel}>Expired</Text>
-            </View>
-          ) : status === 'active' ? (
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setConfirm({ visible: true, action: 'disable', item })}
-              testID={`disable-${item.id}`}
-            >
-              <Ban size={16} color={AMBER} />
-              <Text style={[styles.actionText, { color: AMBER }]}>Disable</Text>
-            </TouchableOpacity>
+          {isEvent ? (
+            <>
+              {effectiveStatus === 'upcoming' && (
+                <>
+                  <View style={styles.actionDivider} />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => setCancelConfirm({ visible: true, event: event! })}
+                    testID={`cancel-${item.id}`}
+                  >
+                    <XCircle size={16} color={DANGER} />
+                    <Text style={[styles.actionText, { color: DANGER }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
           ) : (
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={async () => {
-                if (item.type === 'offer') {
-                  try {
-                    await toggleStatus(item.id, 'active');
-                    showSnackbar(`${itemTitle(item)} enabled`);
-                    refreshOffers();
-                  } catch (err: unknown) {
-                    showSnackbar(err instanceof Error ? err.message : 'Cannot enable this offer');
-                  }
-                } else {
-                  updateStatus(item.id, item.type, 'active');
-                  showSnackbar(`${itemTitle(item)} enabled`);
-                }
-              }}
-              testID={`enable-${item.id}`}
-            >
-              <CheckCircle2 size={16} color={SUCCESS} />
-              <Text style={[styles.actionText, { color: SUCCESS }]}>Enable</Text>
-            </TouchableOpacity>
+            <>
+              <View style={styles.actionDivider} />
+
+              {status === 'expired' ? (
+                <View style={styles.actionBtn}>
+                  <Text style={styles.expiredLabel}>Expired</Text>
+                </View>
+              ) : status === 'active' ? (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => setConfirm({ visible: true, action: 'disable', item })}
+                  testID={`disable-${item.id}`}
+                >
+                  <Ban size={16} color={AMBER} />
+                  <Text style={[styles.actionText, { color: AMBER }]}>Disable</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={async () => {
+                    if (item.type === 'offer') {
+                      try {
+                        await toggleStatus(item.id, 'active');
+                        showSnackbar(`${itemTitle(item)} enabled`);
+                        refreshOffers();
+                      } catch (err: unknown) {
+                        showSnackbar(err instanceof Error ? err.message : 'Cannot enable this offer');
+                      }
+                    } else {
+                      updateStatus(item.id, item.type, 'active');
+                      showSnackbar(`${itemTitle(item)} enabled`);
+                    }
+                  }}
+                  testID={`enable-${item.id}`}
+                >
+                  <CheckCircle2 size={16} color={SUCCESS} />
+                  <Text style={[styles.actionText, { color: SUCCESS }]}>Enable</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.actionDivider} />
+
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => setConfirm({ visible: true, action: 'delete', item })}
+                testID={`delete-${item.id}`}
+              >
+                <Trash2 size={16} color={DANGER} />
+                <Text style={[styles.actionText, { color: DANGER }]}>Delete</Text>
+              </TouchableOpacity>
+            </>
           )}
-
-          <View style={styles.actionDivider} />
-
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => setConfirm({ visible: true, action: 'delete', item })}
-            testID={`delete-${item.id}`}
-          >
-            <Trash2 size={16} color={DANGER} />
-            <Text style={[styles.actionText, { color: DANGER }]}>Delete</Text>
-          </TouchableOpacity>
         </View>
       </Surface>
     );
   };
 
   const emptyConfig = useMemo(() => {
-    if (activeTab === 'offers')
-      return { Icon: Ticket, label: 'Offers', emoji: '🎟' };
-    if (activeTab === 'events')
-      return { Icon: CalendarDays, label: 'Events', emoji: '📅' };
-    return { Icon: FileText, label: 'Posts', emoji: '📝' };
+    if (activeTab === 'offers') return { Icon: Ticket,      label: 'Offers', emoji: '🎟', body: 'Tap ＋ Create Offer to get started.' };
+    if (activeTab === 'events') return { Icon: CalendarDays, label: 'Events', emoji: '📅', body: 'Tap ＋ Create Event to get started.' };
+    return { Icon: FileText,    label: 'Posts',  emoji: '📝', body: 'Tap ＋ Create Offer to get started.' };
   }, [activeTab]);
 
   const confirmCopy = useMemo(() => {
@@ -368,15 +461,7 @@ export default function ManageContentScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backBtn}
-          testID="manage-content-back"
-        >
-          <ArrowLeft size={22} color={TEXT_DARK} />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage Content</Text>
-        <View style={styles.backBtn} />
       </View>
 
       <View style={styles.tabBar}>
@@ -397,6 +482,51 @@ export default function ManageContentScreen() {
         })}
       </View>
 
+      <View style={styles.createBtnWrap}>
+        {activeTab === 'offers' && (
+          <TouchableOpacity
+            onPress={() => router.push('/create-offer' as any)}
+            style={styles.createOfferLink}
+            activeOpacity={0.7}
+            testID="create-offer-btn"
+          >
+            <Plus size={15} color={PURPLE} />
+            <Text style={styles.createOfferText}>Create Offer</Text>
+          </TouchableOpacity>
+        )}
+        {activeTab === 'events' && (
+          <TouchableOpacity
+            onPress={() => router.push('/create-offer?tab=event' as any)}
+            style={styles.createOfferLink}
+            activeOpacity={0.7}
+            testID="create-event-btn"
+          >
+            <Plus size={15} color={PURPLE} />
+            <Text style={styles.createOfferText}>Create Event</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {activeTab === 'events' && (
+        <View style={styles.filterRow}>
+          {EVENT_FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              onPress={() => {
+                setEventFilter(f.key);
+                refreshEvents(f.key);
+              }}
+              style={[styles.filterChip, eventFilter === f.key && styles.filterChipActive]}
+              testID={`filter-${f.key}`}
+            >
+              <Text style={[styles.filterChipText, eventFilter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -406,7 +536,7 @@ export default function ManageContentScreen() {
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyEmoji}>{emptyConfig.emoji}</Text>
             <Text style={styles.emptyTitle}>No {emptyConfig.label} yet</Text>
-            <Text style={styles.emptyBody}>Create your first one from the dashboard.</Text>
+            <Text style={styles.emptyBody}>{emptyConfig.body}</Text>
           </View>
         ) : (
           items.map((it) => renderCard(it))
@@ -441,6 +571,36 @@ export default function ManageContentScreen() {
         </Dialog>
       </Portal>
 
+      <Portal>
+        <Dialog
+          visible={cancelConfirm.visible}
+          onDismiss={() => setCancelConfirm({ visible: false, event: null })}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Cancel Event</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogBody}>
+              Are you sure you want to cancel this event? This cannot be undone.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setCancelConfirm({ visible: false, event: null })}
+              textColor={TEXT_MUTED}
+            >
+              Keep Event
+            </Button>
+            <Button
+              onPress={handleCancelEvent}
+              textColor={DANGER}
+              testID="cancel-event-confirm"
+            >
+              Cancel Event
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Snackbar
         visible={snackbar.visible}
         onDismiss={() => setSnackbar({ visible: false, message: '' })}
@@ -463,20 +623,11 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: '#fff',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: BORDER,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 17,
@@ -517,7 +668,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 60,
+    paddingBottom: 16,
     gap: 12,
   },
   card: {
@@ -639,5 +790,53 @@ const styles = StyleSheet.create({
   dialogBody: {
     fontSize: 14,
     color: TEXT_MUTED,
+  },
+  createBtnWrap: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER,
+  },
+  createOfferLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  createOfferText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: PURPLE,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F1F6',
+  },
+  filterChipActive: {
+    backgroundColor: PURPLE,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: TEXT_MUTED,
+  },
+  filterChipTextActive: {
+    color: '#fff',
   },
 });

@@ -11,6 +11,7 @@ const {
   uploadLogoHandler,
   uploadPhotoHandler,
   completeOnboardingHandler,
+  getBusinessProfileHandler,
 } = require('./business.controller');
 
 const uploadDir = path.join(__dirname, '../../../../uploads/businesses');
@@ -25,6 +26,8 @@ const upload = multer({ storage });
 const router = Router();
 
 router.get('/me', authenticate, getMyBusinessHandler);
+// Public — no auth — must come after /me so Express doesn't treat 'me' as :id
+router.get('/:id', getBusinessProfileHandler);
 router.post('/register', authenticate, validateRequest(registerBusinessSchema), registerBusinessHandler);
 router.post('/:id/logo', authenticate, upload.single('logo'), uploadLogoHandler);
 router.post('/:id/photo', authenticate, upload.single('photo'), uploadPhotoHandler);

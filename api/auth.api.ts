@@ -35,13 +35,24 @@ export type AuthTokens = {
   };
 };
 
+// Backend profile row shape — used by GET /auth/session profiles array
+export type BackendProfile = {
+  id:            string;
+  profile_type:  'personal' | 'business';
+  display_name:  string;
+  avatar_url:    string | null;
+};
+
 export type SessionResponse = {
-  id:        string;
-  email:     string;
-  full_name?: string;
-  name?:      string;
-  role?:      string;
-  profile?:   Record<string, unknown>;
+  id:                 string;
+  email:              string;
+  full_name?:         string;
+  name?:              string;
+  role?:              string;
+  profile?:           Record<string, unknown>;
+  // Added by updated getSessionByUserId — supports profile switcher
+  active_profile_id?: string;
+  profiles?:          BackendProfile[];
 };
 
 /*function extractAuthTokens(data: AuthTokens): { accessToken: string | null; refreshToken: string | null } {
@@ -136,5 +147,15 @@ export const authApi = {
   // Fetch the current user from the server (validates access token)
   async getSession(): Promise<ApiResult<SessionResponse>> {
     return apiClient.get<SessionResponse>('/auth/session');
+  },
+
+  // Switch the active profile on the backend — POST /auth/switch-profile
+  async switchProfile(profileId: string): Promise<ApiResult<{
+    active_profile_id:   string;
+    active_profile_type: 'personal' | 'business';
+    display_name:        string;
+    avatar_url:          string | null;
+  }>> {
+    return apiClient.post('/auth/switch-profile', { profile_id: profileId });
   },
 };

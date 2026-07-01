@@ -7,7 +7,6 @@ import {
   Image,
   TouchableOpacity,
   Share,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,22 +28,8 @@ import {
   Surface,
 } from 'react-native-paper';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  getOfferById,
-  getBusinessById,
-  getRewardConfig,
-  incrementOfferView,
-  incrementOfferShare,
-} from '@/services/offerService';
-import {
-  getSubscription,
-  upsertSubscription,
-} from '@/services/subscriptionService';
-import {
-  getUserPoints,
-  updateUserPoints,
-  addPointsTransaction,
-} from '@/services/pointsService';
+import { fetchOfferById, type Offer as ServiceOffer } from '@/api/services/offersService';
+import { fetchBusinessProfile } from '@/api/services/businessProfileService';
 
 const PURPLE = '#1A5C35';
 const LIGHT_PURPLE = '#E8F5EE';
@@ -58,12 +43,11 @@ type Offer = {
   title: string;
   description: string | null;
   image_url: string | null;
-  offer_type: string | null;
-  discount_percent: number | null;
+  discount_type: string | null;
+  discount_value: number | null;
   starts_at: string | null;
   expires_at: string | null;
   is_active: boolean;
-  view_count: number | null;
   terms_conditions?: string | null;
 };
 
@@ -134,8 +118,6 @@ export default function ViewOfferScreen() {
   const sharedByInitials = typeof params.sharedByInitials === 'string' ? params.sharedByInitials : '';
   const sharedByColor = typeof params.sharedByColor === 'string' && params.sharedByColor ? params.sharedByColor : '#1A5C35';
   const router = useRouter();
-  const { activeProfile } = useAuth();
-  const activeProfileId = activeProfile?.id ?? '';
 
   const [offer, setOffer] = useState<Offer | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
@@ -147,47 +129,54 @@ export default function ViewOfferScreen() {
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarText, setSnackbarText] = useState<string>('');
   const [sharing, setSharing] = useState<boolean>(false);
-  const [subscribing, setSubscribing] = useState<boolean>(false);
+  const subscribing = false;
 
   const fetchData = useCallback(async () => {
-    if (!offerId || !businessId) {
+    if (!offerId) {
       setError(true);
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      const [offerRes, bizRes, subRes, rewardRes] = await Promise.all([
-        getOfferById(offerId),
-        getBusinessById(businessId),
-        activeProfileId
-          ? getSubscription(activeProfileId, businessId)
-          : Promise.resolve({ data: null, error: null }),
-        getRewardConfig(businessId),
+      const [offerData, bizData] = await Promise.all([
+        fetchOfferById(offerId),
+        businessId ? fetchBusinessProfile(businessId) : Promise.resolve(null),
       ]);
 
-      if (offerRes.error || !offerRes.data) {
-        console.log('[ViewOffer] offer fetch error', offerRes.error);
-        setError(true);
-        setLoading(false);
-        return;
-      }
-      setOffer(offerRes.data as Offer);
-      if (bizRes.data) setBusiness(bizRes.data as Business);
-      const subData = subRes.data;
-      setIsSubscribed(!!subData && subData.status === 'active');
-      setSharingPoints(rewardRes.data?.sharing_points ?? 0);
-      setLoading(false);
-
-      incrementOfferView(offerId).then((r) => {
-        if (r.error) console.log('[ViewOffer] increment_offer_view error', r.error);
+      setOffer({
+        id:               offerData.id,
+        title:            offerData.title,
+        description:      offerData.description,
+        image_url:        offerData.image_url,
+        discount_type:    offerData.discount_type,
+        discount_value:   offerData.discount_value,
+        starts_at:        offerData.starts_at,
+        expires_at:       offerData.expires_at,
+        is_active:        offerData.effective_status === 'active',
+        terms_conditions: offerData.terms,
       });
+
+      if (bizData) {
+        setBusiness({
+          id:            bizData.id,
+          business_name: bizData.name,
+          logo_url:      bizData.logo_url,
+          category:      bizData.category_name,
+          city:          bizData.city,
+        });
+      }
+
+      // Subscriptions and points modules not yet built
+      setIsSubscribed(false);
+      setSharingPoints(0);
     } catch (e) {
-      console.log('[ViewOffer] fetch exception', e);
+      if (__DEV__) console.log('[ViewOffer] fetch error', e);
       setError(true);
+    } finally {
       setLoading(false);
     }
-  }, [offerId, businessId, activeProfileId]);
+  }, [offerId, businessId]);
 
   useEffect(() => {
     fetchData();
@@ -200,75 +189,22 @@ export default function ViewOfferScreen() {
     if (sharing || !offer || !business) return;
     setSharing(true);
     try {
-      incrementOfferShare(offerId).then((r) => {
-        if (r.error) console.log('[ViewOffer] increment_offer_share error', r.error);
-      });
-
-      if (isSubscribed && sharingPoints > 0 && activeProfileId) {
-        const { data: pointsRow } = await getUserPoints(activeProfileId, businessId);
-        const currentPoints = pointsRow?.total_points ?? 0;
-        const newTotal = currentPoints + sharingPoints;
-
-        await Promise.all([
-          addPointsTransaction({
-            profile_id: activeProfileId,
-            business_id: businessId,
-            transaction_type: 'sharing',
-            points: sharingPoints,
-            balance_after: newTotal,
-            reference_id: offerId,
-            reference_type: 'offer',
-            note: 'Points earned for sharing an offer',
-          }),
-          updateUserPoints(activeProfileId, businessId, {
-            total_points: newTotal,
-            last_activity_at: new Date().toISOString(),
-          }),
-        ]);
-
-        setSnackbarText(`Shared! You earned ${sharingPoints} pts`);
-      } else {
-        setSnackbarText('Offer shared');
-      }
+      const message = `Check out this offer from ${business.business_name}: ${offer.title}`;
+      await Share.share({ message });
+      setSnackbarText('Offer shared');
       setSnackbarVisible(true);
-
-      const message = `Check out this offer from ${business.business_name} on TouchPoint: ${offer.title}`;
-      if (Platform.OS === 'web') {
-        const nav = (globalThis as unknown as { navigator?: { share?: (d: { title: string; text: string }) => Promise<void> } }).navigator;
-        if (nav?.share) {
-          await nav.share({ title: offer.title, text: message });
-        }
-      } else {
-        await Share.share({ message });
-      }
     } catch (e) {
-      console.log('[ViewOffer] share error', e);
+      if (__DEV__) console.log('[ViewOffer] share error', e);
     } finally {
       setSharing(false);
     }
-  }, [sharing, offer, business, isSubscribed, sharingPoints, activeProfileId, businessId, offerId]);
+  }, [sharing, offer, business]);
 
   const handleSubscribe = useCallback(async () => {
-    if (subscribing || !activeProfileId || !businessId) return;
-    setSubscribing(true);
-    try {
-      const { error: subErr } = await upsertSubscription({
-        profile_id: activeProfileId,
-        business_id: businessId,
-        status: 'active',
-        subscribed_at: new Date().toISOString(),
-      });
-      if (subErr) {
-        console.log('[ViewOffer] subscribe error', subErr);
-      } else {
-        setIsSubscribed(true);
-        setSnackbarText(`Subscribed to ${business?.business_name ?? 'business'}`);
-        setSnackbarVisible(true);
-      }
-    } finally {
-      setSubscribing(false);
-    }
-  }, [subscribing, activeProfileId, businessId, business?.business_name]);
+    // Subscriptions module not yet built
+    setSnackbarText('Subscription feature coming soon');
+    setSnackbarVisible(true);
+  }, []);
 
   if (loading) {
     return (
@@ -297,7 +233,7 @@ export default function ViewOfferScreen() {
     );
   }
 
-  const typeColor = getTypeColor(offer.offer_type);
+  const typeColor = getTypeColor(offer.discount_type);
 
   return (
     <View style={styles.container}>
@@ -344,18 +280,18 @@ export default function ViewOfferScreen() {
                 <ArrowLeft size={22} color="#fff" />
               </TouchableOpacity>
 
-              {offer.discount_percent ? (
+              {offer.discount_type === 'percent' && offer.discount_value ? (
                 <View style={styles.discountPill}>
-                  <Text style={styles.discountText}>{offer.discount_percent}% OFF</Text>
+                  <Text style={styles.discountText}>{offer.discount_value}% OFF</Text>
                 </View>
               ) : (
                 <View />
               )}
             </View>
 
-            {offer.offer_type ? (
+            {offer.discount_type ? (
               <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-                <Text style={styles.typeBadgeText}>{offer.offer_type}</Text>
+                <Text style={styles.typeBadgeText}>{offer.discount_type}</Text>
               </View>
             ) : null}
           </SafeAreaView>

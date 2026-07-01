@@ -90,7 +90,7 @@ export default function ProfileSwitcherPill() {
 
   const handleSelect = useCallback(
     async (profile: ProfileEntry) => {
-      if (profile.id === activeProfile.id) return;
+      if (profile.id === activeProfile?.id) return;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSwitchingId(profile.id);
       try {
@@ -102,7 +102,7 @@ export default function ProfileSwitcherPill() {
         setSwitchingId(null);
       }
     },
-    [activeProfile.id, switchProfile, showSnackbar],
+    [activeProfile?.id, switchProfile, showSnackbar],
   );
 
   if (profiles.length === 0) return null;
@@ -118,7 +118,7 @@ export default function ProfileSwitcherPill() {
         <Pill
           key={profile.id}
           profile={profile}
-          isActive={profile.id === activeProfile.id}
+          isActive={profile.id === activeProfile?.id}
           isSwitching={switchingId === profile.id}
           onPress={handleSelect}
         />

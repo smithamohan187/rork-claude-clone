@@ -234,7 +234,7 @@ export default function BusinessDashboard() {
 
   const handleManageContent = useCallback(() => {
     console.log('[BusinessDashboard] Manage content banner pressed');
-    router.push('/manage-content' as never);
+    router.push('/(tabs)/content' as never);
   }, [router]);
 
   const handleNotifications = useCallback(() => {

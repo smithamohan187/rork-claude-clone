@@ -1,4 +1,5 @@
 const { registerUser, loginUser, logout, refreshAccessToken, getSession } = require('./auth.service');
+const authModel = require('./auth.model');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
 const { ok, fail } = require('../../utils/apiResponse');
@@ -116,6 +117,7 @@ const sessionHandler = asyncHandler(async (req, res) => {
       profile_type: result.profile_type,
       display_name: result.display_name,
       avatar_url:   result.avatar_url,
+      profiles:     result.profiles,
     }));
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json(fail(err.message));
@@ -123,4 +125,18 @@ const sessionHandler = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler };
+const switchProfileHandler = asyncHandler(async (req, res) => {
+  const { profile_id } = req.body;
+  if (!profile_id) {
+    return res.status(400).json(fail('profile_id is required'));
+  }
+  const profile = await authModel.switchActiveProfile(req.user.userId, profile_id);
+  return res.json(ok({
+    active_profile_id:   profile.id,
+    active_profile_type: profile.profile_type,
+    display_name:        profile.display_name,
+    avatar_url:          profile.avatar_url,
+  }));
+});
+
+module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler, switchProfileHandler };

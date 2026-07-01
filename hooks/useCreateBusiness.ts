@@ -62,7 +62,7 @@ async function toDisplayUri(uri: string): Promise<string> {
 
 export function useCreateBusiness() {
   const router = useRouter();
-  const { updateAuthUser } = useAuth();
+  const { updateAuthUser, refreshProfiles } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -301,6 +301,8 @@ export function useCreateBusiness() {
       await completeOnboarding(id);
 
       updateAuthUser({ role: 'business' });
+      // Refresh profiles so the business pill appears in ProfileSwitcherPill
+      try { await refreshProfiles(); } catch { /* non-fatal */ }
       router.replace('/(tabs)/feed' as never);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
@@ -312,7 +314,7 @@ export function useCreateBusiness() {
     businessName, businessType, categoryId, description,
     phone, website, address, city, state, country,
     inhouseReferral, inhouseReferralUrl, hours, logoUri, coverUri,
-    validateStep, updateAuthUser, router,
+    validateStep, updateAuthUser, refreshProfiles, router,
   ]);
 
   return {

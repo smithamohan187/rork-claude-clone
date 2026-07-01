@@ -4,6 +4,7 @@ const {
   uploadBusinessLogo,
   uploadBusinessCoverPhoto,
   completeOnboarding,
+  getPublicBusinessProfile,
 } = require('./business.service');
 const { ok } = require('../../utils/apiResponse');
 
@@ -47,10 +48,24 @@ const completeOnboardingHandler = asyncHandler(async (req, res) => {
   res.status(200).json(ok({ onboarding_complete: true }));
 });
 
+/**
+ * GET /businesses/:id — public, no auth required.
+ * Returns full business profile with hours, rating aggregates, and subscriber count.
+ */
+const getBusinessProfileHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const business = await getPublicBusinessProfile(id);
+  if (!business) {
+    return res.status(404).json({ success: false, data: null, error: 'Business not found' });
+  }
+  return res.status(200).json(ok({ business }));
+});
+
 module.exports = {
   getMyBusinessHandler,
   registerBusinessHandler,
   uploadLogoHandler,
   uploadPhotoHandler,
   completeOnboardingHandler,
+  getBusinessProfileHandler,
 };

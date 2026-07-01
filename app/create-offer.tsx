@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -20,22 +21,43 @@ import {
   X,
   ImagePlus,
   Calendar,
-  Clock,
   MapPin,
   Percent,
-  Users,
   Zap,
   Tag,
   Megaphone,
   Sparkles,
   Check,
   Trash2,
-  ChevronDown,
   FileText,
   Camera,
 } from 'lucide-react-native';
+import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
+import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
 import { usePosts } from '@/contexts/PostsContext';
+import { createOffer, uploadOfferImage, type CreateOfferPayload } from '@/api/services/offersService';
+import { useEvents } from '@/hooks/useEvents';
+import { uploadEventImage } from '@/api/services/eventsService';
+
+async function toDisplayUri(uri: string): Promise<string> {
+  if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = reject;
+    xhr.open('GET', uri);
+    xhr.responseType = 'blob';
+    xhr.send();
+  });
+}
+
+registerTranslation('en', en);
 
 const PURPLE = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
@@ -46,7 +68,6 @@ const CARD_SHADOW = 'rgba(26,92,53,0.08)';
 
 type TabMode = 'offer' | 'event' | 'post';
 type OfferType = 'promotion' | 'discount' | 'flash_sale';
-type EventType = 'in_person' | 'online' | 'hybrid';
 
 interface FormErrors {
   title?: string;
@@ -54,22 +75,15 @@ interface FormErrors {
   discount?: string;
   startDate?: string;
   endDate?: string;
-  location?: string;
-  eventStartDate?: string;
-  eventStartTime?: string;
-  maxAttendees?: string;
+  eventTitle?: string;
+  eventDate?: string;
+  eventEndDate?: string;
 }
 
 const OFFER_TYPES: { value: OfferType; label: string; icon: typeof Megaphone }[] = [
   { value: 'promotion', label: 'Promotion', icon: Megaphone },
   { value: 'discount', label: 'Discount', icon: Percent },
   { value: 'flash_sale', label: 'Flash Sale', icon: Zap },
-];
-
-const EVENT_TYPES: { value: EventType; label: string }[] = [
-  { value: 'in_person', label: 'In-Person' },
-  { value: 'online', label: 'Online' },
-  { value: 'hybrid', label: 'Hybrid' },
 ];
 
 export default function CreateOfferScreen() {
@@ -93,15 +107,19 @@ export default function CreateOfferScreen() {
   const [offerImage, setOfferImage] = useState<string>('');
   const [offerStartDate, setOfferStartDate] = useState<string>('');
   const [offerEndDate, setOfferEndDate] = useState<string>('');
+  const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [publishing, setPublishing] = useState<boolean>(false);
 
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDescription, setEventDescription] = useState<string>('');
   const [eventLocation, setEventLocation] = useState<string>('');
-  const [eventType, setEventType] = useState<EventType>('in_person');
-  const [eventStartDate, setEventStartDate] = useState<string>('');
-  const [eventStartTime, setEventStartTime] = useState<string>('');
-  const [maxAttendees, setMaxAttendees] = useState<string>('');
+  const [eventDate, setEventDate] = useState<Date | null>(null);
+  const [eventEndDate, setEventEndDate] = useState<Date | null>(null);
+  const [eventDateOpen, setEventDateOpen] = useState<boolean>(false);
+  const [eventEndDateOpen, setEventEndDateOpen] = useState<boolean>(false);
+
+  const { addEvent } = useEvents();
 
   const tabIndicatorAnim = useRef(
     new Animated.Value(activeTab === 'offer' ? 0 : activeTab === 'event' ? 1 : 2),
@@ -114,6 +132,15 @@ export default function CreateOfferScreen() {
   const handleTabChange = useCallback((value: TabMode) => {
     setActiveTab(value);
     clearErrors();
+    setOfferImage(''); // clear shared image state on every tab switch
+    if (value === 'offer') {
+      setEventTitle(''); setEventDescription(''); setEventLocation('');
+      setEventDate(null); setEventEndDate(null);
+    } else if (value === 'event') {
+      setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
+      setDiscountPercent(''); setOfferStartDate(''); setOfferEndDate('');
+      setIsActive(true);
+    }
     Animated.spring(tabIndicatorAnim, {
       toValue: value === 'offer' ? 0 : value === 'event' ? 1 : 2,
       useNativeDriver: false,
@@ -148,8 +175,9 @@ export default function CreateOfferScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]) {
-        setOfferImage(result.assets[0].uri);
-        console.log('[CreateOffer] Image selected:', result.assets[0].uri);
+        const stable = await toDisplayUri(result.assets[0].uri);
+        setOfferImage(stable);
+        if (__DEV__) console.log('[CreateOffer] Image selected:', stable);
       }
     } catch (err) {
       console.log('[CreateOffer] Image picker error:', err);
@@ -175,26 +203,22 @@ export default function CreateOfferScreen() {
     }
     if (!offerStartDate.trim()) newErrors.startDate = 'Start date is required';
     if (!offerEndDate.trim()) newErrors.endDate = 'End date is required';
+    if (offerStartDate && offerEndDate && new Date(offerEndDate) < new Date(offerStartDate))
+      newErrors.endDate = 'End date must be after start date';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [offerTitle, offerDescription, offerType, discountPercent, offerStartDate, offerEndDate]);
 
   const validateEventForm = useCallback((): boolean => {
     const newErrors: FormErrors = {};
-    if (!eventTitle.trim()) newErrors.title = 'Title is required';
-    if (!eventDescription.trim()) newErrors.description = 'Description is required';
-    if (!eventLocation.trim()) newErrors.location = 'Location is required';
-    if (!eventStartDate.trim()) newErrors.eventStartDate = 'Start date is required';
-    if (!eventStartTime.trim()) newErrors.eventStartTime = 'Start time is required';
-    if (maxAttendees.trim()) {
-      const num = parseInt(maxAttendees, 10);
-      if (isNaN(num) || num < 1) {
-        newErrors.maxAttendees = 'Enter a valid number';
-      }
+    if (!eventTitle.trim()) newErrors.eventTitle = 'Event title is required';
+    if (!eventDate) newErrors.eventDate = 'Event date is required';
+    if (eventDate && eventEndDate && eventEndDate <= eventDate) {
+      newErrors.eventEndDate = 'End date must be after event date';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [eventTitle, eventDescription, eventLocation, eventStartDate, eventStartTime, maxAttendees]);
+  }, [eventTitle, eventDate, eventEndDate]);
 
   const handlePublishPressIn = useCallback(() => {
     Animated.spring(publishScale, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
@@ -204,51 +228,68 @@ export default function CreateOfferScreen() {
     Animated.spring(publishScale, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
   }, [publishScale]);
 
-  const handlePublish = useCallback(() => {
+  const handlePublish = useCallback(async () => {
     if (activeTab === 'post') {
       handleSavePost();
       return;
     }
     if (activeTab === 'offer') {
       if (!validateOfferForm()) return;
-      console.log('[CreateOffer] Publishing offer:', {
-        title: offerTitle,
-        description: offerDescription,
-        type: offerType,
-        discount: offerType === 'discount' ? discountPercent : null,
-        image: offerImage,
-        startDate: offerStartDate,
-        endDate: offerEndDate,
-        isActive,
-      });
-      Alert.alert(
-        'Offer Published!',
-        `"${offerTitle}" is now live and visible to your subscribers.`,
-        [{ text: 'Done', onPress: () => router.back() }]
-      );
+
+      const payload: CreateOfferPayload = {
+        title:          offerTitle.trim(),
+        description:    offerDescription.trim() || null,
+        discount_type:  offerType === 'discount' ? 'percent' : null,
+        discount_value: offerType === 'discount' && discountPercent
+                          ? parseInt(discountPercent, 10)
+                          : null,
+        starts_at:      offerStartDate
+                          ? new Date(offerStartDate).toISOString()
+                          : null,
+        expires_at:     offerEndDate
+                          ? new Date(offerEndDate).toISOString()
+                          : null,
+        status:         isActive ? 'active' : 'disabled',
+      };
+
+      try {
+        setPublishing(true);
+        const offer = await createOffer(payload);
+        if (offerImage) await uploadOfferImage(offer.id, offerImage);
+        setSnackbarVisible(true);
+        setTimeout(() => router.back(), 1200);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to create offer';
+        Alert.alert('Error', msg);
+      } finally {
+        setPublishing(false);
+      }
     } else {
       if (!validateEventForm()) return;
-      console.log('[CreateOffer] Publishing event:', {
-        title: eventTitle,
-        description: eventDescription,
-        location: eventLocation,
-        type: eventType,
-        startDate: eventStartDate,
-        startTime: eventStartTime,
-        maxAttendees: maxAttendees || 'Unlimited',
-      });
-      Alert.alert(
-        'Event Published!',
-        `"${eventTitle}" is now live on the community feed.`,
-        [{ text: 'Done', onPress: () => router.back() }]
-      );
+      try {
+        setPublishing(true);
+        const event = await addEvent({
+          title:       eventTitle.trim(),
+          description: eventDescription.trim() || null,
+          location:    eventLocation.trim() || null,
+          starts_at:   eventDate!.toISOString(),
+          ends_at:     eventEndDate ? eventEndDate.toISOString() : null,
+        });
+        if (offerImage) await uploadEventImage(event.id, offerImage);
+        setSnackbarVisible(true);
+        setTimeout(() => router.back(), 1200);
+      } catch (err: unknown) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create event');
+      } finally {
+        setPublishing(false);
+      }
     }
   }, [
     activeTab, validateOfferForm, validateEventForm, router,
     offerTitle, offerDescription, offerType, discountPercent, offerImage,
     offerStartDate, offerEndDate, isActive,
-    eventTitle, eventDescription, eventLocation, eventType,
-    eventStartDate, eventStartTime, maxAttendees, handleSavePost,
+    eventTitle, eventDescription, eventLocation,
+    eventDate, eventEndDate, addEvent, handleSavePost,
   ]);
 
   const renderSectionHeader = (icon: React.ReactNode, title: string) => (
@@ -285,25 +326,6 @@ export default function CreateOfferScreen() {
     </View>
   );
 
-  const renderEventTypePills = () => (
-    <View style={styles.pillRow}>
-      {EVENT_TYPES.map((item) => {
-        const isSelected = eventType === item.value;
-        return (
-          <Pressable
-            key={item.value}
-            style={[styles.pill, isSelected && styles.pillSelected]}
-            onPress={() => setEventType(item.value)}
-            testID={`event-type-${item.value}`}
-          >
-            <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
 
   const renderOfferForm = () => (
     <>
@@ -410,40 +432,63 @@ export default function CreateOfferScreen() {
 
         <View style={styles.dateRow}>
           <View style={styles.dateField}>
-            <TextInput
-              label="Start Date"
-              value={offerStartDate}
-              onChangeText={(t) => { setOfferStartDate(t); if (errors.startDate) setErrors(prev => ({ ...prev, startDate: undefined })); }}
-              mode="outlined"
-              style={styles.input}
-              outlineColor={errors.startDate ? Colors.error : '#E8E4F0'}
-              activeOutlineColor={PURPLE}
-              error={!!errors.startDate}
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.startDate && styles.dateBtnError]}
+              onPress={() => setPickerField('start')}
               testID="offer-start-date"
-              placeholder="15 Apr 2026"
-              left={<TextInput.Icon icon={() => <Calendar size={15} color={Colors.textSecondary} />} />}
-              theme={{ colors: { background: '#fff' } }}
-            />
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !offerStartDate && styles.dateBtnPlaceholder]}>
+                {offerStartDate ? format(new Date(offerStartDate), 'd MMM yyyy') : 'Start Date'}
+              </Text>
+            </TouchableOpacity>
             {errors.startDate && <Text style={styles.errorText}>{errors.startDate}</Text>}
           </View>
           <View style={styles.dateField}>
-            <TextInput
-              label="End Date"
-              value={offerEndDate}
-              onChangeText={(t) => { setOfferEndDate(t); if (errors.endDate) setErrors(prev => ({ ...prev, endDate: undefined })); }}
-              mode="outlined"
-              style={styles.input}
-              outlineColor={errors.endDate ? Colors.error : '#E8E4F0'}
-              activeOutlineColor={PURPLE}
-              error={!!errors.endDate}
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.endDate && styles.dateBtnError]}
+              onPress={() => setPickerField('end')}
               testID="offer-end-date"
-              placeholder="30 Apr 2026"
-              left={<TextInput.Icon icon={() => <Calendar size={15} color={Colors.textSecondary} />} />}
-              theme={{ colors: { background: '#fff' } }}
-            />
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !offerEndDate && styles.dateBtnPlaceholder]}>
+                {offerEndDate ? format(new Date(offerEndDate), 'd MMM yyyy') : 'End Date'}
+              </Text>
+            </TouchableOpacity>
             {errors.endDate && <Text style={styles.errorText}>{errors.endDate}</Text>}
           </View>
         </View>
+
+        <DatePickerModal
+          locale="en"
+          mode="single"
+          visible={pickerField !== null}
+          onDismiss={() => setPickerField(null)}
+          date={
+            pickerField === 'start'
+              ? (offerStartDate ? new Date(offerStartDate) : undefined)
+              : (offerEndDate ? new Date(offerEndDate) : undefined)
+          }
+          onConfirm={({ date }) => {
+            if (!date) { setPickerField(null); return; }
+            const iso = date.toISOString();
+            if (pickerField === 'start') {
+              setOfferStartDate(iso);
+              setErrors(prev => ({ ...prev, startDate: undefined }));
+            } else {
+              setOfferEndDate(iso);
+              setErrors(prev => ({ ...prev, endDate: undefined }));
+            }
+            setPickerField(null);
+          }}
+          validRange={
+            pickerField === 'end' && offerStartDate
+              ? { startDate: new Date(offerStartDate) }
+              : undefined
+          }
+        />
       </View>
 
       <View style={styles.section}>
@@ -528,128 +573,117 @@ export default function CreateOfferScreen() {
   const renderEventForm = () => (
     <>
       <View style={styles.section}>
+        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
+
+        {offerImage ? (
+          <View style={styles.imagePreviewWrap}>
+            <Image source={{ uri: offerImage }} style={styles.imagePreview} contentFit="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={handleRemoveImage} activeOpacity={0.7}>
+              <Trash2 size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadArea}
+            onPress={handlePickImage}
+            activeOpacity={0.7}
+            testID="event-image-upload-area"
+          >
+            <View style={styles.imageUploadIconWrap}>
+              <ImagePlus size={26} color={PURPLE} />
+            </View>
+            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
+            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.section}>
         {renderSectionHeader(<Tag size={14} color="#fff" />, 'Event Details')}
 
         <TextInput
-          label="Title"
+          label="Title *"
           value={eventTitle}
-          onChangeText={(t) => { setEventTitle(t); if (errors.title) setErrors(prev => ({ ...prev, title: undefined })); }}
+          onChangeText={(t) => { setEventTitle(t); if (errors.eventTitle) setErrors(prev => ({ ...prev, eventTitle: undefined })); }}
           mode="outlined"
           style={styles.input}
-          outlineColor={errors.title ? Colors.error : '#E8E4F0'}
+          outlineColor={errors.eventTitle ? Colors.error : '#E8E4F0'}
           activeOutlineColor={PURPLE}
-          error={!!errors.title}
+          error={!!errors.eventTitle}
           testID="event-title-input"
           placeholder="e.g. Grand Opening Celebration"
           theme={{ colors: { background: '#fff' } }}
         />
-        {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+        {errors.eventTitle && <Text style={styles.errorText}>{errors.eventTitle}</Text>}
 
         <TextInput
           label="Description"
           value={eventDescription}
-          onChangeText={(t) => { setEventDescription(t); if (errors.description) setErrors(prev => ({ ...prev, description: undefined })); }}
+          onChangeText={setEventDescription}
           mode="outlined"
           style={[styles.input, styles.multilineInput]}
-          outlineColor={errors.description ? Colors.error : '#E8E4F0'}
+          outlineColor="#E8E4F0"
           activeOutlineColor={PURPLE}
-          error={!!errors.description}
           multiline
           numberOfLines={4}
           testID="event-description-input"
           placeholder="Tell attendees what to expect..."
           theme={{ colors: { background: '#fff' } }}
         />
-        {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
       </View>
 
       <View style={styles.section}>
-        {renderSectionHeader(<MapPin size={14} color="#fff" />, 'Location & Type')}
+        {renderSectionHeader(<MapPin size={14} color="#fff" />, 'Location')}
 
         <TextInput
           label="Location"
           value={eventLocation}
-          onChangeText={(t) => { setEventLocation(t); if (errors.location) setErrors(prev => ({ ...prev, location: undefined })); }}
+          onChangeText={setEventLocation}
           mode="outlined"
           style={styles.input}
-          outlineColor={errors.location ? Colors.error : '#E8E4F0'}
+          outlineColor="#E8E4F0"
           activeOutlineColor={PURPLE}
-          error={!!errors.location}
           testID="event-location-input"
           placeholder="Venue name or address"
           left={<TextInput.Icon icon={() => <MapPin size={15} color={Colors.textSecondary} />} />}
           theme={{ colors: { background: '#fff' } }}
         />
-        {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
-
-        <Text style={styles.fieldLabel}>Event Type</Text>
-        {renderEventTypePills()}
       </View>
 
       <View style={styles.section}>
         {renderSectionHeader(<Calendar size={14} color="#fff" />, 'Date & Time')}
 
-        <View style={styles.dateRow}>
-          <View style={styles.dateField}>
-            <TextInput
-              label="Start Date"
-              value={eventStartDate}
-              onChangeText={(t) => { setEventStartDate(t); if (errors.eventStartDate) setErrors(prev => ({ ...prev, eventStartDate: undefined })); }}
-              mode="outlined"
-              style={styles.input}
-              outlineColor={errors.eventStartDate ? Colors.error : '#E8E4F0'}
-              activeOutlineColor={PURPLE}
-              error={!!errors.eventStartDate}
-              testID="event-start-date"
-              placeholder="20 Apr 2026"
-              left={<TextInput.Icon icon={() => <Calendar size={15} color={Colors.textSecondary} />} />}
-              theme={{ colors: { background: '#fff' } }}
-            />
-            {errors.eventStartDate && <Text style={styles.errorText}>{errors.eventStartDate}</Text>}
-          </View>
-          <View style={styles.dateField}>
-            <TextInput
-              label="Start Time"
-              value={eventStartTime}
-              onChangeText={(t) => { setEventStartTime(t); if (errors.eventStartTime) setErrors(prev => ({ ...prev, eventStartTime: undefined })); }}
-              mode="outlined"
-              style={styles.input}
-              outlineColor={errors.eventStartTime ? Colors.error : '#E8E4F0'}
-              activeOutlineColor={PURPLE}
-              error={!!errors.eventStartTime}
-              testID="event-start-time"
-              placeholder="6:00 PM"
-              left={<TextInput.Icon icon={() => <Clock size={15} color={Colors.textSecondary} />} />}
-              theme={{ colors: { background: '#fff' } }}
-            />
-            {errors.eventStartTime && <Text style={styles.errorText}>{errors.eventStartTime}</Text>}
-          </View>
-        </View>
-      </View>
+        <TouchableOpacity
+          style={[styles.dateBtn, !!errors.eventDate && styles.dateBtnError]}
+          onPress={() => setEventDateOpen(true)}
+          testID="event-start-date-btn"
+          activeOpacity={0.7}
+        >
+          <Calendar size={15} color={Colors.textSecondary} />
+          <Text style={[styles.dateBtnText, !eventDate && styles.dateBtnPlaceholder]}>
+            {eventDate ? format(eventDate, 'd MMM yyyy, HH:mm') : 'Event date & time *'}
+          </Text>
+        </TouchableOpacity>
+        {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
 
-      <View style={styles.section}>
-        {renderSectionHeader(<Users size={14} color="#fff" />, 'Capacity')}
-
-        <TextInput
-          label="Max Attendees"
-          value={maxAttendees}
-          onChangeText={(t) => {
-            const cleaned = t.replace(/[^0-9]/g, '');
-            setMaxAttendees(cleaned);
-            if (errors.maxAttendees) setErrors(prev => ({ ...prev, maxAttendees: undefined }));
-          }}
-          mode="outlined"
-          style={styles.input}
-          outlineColor={errors.maxAttendees ? Colors.error : '#E8E4F0'}
-          activeOutlineColor={PURPLE}
-          error={!!errors.maxAttendees}
-          keyboardType="numeric"
-          testID="max-attendees-input"
-          placeholder="Leave empty for unlimited"
-          left={<TextInput.Icon icon={() => <Users size={15} color={Colors.textSecondary} />} />}
-          theme={{ colors: { background: '#fff' } }}
-        />
-        {errors.maxAttendees && <Text style={styles.errorText}>{errors.maxAttendees}</Text>}
+        <TouchableOpacity
+          style={[styles.dateBtn, { marginTop: 10 }, !!errors.eventEndDate && styles.dateBtnError]}
+          onPress={() => setEventEndDateOpen(true)}
+          testID="event-end-date-btn"
+          activeOpacity={0.7}
+        >
+          <Calendar size={15} color={Colors.textSecondary} />
+          <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+            {eventEndDate ? format(eventEndDate, 'd MMM yyyy, HH:mm') : 'End date & time (optional)'}
+          </Text>
+        </TouchableOpacity>
+        {eventEndDate && (
+          <TouchableOpacity onPress={() => { setEventEndDate(null); setErrors(p => ({ ...p, eventEndDate: undefined })); }} style={styles.clearDateBtn}>
+            <X size={14} color={Colors.textSecondary} />
+            <Text style={styles.clearDateText}>Clear end date</Text>
+          </TouchableOpacity>
+        )}
+        {errors.eventEndDate && <Text style={styles.errorText}>{errors.eventEndDate}</Text>}
       </View>
     </>
   );
@@ -664,9 +698,7 @@ export default function CreateOfferScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} testID="close-create-offer" activeOpacity={0.7}>
               <X size={20} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-              {activeTab === 'offer' ? 'Create Offer' : activeTab === 'event' ? 'Create Event' : 'Create Post'}
-            </Text>
+            <Text style={styles.headerTitle}>Create Content</Text>
             <View style={styles.headerRight} />
           </View>
         </SafeAreaView>
@@ -738,20 +770,28 @@ export default function CreateOfferScreen() {
             <Pressable
               style={[
                 styles.publishBtn,
-                activeTab === 'post' && postText.trim().length === 0 && styles.publishBtnDisabled,
+                (activeTab === 'post' && postText.trim().length === 0) || publishing
+                  ? styles.publishBtnDisabled
+                  : undefined,
               ]}
               onPress={handlePublish}
               onPressIn={handlePublishPressIn}
               onPressOut={handlePublishPressOut}
-              disabled={activeTab === 'post' && postText.trim().length === 0}
+              disabled={(activeTab === 'post' && postText.trim().length === 0) || publishing}
               testID="publish-btn"
             >
-              <View style={styles.publishInner}>
-                <Check size={18} color="#fff" />
-                <Text style={styles.publishLabel}>
-                  {activeTab === 'offer' ? 'Publish Offer' : activeTab === 'event' ? 'Publish Event' : 'Save Post'}
-                </Text>
-              </View>
+              {publishing ? (
+                <View style={styles.publishInner}>
+                  <ActivityIndicator color="#fff" size="small" />
+                </View>
+              ) : (
+                <View style={styles.publishInner}>
+                  <Check size={18} color="#fff" />
+                  <Text style={styles.publishLabel}>
+                    {activeTab === 'offer' ? 'Create Offer' : activeTab === 'event' ? 'Create Event' : 'Save Post'}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           </Animated.View>
 
@@ -765,8 +805,35 @@ export default function CreateOfferScreen() {
         duration={3000}
         style={styles.snackbar}
       >
-        Post published successfully
+        {activeTab === 'offer' ? 'Offer created!' : activeTab === 'event' ? 'Event created!' : 'Post saved'}
       </Snackbar>
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={eventDateOpen}
+        onDismiss={() => setEventDateOpen(false)}
+        date={eventDate ?? undefined}
+        onConfirm={({ date }) => {
+          if (date) { setEventDate(date); setErrors(p => ({ ...p, eventDate: undefined })); }
+          setEventDateOpen(false);
+        }}
+        saveLabel="Confirm"
+      />
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={eventEndDateOpen}
+        onDismiss={() => setEventEndDateOpen(false)}
+        date={eventEndDate ?? undefined}
+        validRange={eventDate ? { startDate: eventDate } : undefined}
+        onConfirm={({ date }) => {
+          if (date) { setEventEndDate(date); setErrors(p => ({ ...p, eventEndDate: undefined })); }
+          setEventEndDateOpen(false);
+        }}
+        saveLabel="Confirm"
+      />
     </View>
   );
 }
@@ -1035,6 +1102,33 @@ const styles = StyleSheet.create({
   },
   dateField: {
     flex: 1,
+  },
+  dateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: '#E8E4F0',
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    minHeight: 56,
+  },
+  dateBtnError: { borderColor: Colors.error },
+  dateBtnText: { fontSize: 14, color: '#0F1115', flex: 1 },
+  dateBtnPlaceholder: { color: '#9CA3AF' },
+  clearDateBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    alignSelf: 'flex-start' as const,
+    paddingVertical: 4,
+    marginTop: 6,
+  },
+  clearDateText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
   activeToggleRow: {
     flexDirection: 'row',
