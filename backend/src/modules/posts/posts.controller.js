@@ -22,6 +22,11 @@ const getPostByIdHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const getBusinessPostsHandler = asyncHandler(async (req, res) => {
+  const posts = await postsService.getPostsForBusiness(req.params.businessId, req.query.status);
+  res.json(ok({ posts }));
+});
+
 const createPostHandler = asyncHandler(async (req, res) => {
   const post = await postsService.createPost(req.user.userId, req.body);
   res.status(201).json(ok({ post }));
@@ -77,6 +82,7 @@ const uploadPostImageHandler = asyncHandler(async (req, res) => {
 module.exports = {
   getPostsHandler,
   getPostByIdHandler,
+  getBusinessPostsHandler,
   createPostHandler,
   updatePostHandler,
   toggleStatusHandler,

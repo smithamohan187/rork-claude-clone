@@ -28,6 +28,8 @@ export interface BusinessProfile {
   subscriber_count: number;
   avg_rating: number;
   rating_count: number;
+  active_offer_count: number;
+  updated_at: string;
   inhouse_referral: boolean;
   inhouse_referral_url: string | null;
   hours: BusinessHour[];

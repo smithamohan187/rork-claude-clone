@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -8,138 +8,207 @@ import {
   StatusBar,
   Share,
   Platform,
+  Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Snackbar, Button } from 'react-native-paper';
-import { useRouter, Stack } from 'expo-router';
+import { ActivityIndicator, Snackbar, Button } from 'react-native-paper';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
   ArrowLeft,
   Share2,
   Calendar,
   MapPin,
-  Users,
-  Flame,
   Check,
 } from 'lucide-react-native';
+import { fetchEventById, type Event } from '@/api/services/eventsService';
+import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/businessProfileService';
 
 const PURPLE = '#1A5C35';
-const DARK_PURPLE = '#1A5C35';
 const BG = '#F8F7FF';
 const BORDER = '#E8F5EE';
-const MUTED = '#1A5C35';
-const TEXT = '#1A5C35';
 const TEAL = '#1D9E75';
-const AMBER = '#F59E0B';
-
-const eventData = {
-  eventTitle: 'Annual Pastry & Coffee Festival 2025',
-  businessName: "Richard's Pastry",
-  businessCategory: 'Food & Bakery',
-  businessCity: 'Kochi',
-  eventType: 'In Person',
-  isFreeEntry: true,
-  date: 'Sunday, 20 April 2025',
-  time: '5:00 PM – 9:00 PM',
-  location: 'Lulu Mall Food Court, Kochi',
-  maxAttendees: 150,
-  spotsLeft: 42,
-  description:
-    'Join us for an evening of freshly baked artisan pastries, specialty coffees, and live music. Meet our master bakers, watch live demonstrations, and enjoy exclusive tasting sessions. This annual event brings together food lovers from across the city for an unforgettable evening.',
-  isSubscribed: false,
-};
-
-const shareText =
-  "Join me at Annual Pastry & Coffee Festival 2025 by Richard's Pastry on Sunday, 20 April 2025 at 5:00 PM \u2013 9:00 PM, Lulu Mall Food Court, Kochi. Check it out on TouchPoint!";
 
 type WebNavigator = {
   share?: (data: { text: string }) => Promise<void>;
   canShare?: (data: { text: string }) => boolean;
 };
 
+function formatEventDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+function formatEventTime(start: string, end: string | null): string {
+  try {
+    const s = new Date(start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    if (!end) return s;
+    const e = new Date(end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return `${s} – ${e}`;
+  } catch {
+    return '—';
+  }
+}
+
+function statusPillStyle(status: string): object {
+  if (status === 'upcoming') return { backgroundColor: TEAL };
+  if (status === 'cancelled') return { backgroundColor: '#E24B4A' };
+  return { backgroundColor: '#6B7280' }; // past
+}
+
 export default function ViewEventScreen() {
   const router = useRouter();
-  const businessId = 'biz-001';
-  const [snackVisible, setSnackVisible] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>('');
-  const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
-  const [subscribeLoading, setSubscribeLoading] = useState<boolean>(false);
+  const params = useLocalSearchParams<{ eventId?: string; businessId?: string }>();
+  const eventId = typeof params.eventId === 'string' ? params.eventId : '';
+  const paramBizId = typeof params.businessId === 'string' ? params.businessId : '';
 
-  const handleSubscribe = () => {
-    console.log('handleSubscribe pressed');
-    setSubscribeLoading(true);
-    setTimeout(() => {
-      setSubscribeLoading(false);
-      setIsSubscribed(true);
-      setSnackMsg(
-        "You are now subscribed to Richard's Pastry! You earned 50 welcome points."
-      );
-      setSnackVisible(true);
-    }, 1500);
-  };
+  const [event, setEvent] = useState<Event | null>(null);
+  const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [snackVisible, setSnackVisible] = useState(false);
+  const [snackMsg, setSnackMsg] = useState('');
+  const [isSubscribed] = useState(false);
 
-  const handleShareIcon = async () => {
+  const fetchData = useCallback(async () => {
+    if (!eventId) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const ev = await fetchEventById(eventId);
+      setEvent(ev);
+      const biz = await fetchBusinessProfile(paramBizId || ev.business_id);
+      setBusiness(biz);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewEvent] fetch error', e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, paramBizId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleSubscribe = useCallback(() => {
+    // Subscriptions module not yet built
+    setSnackMsg('Subscription feature coming soon');
+    setSnackVisible(true);
+  }, []);
+
+  const buildShareText = useCallback(() => {
+    if (!event) return '';
+    const date = formatEventDate(event.starts_at);
+    const time = formatEventTime(event.starts_at, event.ends_at);
+    const loc = event.location ? ` at ${event.location}` : '';
+    const biz = business ? ` by ${business.name}` : '';
+    return `${event.title}${biz} on ${date} at ${time}${loc}. Check it out on TouchPoints!`;
+  }, [event, business]);
+
+  const handleShareIcon = useCallback(async () => {
+    const text = buildShareText();
+    if (!text) return;
     try {
       if (Platform.OS === 'web') {
         const nav = (globalThis as unknown as { navigator?: WebNavigator }).navigator;
-        if (
-          nav?.share &&
-          nav.canShare &&
-          nav.canShare({ text: shareText })
-        ) {
-          await nav.share({ text: shareText });
+        if (nav?.share && nav.canShare && nav.canShare({ text })) {
+          await nav.share({ text });
           setSnackMsg('Event shared!');
           setSnackVisible(true);
         } else {
-          await Clipboard.setStringAsync(shareText);
+          await Clipboard.setStringAsync(text);
           setSnackMsg('Link copied to clipboard!');
           setSnackVisible(true);
         }
       } else {
-        const result = await Share.share({ message: shareText });
+        const result = await Share.share({ message: text });
         if (result.action === Share.sharedAction) {
           setSnackMsg('Event shared!');
           setSnackVisible(true);
         }
       }
-    } catch (error) {
-      console.log('handleShareIcon error', error);
-      await Clipboard.setStringAsync(shareText);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewEvent] share error', e);
+      await Clipboard.setStringAsync(text);
       setSnackMsg('Link copied to clipboard!');
       setSnackVisible(true);
     }
-  };
+  }, [buildShareText]);
 
-  const handleShareEvent = async () => {
+  const handleShareEvent = useCallback(async () => {
+    const text = buildShareText();
+    if (!text) return;
     try {
       if (Platform.OS === 'web') {
         const nav = (globalThis as unknown as { navigator?: WebNavigator }).navigator;
-        if (
-          nav?.share &&
-          nav.canShare &&
-          nav.canShare({ text: shareText })
-        ) {
-          await nav.share({ text: shareText });
-          setSnackMsg('Event shared! Subscribe to earn sharing points.');
+        if (nav?.share && nav.canShare && nav.canShare({ text })) {
+          await nav.share({ text });
+          setSnackMsg('Event shared!');
           setSnackVisible(true);
         } else {
-          await Clipboard.setStringAsync(shareText);
+          await Clipboard.setStringAsync(text);
           setSnackMsg('Link copied to clipboard!');
           setSnackVisible(true);
         }
       } else {
-        const result = await Share.share({ message: shareText });
+        const result = await Share.share({ message: text });
         if (result.action === Share.sharedAction) {
-          setSnackMsg('Event shared! Subscribe to earn sharing points.');
+          setSnackMsg('Event shared!');
           setSnackVisible(true);
         }
       }
-    } catch (error) {
-      console.log('handleShareEvent error', error);
-      await Clipboard.setStringAsync(shareText);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewEvent] share error', e);
+      await Clipboard.setStringAsync(text);
       setSnackMsg('Link copied to clipboard!');
       setSnackVisible(true);
     }
-  };
+  }, [buildShareText]);
+
+  if (loading) {
+    return (
+      <View style={styles.root} testID="view-event-screen">
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar barStyle="light-content" />
+        <View style={[styles.hero, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator color="#fff" />
+        </View>
+        <View style={styles.skeletonBlock} />
+        <View style={[styles.skeletonBlock, { width: '60%' }]} />
+        <View style={[styles.skeletonBlock, { width: '85%' }]} />
+        <View style={[styles.skeletonBlock, { width: '70%' }]} />
+      </View>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <View style={styles.root} testID="view-event-screen">
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar barStyle="light-content" />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Event not available</Text>
+          <Text style={styles.errorSub}>This event may have been removed or is no longer accessible.</Text>
+          <Button mode="contained" buttonColor={PURPLE} onPress={() => router.back()} style={styles.goBackBtn}>
+            Go Back
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
+  const bizInitial = business?.name?.charAt(0)?.toUpperCase() ?? 'B';
 
   return (
     <View style={styles.root} testID="view-event-screen">
@@ -181,14 +250,9 @@ export default function ViewEventScreen() {
           </TouchableOpacity>
 
           <View style={styles.pillsRow}>
-            <View style={[styles.pill, styles.pillTeal]}>
-              <Text style={styles.pillText}>{eventData.eventType}</Text>
+            <View style={[styles.pill, statusPillStyle(event.effective_status)]}>
+              <Text style={styles.pillText}>{event.effective_status}</Text>
             </View>
-            {eventData.isFreeEntry && (
-              <View style={[styles.pill, styles.pillWhite]}>
-                <Text style={styles.pillText}>Free Entry</Text>
-              </View>
-            )}
           </View>
 
           {/* Fade overlay bottom */}
@@ -199,13 +263,17 @@ export default function ViewEventScreen() {
 
         {/* ORGANISER STRIP */}
         <View style={styles.organiserStrip}>
-          <View style={styles.logoSquare}>
-            <Text style={styles.logoText}>RP</Text>
-          </View>
+          {business?.logo_url ? (
+            <Image source={{ uri: business.logo_url }} style={styles.logoSquare} resizeMode="cover" />
+          ) : (
+            <View style={styles.logoSquare}>
+              <Text style={styles.logoText}>{bizInitial}</Text>
+            </View>
+          )}
           <View style={styles.organiserMiddle}>
             <View style={styles.organiserNameRow}>
               <Text style={styles.organiserName} numberOfLines={1}>
-                {eventData.businessName}
+                {business?.name ?? '—'}
               </Text>
               {isSubscribed && (
                 <View style={styles.subscribedChip} testID="subscribed-chip">
@@ -214,7 +282,7 @@ export default function ViewEventScreen() {
               )}
             </View>
             <Text style={styles.organiserSub} numberOfLines={1}>
-              {eventData.businessCategory} · {eventData.businessCity}
+              {[business?.category_name, business?.city].filter(Boolean).join(' · ')}
             </Text>
           </View>
           <TouchableOpacity
@@ -222,7 +290,7 @@ export default function ViewEventScreen() {
             onPress={() =>
               router.push({
                 pathname: '/business-profile/[id]',
-                params: { id: businessId },
+                params: { id: event.business_id },
               })
             }
           >
@@ -232,7 +300,7 @@ export default function ViewEventScreen() {
 
         {/* CONTENT */}
         <View style={styles.content}>
-          <Text style={styles.eventTitle}>{eventData.eventTitle}</Text>
+          <Text style={styles.eventTitle}>{event.title}</Text>
 
           {/* META */}
           <View style={styles.metaRow}>
@@ -242,7 +310,7 @@ export default function ViewEventScreen() {
             <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Date & time</Text>
               <Text style={styles.metaValue}>
-                {eventData.date} · {eventData.time}
+                {formatEventDate(event.starts_at)} · {formatEventTime(event.starts_at, event.ends_at)}
               </Text>
             </View>
           </View>
@@ -253,72 +321,27 @@ export default function ViewEventScreen() {
             </View>
             <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Location</Text>
-              <Text style={styles.metaValue}>{eventData.location}</Text>
+              <Text style={styles.metaValue}>{event.location ?? '—'}</Text>
             </View>
-          </View>
-
-          <View style={styles.metaRow}>
-            <View style={[styles.iconBox, { backgroundColor: '#FAEEDA' }]}>
-              <Users size={16} color="#B45309" strokeWidth={2} />
-            </View>
-            <View style={styles.metaText}>
-              <Text style={styles.metaLabel}>Capacity</Text>
-              <Text style={styles.metaValue}>
-                {eventData.maxAttendees} attendees
-              </Text>
-            </View>
-          </View>
-
-          {/* SPOTS LEFT STRIP */}
-          <View style={styles.spotsStrip}>
-            <Flame size={14} color={AMBER} strokeWidth={2.2} />
-            <Text style={styles.spotsText}>
-              Only {eventData.spotsLeft} spots remaining — register early!
-            </Text>
           </View>
 
           <View style={styles.divider} />
 
           {/* ABOUT */}
           <Text style={styles.sectionLabel}>ABOUT THIS EVENT</Text>
-          <Text style={styles.bodyText}>{eventData.description}</Text>
+          <Text style={styles.bodyText}>{event.description ?? ''}</Text>
 
           <View style={styles.divider} />
-
-          {/* WHAT TO EXPECT */}
-          <Text style={styles.sectionLabel}>WHAT TO EXPECT</Text>
-
-          <View style={styles.bulletRow}>
-            <View style={[styles.dot, { backgroundColor: PURPLE }]} />
-            <Text style={styles.bulletText}>
-              Live pastry-making demonstration
-            </Text>
-          </View>
-          <View style={styles.bulletRow}>
-            <View style={[styles.dot, { backgroundColor: TEAL }]} />
-            <Text style={styles.bulletText}>
-              Specialty coffee tasting station
-            </Text>
-          </View>
-          <View style={styles.bulletRow}>
-            <View style={[styles.dot, { backgroundColor: AMBER }]} />
-            <Text style={styles.bulletText}>
-              Live acoustic music from 6 PM
-            </Text>
-          </View>
 
           {/* SUBSCRIBE BANNER / SUCCESS STRIP */}
           {!isSubscribed ? (
             <View style={styles.subscribeBanner}>
               <Text style={styles.subscribeText}>
-                Subscribe to {eventData.businessName} to get exclusive access to
-                events like this and earn reward points.
+                Subscribe to {business?.name ?? 'this business'} to get exclusive access to events like this and earn reward points.
               </Text>
               <Button
                 mode="contained"
                 onPress={handleSubscribe}
-                loading={subscribeLoading}
-                disabled={subscribeLoading}
                 buttonColor={PURPLE}
                 style={styles.subscribeNowPaperBtn}
                 labelStyle={styles.subscribeNowPaperLabel}
@@ -334,7 +357,7 @@ export default function ViewEventScreen() {
               </View>
               <View style={styles.successTextWrap}>
                 <Text style={styles.successTitle}>
-                  You are subscribed to {eventData.businessName}
+                  You are subscribed to {business?.name ?? 'this business'}
                 </Text>
                 <Text style={styles.successSub}>
                   You earned 50 welcome points for joining!
@@ -363,8 +386,6 @@ export default function ViewEventScreen() {
           <Button
             mode="contained"
             onPress={handleSubscribe}
-            loading={subscribeLoading}
-            disabled={subscribeLoading}
             buttonColor={PURPLE}
             style={styles.joinPaperBtn}
             contentStyle={styles.shareEventPaperContent}
@@ -380,7 +401,7 @@ export default function ViewEventScreen() {
         visible={snackVisible}
         onDismiss={() => setSnackVisible(false)}
         duration={2500}
-        style={{ backgroundColor: DARK_PURPLE }}
+        style={{ backgroundColor: PURPLE }}
       >
         {snackMsg}
       </Snackbar>
@@ -395,7 +416,7 @@ const styles = StyleSheet.create({
 
   hero: {
     height: 240,
-    backgroundColor: DARK_PURPLE,
+    backgroundColor: PURPLE,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -474,9 +495,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  pillTeal: { backgroundColor: TEAL },
-  pillWhite: { backgroundColor: 'rgba(255,255,255,0.22)' },
-  pillText: { color: '#fff', fontSize: 10, fontWeight: '600' },
+  pillText: { color: '#fff', fontSize: 10, fontWeight: '600', textTransform: 'capitalize' },
 
   heroFade1: {
     position: 'absolute',
@@ -524,8 +543,8 @@ const styles = StyleSheet.create({
   },
   logoText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   organiserMiddle: { flex: 1, marginLeft: 10 },
-  organiserName: { fontSize: 13, fontWeight: '700', color: DARK_PURPLE },
-  organiserSub: { fontSize: 11, color: MUTED, marginTop: 2 },
+  organiserName: { fontSize: 13, fontWeight: '700', color: PURPLE },
+  organiserSub: { fontSize: 11, color: PURPLE, marginTop: 2 },
   viewLink: { color: PURPLE, fontSize: 10, fontWeight: '700' },
 
   content: { paddingHorizontal: 16 },
@@ -533,7 +552,7 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: DARK_PURPLE,
+    color: PURPLE,
     marginTop: 14,
     marginBottom: 12,
     lineHeight: 26,
@@ -552,22 +571,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metaText: { marginLeft: 10, flex: 1 },
-  metaLabel: { fontSize: 10, color: MUTED, marginBottom: 2 },
-  metaValue: { fontSize: 12, fontWeight: '700', color: DARK_PURPLE },
-
-  spotsStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FEF3C7',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: AMBER,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 10,
-  },
-  spotsText: { fontSize: 11, color: '#92400E', fontWeight: '500', flex: 1 },
+  metaLabel: { fontSize: 10, color: PURPLE, marginBottom: 2 },
+  metaValue: { fontSize: 12, fontWeight: '700', color: PURPLE },
 
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -578,23 +583,15 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: MUTED,
+    color: PURPLE,
     letterSpacing: 0.7,
     marginBottom: 8,
   },
   bodyText: {
     fontSize: 12.5,
-    color: TEXT,
+    color: PURPLE,
     lineHeight: 21,
   },
-
-  bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dot: { width: 7, height: 7, borderRadius: 4, marginRight: 10 },
-  bulletText: { fontSize: 12.5, color: TEXT },
 
   subscribeBanner: {
     backgroundColor: '#E8F5EE',
@@ -610,13 +607,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 8,
   },
-  subscribeBtn: {
-    backgroundColor: PURPLE,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  subscribeBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   bottomBar: {
     position: 'absolute',
@@ -632,21 +622,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  bottomBtn: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  shareEventBtn: {
-    borderWidth: 1.5,
-    borderColor: PURPLE,
-    backgroundColor: 'transparent',
-  },
-  shareEventText: { color: PURPLE, fontSize: 13, fontWeight: '700' },
   shareEventPaperBtn: {
     flex: 1,
     borderColor: PURPLE,
@@ -656,8 +631,6 @@ const styles = StyleSheet.create({
   },
   shareEventPaperContent: { paddingVertical: 4 },
   shareEventPaperLabel: { fontSize: 13, fontWeight: '700' },
-  joinBtn: { backgroundColor: PURPLE },
-  joinBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   joinPaperBtn: {
     flex: 1,
     borderRadius: 10,
@@ -715,4 +688,23 @@ const styles = StyleSheet.create({
     color: '#3d7a66',
     marginTop: 2,
   },
+
+  // Loading / error
+  skeletonBlock: {
+    height: 16,
+    backgroundColor: '#EEF2F7',
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginTop: 16,
+    width: '80%',
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  errorTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  errorSub: { color: '#6B7280', fontSize: 14, textAlign: 'center', marginBottom: 24 },
+  goBackBtn: { borderRadius: 10 },
 });

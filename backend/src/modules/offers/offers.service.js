@@ -51,6 +51,10 @@ async function getActiveOffersForBusiness(businessId) {
   return offersModel.getActiveOffersByBusinessId(businessId);
 }
 
+async function getBusinessOffers(businessId, filter) {
+  return offersModel.getOffersByBusinessId(businessId, filter);
+}
+
 async function uploadOfferImage(userId, offerId, imageUrl) {
   await verifyOfferOwnership(userId, offerId);
   return offersModel.updateOfferImageUrl(offerId, imageUrl);
@@ -64,5 +68,6 @@ module.exports = {
   listMyOffers,
   getOffer,
   getActiveOffersForBusiness,
+  getBusinessOffers,
   uploadOfferImage,
 };

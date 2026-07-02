@@ -45,6 +45,19 @@ async function cancelEvent(userId, eventId) {
   return updated;
 }
 
+async function getEventsForBusiness(businessId, filter) {
+  return eventsModel.getEventsByBusiness(businessId, filter);
+}
+
+async function toggleEventStatus(userId, eventId) {
+  const { event } = await verifyEventOwnership(userId, eventId);
+  if (event.effective_status === 'past') throw new Error('Cannot modify a past event');
+  if (event.status === 'upcoming') return eventsModel.cancelEvent(eventId);
+  const restored = await eventsModel.restoreEvent(eventId);
+  if (!restored) throw new Error('Event has already passed and cannot be restored');
+  return restored;
+}
+
 async function uploadEventImage(userId, eventId, imageUrl) {
   await verifyEventOwnership(userId, eventId);
   return eventsModel.updateEventImageUrl(eventId, imageUrl);
@@ -56,5 +69,7 @@ module.exports = {
   getEvent,
   editEvent,
   cancelEvent,
+  getEventsForBusiness,
+  toggleEventStatus,
   uploadEventImage,
 };

@@ -53,6 +53,14 @@ async function deletePost(userId, postId) {
   if (!deleted) throw new Error('Post not found');
 }
 
+async function getPostsForBusiness(businessId, filter) {
+  const isActive =
+    filter === 'active'   ? true  :
+    filter === 'disabled' ? false :
+    undefined;
+  return postsModel.getPostsByBusinessId(businessId, isActive);
+}
+
 async function uploadPostImage(userId, postId, imageUrl) {
   await verifyPostOwnership(userId, postId);
   return postsModel.updatePostImageUrl(postId, imageUrl);
@@ -64,6 +72,7 @@ module.exports = {
   toggleStatus,
   listMyPosts,
   getPost,
+  getPostsForBusiness,
   deletePost,
   uploadPostImage,
 };

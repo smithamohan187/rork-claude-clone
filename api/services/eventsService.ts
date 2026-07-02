@@ -65,6 +65,19 @@ export async function updateEvent(id: string, payload: UpdateEventPayload): Prom
   return resolveEvent(result.data!.event);
 }
 
+export async function fetchBusinessEvents(businessId: string, filter?: string): Promise<Event[]> {
+  const qs = filter ? `?filter=${filter}` : '';
+  const result = await apiClient.get<{ events: Event[] }>(`/events/business/${businessId}${qs}`);
+  if (!result.success) throw new Error(result.error ?? 'Failed to load events');
+  return (result.data!.events ?? []).map(resolveEvent);
+}
+
+export async function toggleEventStatus(id: string): Promise<Event> {
+  const result = await apiClient.patch<{ event: Event }>(`/events/${id}/toggle-status`, {});
+  if (!result.success) throw new Error(result.error ?? 'Failed to update event status');
+  return resolveEvent(result.data!.event);
+}
+
 export async function cancelEvent(id: string): Promise<Event> {
   const result = await apiClient.patch<{ event: Event }>(`/events/${id}/cancel`, {});
   if (!result.success) throw new Error(result.error ?? 'Failed to cancel event');

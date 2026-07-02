@@ -9,9 +9,11 @@ const { createEventSchema, updateEventSchema } = require('./events.validation');
 const {
   listMyEventsHandler,
   getEventHandler,
+  getBusinessEventsHandler,
   createEventHandler,
   updateEventHandler,
   cancelEventHandler,
+  toggleEventStatusHandler,
   uploadEventImageHandler,
 } = require('./events.controller');
 
@@ -26,6 +28,9 @@ const upload = multer({ storage });
 
 const router = Router();
 
+// Public business-scoped listing — must come before /:id
+router.get('/business/:businessId', getBusinessEventsHandler);
+
 // Protected list — must come before /:id
 router.get('/', authenticate, listMyEventsHandler);
 
@@ -36,6 +41,7 @@ router.get('/:id', getEventHandler);
 router.post('/', authenticate, validateRequest(createEventSchema), createEventHandler);
 router.patch('/:id', authenticate, validateRequest(updateEventSchema), updateEventHandler);
 router.patch('/:id/cancel', authenticate, cancelEventHandler);
+router.patch('/:id/toggle-status', authenticate, toggleEventStatusHandler);
 router.post('/:id/image', authenticate, upload.single('image'), uploadEventImageHandler);
 
 module.exports = router;

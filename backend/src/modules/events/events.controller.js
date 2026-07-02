@@ -55,6 +55,23 @@ const cancelEventHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const getBusinessEventsHandler = asyncHandler(async (req, res) => {
+  const events = await eventsService.getEventsForBusiness(req.params.businessId, req.query.filter);
+  res.json(ok({ events }));
+});
+
+const toggleEventStatusHandler = asyncHandler(async (req, res) => {
+  try {
+    const event = await eventsService.toggleEventStatus(req.user.userId, req.params.id);
+    res.json(ok({ event }));
+  } catch (err) {
+    if (err.message === 'Event not found') return res.status(404).json(fail(err.message));
+    if (err.message === 'Cannot modify a past event') return res.status(400).json(fail(err.message));
+    if (err.message === 'Event has already passed and cannot be restored') return res.status(400).json(fail(err.message));
+    throw err;
+  }
+});
+
 const uploadEventImageHandler = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json(fail('No file uploaded'));
   const imageUrl = `/uploads/events/${req.file.filename}`;
@@ -65,8 +82,10 @@ const uploadEventImageHandler = asyncHandler(async (req, res) => {
 module.exports = {
   listMyEventsHandler,
   getEventHandler,
+  getBusinessEventsHandler,
   createEventHandler,
   updateEventHandler,
   cancelEventHandler,
+  toggleEventStatusHandler,
   uploadEventImageHandler,
 };

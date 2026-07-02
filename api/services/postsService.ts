@@ -30,6 +30,16 @@ function resolvePost(post: Post): Post {
   return { ...post, type: 'post', image_url: resolveUrl(post.image_url) };
 }
 
+export async function fetchBusinessPosts(
+  businessId: string,
+  status?: 'active' | 'disabled',
+): Promise<Post[]> {
+  const qs = status ? `?status=${status}` : '';
+  const result = await apiClient.get<{ posts: Post[] }>(`/posts/business/${businessId}${qs}`);
+  if (!result.success) throw new Error(result.error ?? 'Failed to load posts');
+  return (result.data!.posts ?? []).map(resolvePost);
+}
+
 export async function fetchMyPosts(filter?: 'active' | 'disabled'): Promise<Post[]> {
   const qs = filter ? `?status=${filter}` : '';
   const result = await apiClient.get<{ posts: Post[] }>(`/posts/my${qs}`);

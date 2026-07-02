@@ -8,6 +8,7 @@ const { createPostSchema, updatePostSchema, toggleStatusSchema } = require('./po
 const {
   getPostsHandler,
   getPostByIdHandler,
+  getBusinessPostsHandler,
   createPostHandler,
   updatePostHandler,
   toggleStatusHandler,
@@ -26,8 +27,9 @@ const upload = multer({ storage });
 
 const router = Router();
 
-// /my before /:id — static routes must precede dynamic params
+// /my and /business/:id must come before /:id — static routes precede dynamic params
 router.get('/my', authenticate, getPostsHandler);
+router.get('/business/:businessId', getBusinessPostsHandler);
 router.get('/:id', getPostByIdHandler);
 
 router.post('/',           authenticate, validateRequest(createPostSchema), createPostHandler);

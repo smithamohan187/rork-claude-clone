@@ -55,8 +55,12 @@ export async function fetchMyOffers(filter?: 'active' | 'expired' | 'disabled'):
   return (result.data!.offers ?? []).map(resolveOffer);
 }
 
-export async function fetchBusinessOffers(businessId: string): Promise<Offer[]> {
-  const result = await apiClient.get<{ offers: Offer[] }>(`/offers/business/${businessId}`);
+export async function fetchBusinessOffers(
+  businessId: string,
+  status?: 'active' | 'expired' | 'disabled',
+): Promise<Offer[]> {
+  const qs = status ? `?status=${status}` : '';
+  const result = await apiClient.get<{ offers: Offer[] }>(`/offers/business/${businessId}${qs}`);
   if (!result.success) throw new Error(result.error ?? 'Failed to load offers');
   return (result.data!.offers ?? []).map(resolveOffer);
 }

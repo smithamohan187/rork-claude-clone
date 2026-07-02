@@ -27,7 +27,6 @@ import {
   Snackbar,
   Surface,
 } from 'react-native-paper';
-import { useAuth } from '@/contexts/AuthContext';
 import { fetchOfferById, type Offer as ServiceOffer } from '@/api/services/offersService';
 import { fetchBusinessProfile } from '@/api/services/businessProfileService';
 

@@ -23,7 +23,7 @@ const getOfferHandler = asyncHandler(async (req, res) => {
 });
 
 const getBusinessOffersHandler = asyncHandler(async (req, res) => {
-  const offers = await offersService.getActiveOffersForBusiness(req.params.businessId);
+  const offers = await offersService.getBusinessOffers(req.params.businessId, req.query.status);
   res.json(ok({ offers }));
 });
 

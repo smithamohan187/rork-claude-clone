@@ -145,43 +145,33 @@ async function setOnboardingComplete(businessId) {
 async function getBusinessById(businessId) {
   const { rows } = await query(
     `SELECT
-       b.id,
-       b.profile_id,
-       b.name,
-       b.description,
-       b.business_type,
-       b.phone,
-       b.website,
-       b.address,
-       b.city,
-       b.state,
-       b.country,
-       b.logo_url,
-       b.cover_url,
-       b.inhouse_referral,
-       b.inhouse_referral_url,
-       b.onboarding_complete,
-       b.created_at,
+       businesses.*,
        bc.name AS category_name,
-       COALESCE(sub.subscriber_count, 0) AS subscriber_count,
-       COALESCE(rat.avg_rating, 0)       AS avg_rating,
-       COALESCE(rat.rating_count, 0)     AS rating_count
-     FROM businesses b
-     LEFT JOIN business_categories bc ON bc.id = b.category_id
-     LEFT JOIN (
-       SELECT business_id, COUNT(*) AS subscriber_count
-       FROM subscriptions
-       WHERE is_active = true
-       GROUP BY business_id
-     ) sub ON sub.business_id = b.id
-     LEFT JOIN (
-       SELECT business_id,
-              ROUND(AVG(rating)::numeric, 1) AS avg_rating,
-              COUNT(*) AS rating_count
-       FROM business_ratings
-       GROUP BY business_id
-     ) rat ON rat.business_id = b.id
-     WHERE b.id = $1`,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM subscriptions
+          WHERE business_id = businesses.id AND subscriptions.is_active = true),
+         0
+       ) AS subscriber_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM offers
+          WHERE business_id = businesses.id
+            AND status = 'active'
+            AND (expires_at IS NULL OR expires_at > NOW())),
+         0
+       ) AS active_offer_count,
+       COALESCE(
+         (SELECT ROUND(AVG(rating)::numeric, 1) FROM business_ratings
+          WHERE business_id = businesses.id),
+         0
+       ) AS avg_rating,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM business_ratings
+          WHERE business_id = businesses.id),
+         0
+       ) AS rating_count
+     FROM businesses
+     LEFT JOIN business_categories bc ON bc.id = businesses.category_id
+     WHERE businesses.id = $1`,
     [businessId]
   );
   return rows[0] ?? null;

@@ -115,6 +115,17 @@ async function cancelEvent(eventId) {
   return rows[0] ?? null;
 }
 
+async function restoreEvent(eventId) {
+  const { rows } = await query(
+    `UPDATE events
+     SET status = 'upcoming', updated_at = NOW()
+     WHERE id = $1 AND starts_at > NOW()
+     RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
+    [eventId]
+  );
+  return rows[0] ?? null;
+}
+
 async function updateEventImageUrl(eventId, imageUrl) {
   const { rows } = await query(
     `UPDATE events SET image_url = $1, updated_at = NOW() WHERE id = $2 RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
@@ -130,5 +141,6 @@ module.exports = {
   getEventById,
   updateEvent,
   cancelEvent,
+  restoreEvent,
   updateEventImageUrl,
 };

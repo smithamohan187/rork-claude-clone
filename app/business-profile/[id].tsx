@@ -59,12 +59,14 @@ import {
   MOCK_BUSINESS,
   REWARD_TIERS,
   getBusinessById,
-  getOffersForBusiness,
-  getEventsForBusiness,
 } from '@/mocks/businessProfile';
 import BusinessQRCard from '@/components/business/BusinessQRCard';
 import { QrCode } from 'lucide-react-native';
-import type { OfferCard, EventCard, BusinessProfileData } from '@/mocks/businessProfile';
+import type { BusinessProfileData } from '@/mocks/businessProfile';
+import { useBusinessOffers, type OfferFilter } from '@/hooks/useBusinessOffers';
+import { useBusinessEvents, type EventFilter } from '@/hooks/useBusinessEvents';
+import { useBusinessPosts, type PostFilter } from '@/hooks/useBusinessPosts';
+import type { Offer } from '@/api/services/offersService';
 import { StarRatingDisplay } from '@/components/ratings/StarRatingDisplay';
 import { RatingBottomSheet } from '@/components/ratings/RatingBottomSheet';
 import { useBusinessRating, type ReviewItem } from '@/hooks/useBusinessRating';
@@ -118,37 +120,8 @@ const MOCK_REWARDS_CATALOG: Record<string, CatalogItem[]> = {
 
 type TabKey = 'offers' | 'events' | 'posts' | 'about';
 
-type BusinessPost = {
-  id: string;
-  type: 'post';
-  text: string;
-  image_url: string | null;
-  created_at: string;
-  likes: number;
-};
-
-const INITIAL_POSTS: BusinessPost[] = [
-  {
-    id: '1',
-    type: 'post',
-    text: 'We just gave our interiors a fresh new look! Come visit us and feel the vibe. \u2615',
-    image_url: 'https://picsum.photos/seed/post1/600/400',
-    created_at: '2025-05-01T10:30:00Z',
-    likes: 24,
-  },
-  {
-    id: '2',
-    type: 'post',
-    text: 'Thank you for 500 subscribers! You all mean the world to us. \uD83D\uDE4C',
-    image_url: null,
-    created_at: '2025-04-28T08:00:00Z',
-    likes: 61,
-  },
-];
 type OfferStatus = 'active' | 'expired' | 'disabled';
-type OfferFilter = 'all' | OfferStatus;
 type EventStatus = 'upcoming' | 'past' | 'cancelled';
-type EventFilter = 'all' | EventStatus;
 
 const TAB_ITEMS: { key: TabKey; label: string }[] = [
   { key: 'offers', label: 'Offers' },
@@ -177,27 +150,6 @@ const EVENT_STATUS_STYLES: Record<EventStatus, { bg: string; fg: string; label: 
   cancelled: { bg: '#FCEBEB', fg: '#A32D2D', label: 'Cancelled' },
 };
 
-function deriveEventStatus(event: EventCard, index: number): EventStatus {
-  if (index > 0 && index % 5 === 4) return 'cancelled';
-  try {
-    const d = new Date(event.date);
-    const now = new Date();
-    if (!isNaN(d.getTime()) && d.getTime() < now.getTime() - 24 * 60 * 60 * 1000) return 'past';
-  } catch {}
-  if (index > 0 && index % 3 === 2) return 'past';
-  return 'upcoming';
-}
-
-function deriveOfferStatus(offer: OfferCard, index: number): OfferStatus {
-  try {
-    const exp = new Date(offer.validUntil);
-    const now = new Date();
-    if (!isNaN(exp.getTime()) && exp.getTime() < now.getTime()) return 'expired';
-  } catch {}
-  if (index > 0 && index % 4 === 3) return 'disabled';
-  if (index > 0 && index % 5 === 2) return 'expired';
-  return 'active';
-}
 
 export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
@@ -276,7 +228,8 @@ export default function BusinessProfileScreen() {
       coverImage:       realBusiness.cover_url ?? prev.coverImage,
       subscriberCount:  realBusiness.subscriber_count,
       welcomePoints:    prev.welcomePoints,
-      activeOfferCount: prev.activeOfferCount,
+      activeOfferCount: realBusiness.active_offer_count ?? 0,
+      updatedAt:        realBusiness.updated_at,
     }));
     setDraft((prev) => ({ ...prev, name: realBusiness.name }));
   }, [realBusiness, formattedAddress, formattedHours]);
@@ -342,49 +295,19 @@ export default function BusinessProfileScreen() {
     setSnackMsg('Your rating was removed');
     setSnackVisible(true);
   }, [rating]);
-  const businessOffersRaw = useMemo(() => getOffersForBusiness(id ?? ''), [id]);
-  const initialOffers = useMemo<StatusedOffer[]>(
-    () => businessOffersRaw.map((o, i) => ({ ...o, status: deriveOfferStatus(o, i) })),
-    [businessOffersRaw],
-  );
-  const [offersList, setOffersList] = useState<StatusedOffer[]>(initialOffers);
-  React.useEffect(() => {
-    setOffersList(initialOffers);
-  }, [initialOffers]);
-  const businessOffers = offersList;
-
-  const handleToggleOffer = useCallback((offerId: string) => {
-    let offerTitle = '';
-    let newStatusLabel: 'disabled' | 'enabled' = 'disabled';
-    setOffersList((prev) =>
-      prev.map((offer) => {
-        if (offer.id !== offerId) return offer;
-        if (offer.status === 'expired') return offer;
-        const newStatus: OfferStatus = offer.status === 'active' ? 'disabled' : 'active';
-        offerTitle = offer.title;
-        newStatusLabel = newStatus === 'active' ? 'enabled' : 'disabled';
-        return { ...offer, status: newStatus };
-      }),
-    );
-    setTimeout(() => {
-      if (offerTitle) {
-        setSnackMsg(`Offer "${offerTitle}" ${newStatusLabel} successfully`);
-        setSnackVisible(true);
-      }
-    }, 0);
-  }, []);
+  const { offers: businessOffers, isLoading: offersLoading, toggleDisable: toggleOfferDisable } =
+    useBusinessOffers(id ?? '', offerFilter);
 
   const handleRequestToggle = useCallback((offerId: string) => {
-    const offer = offersList.find((o) => o.id === offerId);
+    const offer = businessOffers.find((o) => o.id === offerId);
     if (!offer) return;
-    if (offer.status === 'expired') return;
-    if (offer.status === 'active') {
+    if (offer.effective_status === 'expired') return;
+    if (offer.effective_status === 'active') {
       setConfirmDialog({ visible: true, offerId });
     } else {
-      handleToggleOffer(offerId);
+      toggleOfferDisable(offerId, 'disabled');
     }
-  }, [offersList, handleToggleOffer]);
-  const businessEvents = useMemo(() => getEventsForBusiness(id ?? ''), [id]);
+  }, [businessOffers, toggleOfferDisable]);
 
   const tabWidth = useMemo(() => (SCREEN_WIDTH - 32) / TAB_ITEMS.length, []);
 
@@ -439,15 +362,15 @@ export default function BusinessProfileScreen() {
     console.log('[BusinessProfile] Toggled save for offer:', offerId);
   }, []);
 
-  const handleOpenOffer = useCallback((offer: OfferCard) => {
+  const handleOpenOffer = useCallback((offer: Offer) => {
     console.log('[BusinessProfile] Open offer:', offer.id);
     router.push({ pathname: '/view-offer', params: { offerId: offer.id, businessId: id ?? '' } } as never);
   }, [router, id]);
 
-  const handleShareOffer = useCallback(async (offer: OfferCard) => {
+  const handleShareOffer = useCallback(async (offer: Offer) => {
     try {
       await Share.share({
-        message: `Check out "${offer.title}" from ${business.name}! ${offer.discount} — valid until ${formatDate(offer.validUntil)}`,
+        message: `Check out "${offer.title}" from ${business.name}! ${formatDiscount(offer)} — valid until ${formatDate(offer.expires_at ?? '')}`,
       });
     } catch (e) {
       console.log('[BusinessProfile] Share error:', e);
@@ -471,7 +394,7 @@ export default function BusinessProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.coverWrap}>
-          <Image source={{ uri: business.coverImage }} style={styles.coverImage} contentFit="cover" />
+          <Image source={{ uri: business.coverImage + (business.updatedAt ? `?t=${business.updatedAt}` : '') }} style={styles.coverImage} contentFit="cover" />
           <View style={styles.coverOverlay} />
           {isEditing && (
             <View style={styles.coverCameraOverlay} pointerEvents="none">
@@ -546,7 +469,7 @@ export default function BusinessProfileScreen() {
 
         <View style={styles.profileHeader}>
           <View style={styles.logoWrap}>
-            <Image source={{ uri: business.logo }} style={styles.logo} contentFit="cover" />
+            <Image source={{ uri: business.logo + (business.updatedAt ? `?t=${business.updatedAt}` : '') }} style={styles.logo} contentFit="cover" />
             {isEditing && (
               <View style={styles.logoCameraOverlay} pointerEvents="none">
                 <Camera size={18} color="#fff" />
@@ -762,10 +685,9 @@ export default function BusinessProfileScreen() {
         </View>
 
         <View style={styles.tabContent}>
-          {activeTab === 'offers' && <OffersTab offers={businessOffers} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwner={isOwner} onRequestToggle={handleRequestToggle} />}
+          {activeTab === 'offers' && <OffersTab offers={businessOffers} isLoading={offersLoading} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwner={isOwner} onRequestToggle={handleRequestToggle} />}
           {activeTab === 'events' && (
             <EventsTab
-              events={businessEvents}
               businessId={id ?? ''}
               isOwner={isOwner}
               onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
@@ -1037,7 +959,7 @@ export default function BusinessProfileScreen() {
             </PaperButton>
             <PaperButton
               onPress={() => {
-                if (confirmDialog.offerId) handleToggleOffer(confirmDialog.offerId);
+                if (confirmDialog.offerId) toggleOfferDisable(confirmDialog.offerId, 'active');
                 setConfirmDialog({ visible: false, offerId: null });
               }}
               textColor="#E24B4A"
@@ -1071,10 +993,9 @@ export default function BusinessProfileScreen() {
   );
 }
 
-type StatusedOffer = OfferCard & { status: OfferStatus };
-
 function OffersTab({
   offers,
+  isLoading,
   savedOffers,
   onSave,
   onShare,
@@ -1084,11 +1005,12 @@ function OffersTab({
   isOwner,
   onRequestToggle,
 }: {
-  offers: StatusedOffer[];
+  offers: Offer[];
+  isLoading: boolean;
   savedOffers: Record<string, boolean>;
   onSave: (id: string) => void;
-  onShare: (offer: OfferCard) => void;
-  onOpen: (offer: OfferCard) => void;
+  onShare: (offer: Offer) => void;
+  onOpen: (offer: Offer) => void;
   filter: OfferFilter;
   onFilterChange: (f: OfferFilter) => void;
   isOwner: boolean;
@@ -1096,13 +1018,13 @@ function OffersTab({
 }) {
   const counts = useMemo(() => ({
     all: offers.length,
-    active: offers.filter((o) => o.status === 'active').length,
-    expired: offers.filter((o) => o.status === 'expired').length,
-    disabled: offers.filter((o) => o.status === 'disabled').length,
+    active: offers.filter((o) => o.effective_status === 'active').length,
+    expired: offers.filter((o) => o.effective_status === 'expired').length,
+    disabled: offers.filter((o) => o.effective_status === 'disabled').length,
   }), [offers]);
 
   const filteredOffers = useMemo(
-    () => (filter === 'all' ? offers : offers.filter((o) => o.status === filter)),
+    () => (filter === 'all' ? offers : offers.filter((o) => o.effective_status === filter)),
     [offers, filter],
   );
 
@@ -1157,7 +1079,9 @@ function OffersTab({
         })}
       </ScrollView>
 
-      {filteredOffers.length === 0 ? (
+      {isLoading ? (
+        <ActivityIndicator color={ACCENT} style={{ marginTop: 24 }} />
+      ) : filteredOffers.length === 0 ? (
         <View style={styles.offersEmpty}>
           <Text style={styles.offersEmptyTitle}>{emptyCopy[filter].title}</Text>
           {emptyCopy[filter].subtitle ? (
@@ -1166,8 +1090,8 @@ function OffersTab({
         </View>
       ) : (
         filteredOffers.map((offer) => {
-          const dimmed = offer.status === 'expired' || offer.status === 'disabled';
-          const statusStyle = OFFER_STATUS_STYLES[offer.status];
+          const dimmed = offer.effective_status === 'expired' || offer.effective_status === 'disabled';
+          const statusStyle = OFFER_STATUS_STYLES[offer.effective_status];
           return (
             <TouchableOpacity
               key={offer.id}
@@ -1178,7 +1102,7 @@ function OffersTab({
             >
               <View style={styles.offerCardTop}>
                 <View style={styles.discountBadge}>
-                  <Text style={styles.discountText}>{offer.discount}</Text>
+                  <Text style={styles.discountText}>{formatDiscount(offer)}</Text>
                 </View>
                 <View style={styles.offerTopRight}>
                   <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
@@ -1217,7 +1141,7 @@ function OffersTab({
               <Text style={styles.offerDesc}>{offer.description}</Text>
               <View style={styles.offerFooter}>
                 <Calendar size={12} color="#9CA3AF" />
-                <Text style={styles.offerValidity}>Valid until {formatDate(offer.validUntil)}</Text>
+                <Text style={styles.offerValidity}>Valid until {offer.expires_at ? formatDate(offer.expires_at) : '—'}</Text>
                 <View style={styles.offerFooterSpacer} />
                 <TouchableOpacity
                   onPress={() => onOpen(offer)}
@@ -1230,7 +1154,7 @@ function OffersTab({
               {isOwner && (
                 <View style={styles.ownerActionRow}>
                   <View style={styles.ownerActionLeft}>
-                    {offer.status === 'active' && (
+                    {offer.effective_status === 'active' && (
                       <TouchableOpacity
                         onPress={() => onRequestToggle(offer.id)}
                         style={styles.ownerActionBtn}
@@ -1241,7 +1165,7 @@ function OffersTab({
                         <Text style={styles.ownerActionDisableText}>Disable</Text>
                       </TouchableOpacity>
                     )}
-                    {offer.status === 'disabled' && (
+                    {offer.effective_status === 'disabled' && (
                       <TouchableOpacity
                         onPress={() => onRequestToggle(offer.id)}
                         style={styles.ownerActionBtn}
@@ -1252,15 +1176,15 @@ function OffersTab({
                         <Text style={styles.ownerActionEnableText}>Enable</Text>
                       </TouchableOpacity>
                     )}
-                    {offer.status === 'expired' && (
+                    {offer.effective_status === 'expired' && (
                       <Text style={styles.ownerActionExpiredText}>
                         Expired — cannot re-enable
                       </Text>
                     )}
                   </View>
                   <Switch
-                    value={offer.status === 'active'}
-                    disabled={offer.status === 'expired'}
+                    value={offer.effective_status === 'active'}
+                    disabled={offer.effective_status === 'expired'}
                     onValueChange={() => onRequestToggle(offer.id)}
                     color={ACCENT}
                     testID={`offer-switch-${offer.id}`}
@@ -1281,66 +1205,32 @@ const OFFER_STATUS_STYLES: Record<OfferStatus, { bg: string; fg: string; label: 
   disabled: { bg: '#FCEBEB', fg: '#A32D2D', label: 'Disabled' },
 };
 
-type StatusedEvent = EventCard & { status: EventStatus };
-
-function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: EventCard[]; businessId: string; isOwner: boolean; onShowSnack: (msg: string) => void }) {
+function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; isOwner: boolean; onShowSnack: (msg: string) => void }) {
   const router = useRouter();
   const [filter, setFilter] = useState<EventFilter>('upcoming');
-
-  const initialStatusedEvents = useMemo<StatusedEvent[]>(
-    () => events.map((e, i) => ({ ...e, status: deriveEventStatus(e, i) })),
-    [events],
-  );
-  const [eventsList, setEventsList] = useState<StatusedEvent[]>(initialStatusedEvents);
-  React.useEffect(() => {
-    setEventsList(initialStatusedEvents);
-  }, [initialStatusedEvents]);
+  const { events, isLoading, toggleStatus } = useBusinessEvents(businessId, filter);
   const [eventConfirmDialog, setEventConfirmDialog] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
 
-  const handleToggleEvent = useCallback((eventId: string) => {
-    let eventTitle = '';
-    let newStatusLabel: 'cancelled' | 'restored' = 'cancelled';
-    setEventsList((prev) =>
-      prev.map((event) => {
-        if (event.id !== eventId) return event;
-        if (event.status === 'past') return event;
-        const newStatus: EventStatus = event.status === 'upcoming' ? 'cancelled' : 'upcoming';
-        eventTitle = event.title;
-        newStatusLabel = newStatus === 'upcoming' ? 'restored' : 'cancelled';
-        return { ...event, status: newStatus };
-      }),
-    );
-    setTimeout(() => {
-      if (eventTitle) {
-        onShowSnack(`"${eventTitle}" ${newStatusLabel} successfully`);
-      }
-    }, 0);
-  }, [onShowSnack]);
-
   const handleRequestToggleEvent = useCallback((eventId: string) => {
-    const ev = eventsList.find((e) => e.id === eventId);
+    const ev = events.find((e) => e.id === eventId);
     if (!ev) return;
-    if (ev.status === 'past') return;
-    if (ev.status === 'upcoming') {
+    if (ev.effective_status === 'past') return;
+    if (ev.effective_status === 'upcoming') {
       setEventConfirmDialog({ visible: true, eventId });
     } else {
-      handleToggleEvent(eventId);
+      toggleStatus(eventId).then(() => {
+        const e = events.find((x) => x.id === eventId);
+        if (e) onShowSnack(`"${e.title}" restored successfully`);
+      });
     }
-  }, [eventsList, handleToggleEvent]);
-
-  const statusedEvents = eventsList;
+  }, [events, toggleStatus, onShowSnack]);
 
   const counts = useMemo(() => ({
-    all: statusedEvents.length,
-    upcoming: statusedEvents.filter((e) => e.status === 'upcoming').length,
-    past: statusedEvents.filter((e) => e.status === 'past').length,
-    cancelled: statusedEvents.filter((e) => e.status === 'cancelled').length,
-  }), [statusedEvents]);
-
-  const filteredEvents = useMemo(
-    () => (filter === 'all' ? statusedEvents : statusedEvents.filter((e) => e.status === filter)),
-    [statusedEvents, filter],
-  );
+    all: events.length,
+    upcoming: events.filter((e) => e.effective_status === 'upcoming').length,
+    past: events.filter((e) => e.effective_status === 'past').length,
+    cancelled: events.filter((e) => e.effective_status === 'cancelled').length,
+  }), [events]);
 
   const emptyCopy: Record<EventFilter, string> = {
     upcoming: 'No upcoming events right now',
@@ -1400,14 +1290,16 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
         })}
       </ScrollView>
 
-      {filteredEvents.length === 0 ? (
+      {isLoading ? (
+        <ActivityIndicator color={ACCENT} style={{ marginTop: 24 }} />
+      ) : events.length === 0 ? (
         <View style={styles.offersEmpty}>
           <Text style={styles.offersEmptyTitle}>{emptyCopy[filter]}</Text>
         </View>
       ) : (
-        filteredEvents.map((event) => {
-          const dimmed = event.status === 'past' || event.status === 'cancelled';
-          const statusStyle = EVENT_STATUS_STYLES[event.status];
+        events.map((event) => {
+          const dimmed = event.effective_status === 'past' || event.effective_status === 'cancelled';
+          const statusStyle = EVENT_STATUS_STYLES[event.effective_status];
           return (
             <TouchableOpacity
               key={event.id}
@@ -1417,8 +1309,8 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
               testID={`event-${event.id}`}
             >
               <View style={styles.eventDateBlock}>
-                <Text style={styles.eventDateMonth}>{getMonth(event.date)}</Text>
-                <Text style={styles.eventDateDay}>{getDay(event.date)}</Text>
+                <Text style={styles.eventDateMonth}>{getMonth(event.starts_at)}</Text>
+                <Text style={styles.eventDateDay}>{getDay(event.starts_at)}</Text>
               </View>
               <View style={styles.eventInfo}>
                 <View style={styles.eventTitleRow}>
@@ -1433,13 +1325,13 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
                 </View>
                 <View style={styles.eventMeta}>
                   <Clock size={11} color="#9CA3AF" />
-                  <Text style={styles.eventMetaText}>{event.time}</Text>
+                  <Text style={styles.eventMetaText}>{formatTime(event.starts_at)}</Text>
                 </View>
                 <View style={styles.eventMeta}>
                   <MapPin size={11} color="#9CA3AF" />
-                  <Text style={styles.eventMetaText}>{event.location}</Text>
+                  <Text style={styles.eventMetaText}>{event.location ?? '—'}</Text>
                 </View>
-                <Text style={styles.eventDesc} numberOfLines={2}>{event.description}</Text>
+                <Text style={styles.eventDesc} numberOfLines={2}>{event.description ?? ''}</Text>
                 <Text
                   style={styles.eventViewDetails}
                   onPress={() => openEvent(event.id)}
@@ -1450,7 +1342,7 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
                 {isOwner && (
                   <View style={styles.ownerActionRow}>
                     <View style={styles.ownerActionLeft}>
-                      {event.status === 'upcoming' && (
+                      {event.effective_status === 'upcoming' && (
                         <TouchableOpacity
                           onPress={() => handleRequestToggleEvent(event.id)}
                           style={styles.ownerActionBtn}
@@ -1461,7 +1353,7 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
                           <Text style={styles.ownerActionDisableText}>Cancel</Text>
                         </TouchableOpacity>
                       )}
-                      {event.status === 'cancelled' && (
+                      {event.effective_status === 'cancelled' && (
                         <TouchableOpacity
                           onPress={() => handleRequestToggleEvent(event.id)}
                           style={styles.ownerActionBtn}
@@ -1472,15 +1364,15 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
                           <Text style={styles.ownerActionEnableText}>Restore</Text>
                         </TouchableOpacity>
                       )}
-                      {event.status === 'past' && (
+                      {event.effective_status === 'past' && (
                         <Text style={styles.ownerActionExpiredText}>
                           Event has passed
                         </Text>
                       )}
                     </View>
                     <Switch
-                      value={event.status === 'upcoming'}
-                      disabled={event.status === 'past'}
+                      value={event.effective_status === 'upcoming'}
+                      disabled={event.effective_status === 'past'}
                       onValueChange={() => handleRequestToggleEvent(event.id)}
                       color={ACCENT}
                       testID={`event-switch-${event.id}`}
@@ -1513,7 +1405,12 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
             </PaperButton>
             <PaperButton
               onPress={() => {
-                if (eventConfirmDialog.eventId) handleToggleEvent(eventConfirmDialog.eventId);
+                if (eventConfirmDialog.eventId) {
+                  const ev = events.find((e) => e.id === eventConfirmDialog.eventId);
+                  toggleStatus(eventConfirmDialog.eventId).then(() => {
+                    if (ev) onShowSnack(`"${ev.title}" cancelled successfully`);
+                  });
+                }
                 setEventConfirmDialog({ visible: false, eventId: null });
               }}
               textColor="#E24B4A"
@@ -1527,6 +1424,12 @@ function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: Event
   );
 }
 
+const POST_FILTERS: { key: PostFilter; label: string; color: string }[] = [
+  { key: 'all', label: 'All', color: '#1A5C35' },
+  { key: 'active', label: 'Active', color: '#0F6E56' },
+  { key: 'disabled', label: 'Disabled', color: '#E24B4A' },
+];
+
 function PostsTab({
   business,
   isOwner,
@@ -1537,12 +1440,14 @@ function PostsTab({
   onShowSnack: (msg: string) => void;
 }) {
   const router = useRouter();
-  const { getPostsForBusiness } = usePosts();
-  const posts = getPostsForBusiness(business.id);
+  const [postFilter, setPostFilter] = useState<PostFilter>('all');
+  const { posts, isLoading, toggleDisable: togglePostDisable, deletePost: apiDeletePost } =
+    useBusinessPosts(business.id, postFilter);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ visible: boolean; postId: string | null }>({ visible: false, postId: null });
-  const { toggleLike: ctxToggleLike, deletePost: ctxDeletePost, addComment: ctxAddComment, likedIds } = usePosts();
+  const [postDisableConfirm, setPostDisableConfirm] = useState<{ visible: boolean; postId: string | null; currentIsActive: boolean }>({ visible: false, postId: null, currentIsActive: true });
+  const { toggleLike: ctxToggleLike, likedIds } = usePosts();
 
   const handleToggleLike = useCallback((postId: string) => {
     if (Platform.OS !== 'web') {
@@ -1557,18 +1462,25 @@ function PostsTab({
     router.push('/new-post' as never);
   }, [router]);
 
+  const openPost = useCallback(
+    (postId: string) => {
+      router.push({ pathname: '/view-post', params: { postId, businessId: business.id } } as never);
+    },
+    [router, business.id],
+  );
+
   const openEdit = useCallback((post: { id: string }) => {
     setMenuOpenFor(null);
     router.push(`/edit-post/${post.id}` as never);
   }, [router]);
 
-  const handleConfirmDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(async () => {
     if (!deleteConfirm.postId) return;
     const id = deleteConfirm.postId;
-    ctxDeletePost(id);
     setDeleteConfirm({ visible: false, postId: null });
+    await apiDeletePost(id);
     onShowSnack('Post deleted');
-  }, [deleteConfirm.postId, onShowSnack, ctxDeletePost]);
+  }, [deleteConfirm.postId, onShowSnack, apiDeletePost]);
 
   return (
     <View>
@@ -1580,6 +1492,39 @@ function PostsTab({
           </Text>
         </View>
       )}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {POST_FILTERS.map((f) => {
+          const active = postFilter === f.key;
+          return (
+            <TouchableOpacity
+              key={f.key}
+              activeOpacity={0.8}
+              onPress={() => setPostFilter(f.key)}
+              style={[
+                styles.filterChip,
+                active
+                  ? { backgroundColor: f.color, borderColor: f.color }
+                  : { backgroundColor: 'transparent', borderColor: f.color },
+              ]}
+              testID={`post-filter-${f.key}`}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  { color: active ? '#fff' : f.color, fontWeight: active ? '700' : '600' },
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {isOwner && (
         <TouchableOpacity
@@ -1593,18 +1538,21 @@ function PostsTab({
         </TouchableOpacity>
       )}
 
-      {posts.length === 0 ? (
+      {isLoading ? (
+        <ActivityIndicator color={ACCENT} style={{ marginTop: 24 }} />
+      ) : posts.length === 0 ? (
         <View style={styles.offersEmpty}>
           <Text style={styles.offersEmptyTitle}>No posts yet</Text>
           {isOwner ? (
-            <Text style={styles.offersEmptySubtitle}>Tap “New Post” to share your first update</Text>
+            <Text style={styles.offersEmptySubtitle}>Tap "New Post" to share your first update</Text>
           ) : null}
         </View>
       ) : (
         posts.map((post) => {
           const liked = !!likedIds[post.id] || !!likedPosts[post.id];
+          const dimmed = !post.is_active;
           return (
-            <View key={post.id} style={styles.postCard} testID={`post-${post.id}`}>
+            <View key={post.id} style={[styles.postCard, dimmed && styles.offerCardDimmed]} testID={`post-${post.id}`}>
               <View style={styles.postHeaderRow}>
                 <View style={styles.postHeaderLeft}>
                   <Image source={{ uri: business.logo }} style={styles.postAvatar} contentFit="cover" />
@@ -1651,31 +1599,109 @@ function PostsTab({
                 )}
               </View>
 
-              <Text style={styles.postText}>{post.text}</Text>
+              <TouchableOpacity onPress={() => openPost(post.id)} activeOpacity={0.8} testID={`post-open-${post.id}`}>
+                <Text style={styles.postText}>{post.content}</Text>
 
-              {post.image_url ? (
-                <Image
-                  source={{ uri: post.image_url }}
-                  style={styles.postImage}
-                  contentFit="cover"
-                />
-              ) : null}
+                {post.image_url ? (
+                  <Image
+                    source={{ uri: post.image_url }}
+                    style={styles.postImage}
+                    contentFit="cover"
+                  />
+                ) : null}
+              </TouchableOpacity>
+
+              <Text
+                style={styles.eventViewDetails}
+                onPress={() => openPost(post.id)}
+                testID={`post-view-details-${post.id}`}
+              >
+                View details →
+              </Text>
 
               <PostEngagementRow
                 postId={post.id}
                 liked={liked}
-                likes={post.likes}
-                comments={post.comments}
+                likes={0}
+                comments={[]}
                 onLike={() => handleToggleLike(post.id)}
-                onSendComment={(t) => ctxAddComment(post.id, t)}
+                onSendComment={() => {}}
                 onShare={() => onShowSnack('Link copied to clipboard')}
               />
+
+              {isOwner && (
+                <View style={styles.ownerActionRow}>
+                  <View style={styles.ownerActionLeft}>
+                    {post.is_active ? (
+                      <TouchableOpacity
+                        onPress={() => setPostDisableConfirm({ visible: true, postId: post.id, currentIsActive: true })}
+                        style={styles.ownerActionBtn}
+                        hitSlop={8}
+                        testID={`post-disable-${post.id}`}
+                      >
+                        <PauseCircle size={14} color="#E24B4A" />
+                        <Text style={styles.ownerActionDisableText}>Disable</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => togglePostDisable(post.id, false)}
+                        style={styles.ownerActionBtn}
+                        hitSlop={8}
+                        testID={`post-enable-${post.id}`}
+                      >
+                        <PlayCircle size={14} color="#0F6E56" />
+                        <Text style={styles.ownerActionEnableText}>Enable</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <Switch
+                    value={post.is_active}
+                    onValueChange={() => {
+                      if (post.is_active) {
+                        setPostDisableConfirm({ visible: true, postId: post.id, currentIsActive: true });
+                      } else {
+                        togglePostDisable(post.id, false);
+                      }
+                    }}
+                    color={ACCENT}
+                    testID={`post-switch-${post.id}`}
+                  />
+                </View>
+              )}
             </View>
           );
         })
       )}
 
       <Portal>
+        <Dialog
+          visible={postDisableConfirm.visible}
+          onDismiss={() => setPostDisableConfirm({ visible: false, postId: null, currentIsActive: true })}
+        >
+          <Dialog.Title>Disable this post?</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ fontSize: 13, color: '#1A5C35', lineHeight: 19 }}>
+              This post will no longer be visible to your subscribers. You can re-enable it at any time.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PaperButton
+              onPress={() => setPostDisableConfirm({ visible: false, postId: null, currentIsActive: true })}
+              textColor="#888780"
+            >
+              Cancel
+            </PaperButton>
+            <PaperButton
+              onPress={() => {
+                if (postDisableConfirm.postId) togglePostDisable(postDisableConfirm.postId, true);
+                setPostDisableConfirm({ visible: false, postId: null, currentIsActive: true });
+              }}
+              textColor="#E24B4A"
+            >
+              Disable
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
         <Dialog
           visible={deleteConfirm.visible}
           onDismiss={() => setDeleteConfirm({ visible: false, postId: null })}
@@ -2157,6 +2183,22 @@ function avatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
   return palette[Math.abs(hash) % palette.length];
+}
+
+function formatDiscount(offer: Offer): string {
+  if (offer.discount_type === 'percent' && offer.discount_value) return `${offer.discount_value}% off`;
+  if (offer.discount_type === 'flat' && offer.discount_value) return `$${offer.discount_value} off`;
+  if (offer.discount_type === 'bogo') return 'Buy 1 Get 1';
+  if (offer.discount_type === 'freebie') return 'Free item';
+  return 'Special deal';
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch {
+    return '';
+  }
 }
 
 function relativeDate(iso: string): string {
