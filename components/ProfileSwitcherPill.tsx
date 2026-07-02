@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSnackbar } from '@/contexts/SnackbarContext';
+import { resolveAvatarUrl } from '@/api/services/profileService';
 import type { ProfileEntry } from '@/types';
 
 function truncate(name: string, max: number = 14): string {
@@ -52,6 +53,9 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
     onPress(profile);
   }, [profile, onPress]);
 
+  const resolved = resolveAvatarUrl(profile.avatarUrl);
+  const initial = (profile.displayName?.[0] ?? '?').toUpperCase();
+
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
@@ -63,7 +67,15 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
         testID={`profile-pill-${profile.id}`}
       >
         <View style={[styles.pillAvatarWrap, isActive && styles.pillAvatarWrapActive]}>
-          <Image source={{ uri: profile.avatarUrl }} style={styles.pillAvatar} contentFit="cover" />
+          {resolved ? (
+            <Image source={{ uri: resolved }} style={styles.pillAvatar} contentFit="cover" />
+          ) : (
+            <View style={[styles.pillAvatar, styles.pillAvatarFallback]}>
+              <Text style={[styles.pillAvatarInitial, isActive && styles.pillAvatarInitialActive]}>
+                {initial}
+              </Text>
+            </View>
+          )}
         </View>
         <Text
           style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}
@@ -184,5 +196,18 @@ const styles = StyleSheet.create({
   },
   pillSpinner: {
     marginLeft: 6,
+  },
+  pillAvatarFallback: {
+    backgroundColor: Colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillAvatarInitial: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  pillAvatarInitialActive: {
+    color: '#fff',
   },
 });

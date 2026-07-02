@@ -6,14 +6,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   fetchMyProfile,
   updateMyProfile,
-  uploadAvatar,
+  uploadAvatarFile,
+  saveAvatarUrl,
+  resolveAvatarUrl,
   fetchInterestCategories,
   type InterestCategory,
 } from '@/api/services/profileService';
 
 export function useEditProfile() {
- 
-  const { isAuthenticated, authLoading, authUser, updateAuthUser } = useAuth();
+
+  const { isAuthenticated, authLoading, authUser, updateAuthUser, accessToken } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -40,8 +42,10 @@ export function useEditProfile() {
   const [stateSuggestions, setStateSuggestions]     = useState<ReturnType<typeof State.getAllStates>>([]);
   const [citySuggestions, setCitySuggestions]       = useState<ReturnType<typeof City.getAllCities>>([]);
 
-  const [avatarUri, setAvatarUri]           = useState<string | null>(authUser?.avatar ?? null);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUri, setAvatarUri]                   = useState<string | null>(authUser?.avatar ?? null);
+  const [pendingAvatarBase64, setPendingAvatarBase64] = useState<string | null>(null);
+  const [pendingAvatarFileUri, setPendingAvatarFileUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar]         = useState(false);
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -65,7 +69,7 @@ export function useEditProfile() {
         setFullName(profile.display_name ?? '');
         setPhone(profile.phone ?? '');
         setBio(profile.bio ?? '');
-        setAvatarUri(profile.avatar_url ?? authUser?.avatar ?? null);
+        setAvatarUri(resolveAvatarUrl(profile.avatar_url) ?? authUser?.avatar ?? null);
         setCountry(profile.country ?? '');
         setState(profile.state ?? '');
         setCity(profile.city ?? '');
@@ -136,6 +140,7 @@ export function useEditProfile() {
     );
   }, []);
 
+  // Pick image and store locally for display — upload is deferred to handleSave
   const pickAndUploadAvatar = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -149,25 +154,38 @@ export function useEditProfile() {
       quality: 0.5,
       base64: true,
     });
-    if (picked.canceled || !picked.assets?.[0]?.base64) return;
-    const dataUri = `data:image/jpeg;base64,${picked.assets[0].base64}`;
-    setUploadingAvatar(true);
-    try {
-      const newUrl = await uploadAvatar(dataUri);
-      setAvatarUri(newUrl);
-      updateAuthUser({ avatar: newUrl });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to upload avatar';
-      setError(msg);
-    } finally {
-      setUploadingAvatar(false);
-    }
-  }, [updateAuthUser]);
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const asset = picked.assets[0];
+    const dataUri = `data:image/jpeg;base64,${asset.base64}`;
+    setPendingAvatarBase64(dataUri);
+    setPendingAvatarFileUri(asset.uri);
+    setAvatarUri(dataUri); // show immediately for local feedback
+  }, []);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
+      let resolvedAvatarUrl: string | undefined;
+
+      if (pendingAvatarBase64 && accessToken) {
+        setUploadingAvatar(true);
+        try {
+          const relativeUrl = await uploadAvatarFile({
+            fileUri: pendingAvatarFileUri ?? '',
+            base64DataUri: pendingAvatarBase64,
+            token: accessToken,
+          });
+          await saveAvatarUrl(relativeUrl);
+          resolvedAvatarUrl = resolveAvatarUrl(relativeUrl) ?? undefined;
+          setAvatarUri(resolvedAvatarUrl ?? null);
+          setPendingAvatarBase64(null);
+          setPendingAvatarFileUri(null);
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+
       await updateMyProfile({
         display_name:  fullName.trim() || undefined,
         phone:         phone.trim() || undefined,
@@ -177,6 +195,13 @@ export function useEditProfile() {
         country:       country.trim() || undefined,
         interest_ids:  selectedInterestIds,
       });
+
+      // Sync AuthContext so drawer and other consumers reflect changes immediately
+      updateAuthUser({
+        name:   fullName.trim() || undefined,
+        avatar: resolvedAvatarUrl ?? avatarUri ?? undefined,
+      });
+
       setSuccess(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save profile';
@@ -184,7 +209,8 @@ export function useEditProfile() {
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, bio, city, state, country, selectedInterestIds]);
+  }, [fullName, phone, bio, city, state, country, selectedInterestIds,
+      pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser]);
 
   return {
     fullName,   setFullName,

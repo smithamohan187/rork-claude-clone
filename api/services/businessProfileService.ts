@@ -12,6 +12,7 @@ export interface BusinessHour {
 // Full shape returned by GET /businesses/:id
 export interface BusinessProfile {
   id: string;
+  profile_id: string;
   name: string;
   description: string | null;
   business_type: 'goodwill' | 'incentivised';

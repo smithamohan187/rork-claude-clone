@@ -146,6 +146,7 @@ async function getBusinessById(businessId) {
   const { rows } = await query(
     `SELECT
        b.id,
+       b.profile_id,
        b.name,
        b.description,
        b.business_type,
@@ -170,6 +171,7 @@ async function getBusinessById(businessId) {
      LEFT JOIN (
        SELECT business_id, COUNT(*) AS subscriber_count
        FROM subscriptions
+       WHERE is_active = true
        GROUP BY business_id
      ) sub ON sub.business_id = b.id
      LEFT JOIN (

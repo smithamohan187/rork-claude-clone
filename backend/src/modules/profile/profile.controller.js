@@ -31,4 +31,12 @@ const updateMyAvatar = asyncHandler(async (req, res) => {
   res.status(200).json(ok(result));
 });
 
-module.exports = { getMyProfile, updateMyProfile, getInterests, updateMyAvatar };
+const uploadMyAvatarFile = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
+  }
+  const url = `/uploads/avatars/${req.file.filename}`;
+  res.status(200).json(ok({ url }));
+});
+
+module.exports = { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile };

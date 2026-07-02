@@ -14,6 +14,7 @@ const businessDirectoryRoutes = require('./modules/businessDirectory/businessDir
 const offersRoutes            = require('./modules/offers/offers.routes');
 const eventsRoutes            = require('./modules/events/events.routes');
 const postsRoutes             = require('./modules/posts/posts.routes');
+const subscriptionRoutes      = require('./modules/subscriptions/subscription.routes');
 
 const app = express();
 
@@ -43,6 +44,7 @@ console.log('Done.');
 app.use('/offers',            offersRoutes);
 app.use('/events',            eventsRoutes);
 app.use('/posts',             postsRoutes);
+app.use('/subscriptions',     subscriptionRoutes);
 
 app.use('/api/v1', api);
 

@@ -21,7 +21,9 @@ interface Props {
 }
 
 export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
-  const { authUser, accountType, switchAccount } = useAuth();
+  const { authUser, accountType, switchAccount, profiles } = useAuth();
+  const personalProfile = profiles.find(p => p.type === 'personal');
+  const businessProfile  = profiles.find(p => p.type === 'business');
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
@@ -99,19 +101,19 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
               testID="switcher-personal"
             >
               <View style={styles.avatarWrap}>
-                {authUser?.avatar ? (
-                  <Image source={{ uri: authUser.avatar }} style={styles.avatar} contentFit="cover" />
+                {personalProfile?.avatarUrl ? (
+                  <Image source={{ uri: personalProfile.avatarUrl }} style={styles.avatar} contentFit="cover" />
                 ) : (
                   <View style={[styles.avatar, styles.avatarFallback]}>
                     <Text style={styles.avatarInitial}>
-                      {(authUser?.name ?? authUser?.email ?? 'P').charAt(0).toUpperCase()}
+                      {(personalProfile?.displayName ?? authUser?.name ?? authUser?.email ?? 'P').charAt(0).toUpperCase()}
                     </Text>
                   </View>
                 )}
               </View>
 
               <View style={styles.info}>
-                <Text style={styles.name}>{authUser?.name ?? authUser?.email ?? 'Personal'}</Text>
+                <Text style={styles.name}>{personalProfile?.displayName ?? authUser?.name ?? authUser?.email ?? 'Personal'}</Text>
                 <View style={styles.badgeRow}>
                   <View style={[styles.badge, styles.badgePersonal]}>
                     <Text style={[styles.badgeText, styles.badgeTextPersonal]}>Personal</Text>
@@ -126,8 +128,8 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
               )}
             </TouchableOpacity>
 
-            {/* Business Profile Row — only if user has a business account */}
-            {(authUser?.role === 'business' || authUser?.role === 'owner') && (
+            {/* Business Profile Row — only if a business profile exists */}
+            {businessProfile ? (
               <>
                 <View style={styles.rowDivider} />
                 <TouchableOpacity
@@ -140,19 +142,19 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
                   testID="switcher-business"
                 >
                   <View style={styles.avatarWrap}>
-                    {authUser?.avatar ? (
-                      <Image source={{ uri: authUser.avatar }} style={styles.avatar} contentFit="cover" />
+                    {businessProfile.avatarUrl ? (
+                      <Image source={{ uri: businessProfile.avatarUrl }} style={styles.avatar} contentFit="cover" />
                     ) : (
                       <View style={[styles.avatar, styles.avatarFallback, styles.avatarFallbackBusiness]}>
-                        <Text style={styles.avatarInitial}>
-                          {(authUser?.name ?? 'B').charAt(0).toUpperCase()}
+                        <Text style={[styles.avatarInitial, styles.avatarInitialBusiness]}>
+                          {businessProfile.displayName.charAt(0).toUpperCase()}
                         </Text>
                       </View>
                     )}
                   </View>
 
                   <View style={styles.info}>
-                    <Text style={styles.name}>{authUser?.name ?? 'Business'}</Text>
+                    <Text style={styles.name}>{businessProfile.displayName}</Text>
                     <View style={styles.badgeRow}>
                       <View style={[styles.badge, styles.badgeBusiness]}>
                         <Text style={[styles.badgeText, styles.badgeTextBusiness]}>Business</Text>
@@ -167,7 +169,7 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
                   )}
                 </TouchableOpacity>
               </>
-            )}
+            ) : null}
 
             {/* Add Business prompt — shown when user has no business profile yet */}
             {authUser?.role !== 'business' && authUser?.role !== 'owner' && (
@@ -296,6 +298,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#1A5C35',
+  },
+  avatarInitialBusiness: {
+    color: '#fff',
   },
   avatarCreateText: {
     fontSize: 22,

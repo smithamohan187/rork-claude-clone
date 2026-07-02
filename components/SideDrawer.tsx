@@ -116,7 +116,7 @@ function MenuRow({
 const SideDrawer = React.memo(function SideDrawer() {
   const router = useRouter();
   const { isOpen, close } = useSideDrawer();
-  const { currentUser, hasBusinessProfile, accountType, switchAccount } = useAuth();
+  const { authUser, profiles, accountType, switchAccount } = useAuth();
 
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -215,9 +215,10 @@ const SideDrawer = React.memo(function SideDrawer() {
     // optimization: don't render if fully closed (but allow during animation)
   }
 
-  const hasAvatar = !!currentUser?.avatar;
-  const initials = getInitials(currentUser?.name ?? 'U');
-  const totalPoints = currentUser?.points ?? 0;
+  const hasBusinessProfile = profiles.some((p) => p.type === 'business');
+  const hasAvatar = !!authUser?.avatar;
+  const initials = getInitials(authUser?.name ?? 'U');
+  const totalPoints = 0; // points not yet in AuthUser — placeholder until rewards module is wired
   const isBusinessActive = accountType === 'business';
 
   return (
@@ -263,7 +264,7 @@ const SideDrawer = React.memo(function SideDrawer() {
             <View style={styles.heroAvatar}>
               {hasAvatar ? (
                 <Image
-                  source={{ uri: currentUser.avatar }}
+                  source={{ uri: authUser!.avatar }}
                   style={styles.heroAvatarImage}
                   contentFit="cover"
                 />
@@ -275,10 +276,10 @@ const SideDrawer = React.memo(function SideDrawer() {
             </View>
 
             <Text style={styles.heroName} numberOfLines={1}>
-              {currentUser?.name ?? 'Welcome'}
+              {authUser?.name ?? 'Welcome'}
             </Text>
             <Text style={styles.heroEmail} numberOfLines={1}>
-              {currentUser?.email ?? (currentUser?.username ? `@${currentUser.username}` : '')}
+              {authUser?.email ?? ''}
             </Text>
 
             <Pressable

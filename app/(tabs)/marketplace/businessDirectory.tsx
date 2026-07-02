@@ -25,6 +25,7 @@ import {
   MapPin,
   Building2,
 } from 'lucide-react-native';
+import { Chip } from 'react-native-paper';
 import { useBusinessDirectory } from '@/hooks/useBusinessDirectory';
 import type { BusinessDirectoryItem, BusinessCategory } from '@/api/services/businessDirectoryService';
 
@@ -86,9 +87,11 @@ const CategoryChip = React.memo(function CategoryChip({
 const BusinessCard = React.memo(function BusinessCard({
   item,
   onPress,
+  isSubscribed,
 }: {
   item: BusinessDirectoryItem;
   onPress: () => void;
+  isSubscribed?: boolean;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -166,6 +169,17 @@ const BusinessCard = React.memo(function BusinessCard({
           <Text style={styles.ratingCount}>
             {item.rating_count > 0 ? `${item.rating_count} ratings` : 'No ratings yet'}
           </Text>
+
+          {isSubscribed && (
+            <Chip
+              icon="check-circle"
+              compact
+              style={styles.subscribedChip}
+              textStyle={styles.subscribedChipText}
+            >
+              Subscribed
+            </Chip>
+          )}
         </View>
       </Pressable>
     </Animated.View>
@@ -508,6 +522,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     color: '#BDBDBD',
+  },
+  subscribedChip: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    backgroundColor: '#E8F5EE',
+    height: 24,
+  },
+  subscribedChipText: {
+    fontSize: 10,
+    color: '#1A5C35',
   },
   // ── Loading / Error ──
   loadingCenter: {

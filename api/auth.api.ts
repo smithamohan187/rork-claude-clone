@@ -48,9 +48,10 @@ export type SessionResponse = {
   email:              string;
   full_name?:         string;
   name?:              string;
+  display_name?:      string;
+  avatar_url?:        string | null;
   role?:              string;
   profile?:           Record<string, unknown>;
-  // Added by updated getSessionByUserId — supports profile switcher
   active_profile_id?: string;
   profiles?:          BackendProfile[];
 };

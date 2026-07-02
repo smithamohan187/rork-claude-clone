@@ -9,6 +9,7 @@ import {
   Animated,
   Share,
   Platform,
+  Alert,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -72,6 +73,8 @@ import { usePosts } from '@/contexts/PostsContext';
 import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import type { BusinessProfile } from '@/api/services/businessProfileService';
 import CommentSheet from '@/components/feed/CommentSheet';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/hooks/useSubscription';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ACCENT = '#1A5C35';
@@ -200,9 +203,10 @@ export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
   const { business: realBusiness, loading: profileLoading, error: profileError,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
+  const { activeProfile } = useAuth();
+  const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
-  const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
   const [showSubscribeBanner, setShowSubscribeBanner] = useState<boolean>(
     subscribeParam === '1',
   );
@@ -237,13 +241,13 @@ export default function BusinessProfileScreen() {
     }, 450);
   }, [favLoading, isFavorited, heartScale]);
 
-  const subscribeBtnScale = useRef(new Animated.Value(1)).current;
   const tabUnderlineX = useRef(new Animated.Value(0)).current;
-  const pointsPopAnim = useRef(new Animated.Value(0)).current;
-  const pointsOpacity = useRef(new Animated.Value(0)).current;
 
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
-  const [isOwnerMode] = useState<boolean>(true);
+  const isOwner = useMemo(
+    () => !!activeProfile && !!realBusiness && activeProfile.id === realBusiness.profile_id,
+    [activeProfile, realBusiness],
+  );
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
@@ -400,16 +404,11 @@ export default function BusinessProfileScreen() {
     [tabUnderlineX, tabWidth],
   );
 
-  const handleSubscribe = useCallback(() => {
-    if (isSubscribed) return;
-
-    Animated.sequence([
-      Animated.timing(subscribeBtnScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
-      Animated.timing(subscribeBtnScale, { toValue: 1.05, duration: 120, useNativeDriver: true }),
-      Animated.timing(subscribeBtnScale, { toValue: 1, duration: 100, useNativeDriver: true }),
-    ]).start();
-
-    setIsSubscribed(true);
+  const handleSubscribe = useCallback(async () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    await subscribe();
     if (showSubscribeBanner) {
       Animated.timing(subscribeBannerSlide, {
         toValue: -120,
@@ -419,23 +418,18 @@ export default function BusinessProfileScreen() {
       setSnackMsg(`You're now subscribed to ${business.name}!`);
       setSnackVisible(true);
     }
+  }, [subscribe, showSubscribeBanner, subscribeBannerSlide, business.name]);
 
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    pointsPopAnim.setValue(0);
-    pointsOpacity.setValue(1);
-    Animated.parallel([
-      Animated.timing(pointsPopAnim, { toValue: -40, duration: 900, useNativeDriver: true }),
-      Animated.sequence([
-        Animated.delay(500),
-        Animated.timing(pointsOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]),
-    ]).start();
-
-    console.log('[BusinessProfile] Subscribed to business:', id);
-  }, [isSubscribed, subscribeBtnScale, pointsPopAnim, pointsOpacity, id]);
+  const handleUnsubscribe = useCallback(() => {
+    Alert.alert(
+      'Unsubscribe?',
+      "You'll stop receiving offers and updates from this business.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unsubscribe', style: 'destructive', onPress: unsubscribe },
+      ],
+    );
+  }, [unsubscribe]);
 
   const handleSaveOffer = useCallback((offerId: string) => {
     setSavedOffers((prev) => ({ ...prev, [offerId]: !prev[offerId] }));
@@ -496,7 +490,7 @@ export default function BusinessProfileScreen() {
             >
               <ArrowLeft size={20} color="#fff" />
             </TouchableOpacity>
-            {isOwnerMode ? (
+            {isOwner ? (
               isEditing ? (
                 <TouchableOpacity
                   style={styles.editHeaderBtn}
@@ -542,7 +536,7 @@ export default function BusinessProfileScreen() {
                 )}
               </TouchableOpacity>
             )}
-            {favTooltipVisible && !isOwnerMode && (
+            {favTooltipVisible && !isOwner && (
               <View style={styles.favTooltip} pointerEvents="none">
                 <Text style={styles.favTooltipText}>Bookmark this business</Text>
               </View>
@@ -666,36 +660,42 @@ export default function BusinessProfileScreen() {
           </View>
         </View>
 
+        {!isOwner && (
         <View style={styles.subscribeBtnWrap}>
-          <Animated.View style={{ transform: [{ scale: subscribeBtnScale }], position: 'relative' as const }}>
+          {!isSubscribed ? (
             <TouchableOpacity
-              style={[styles.subscribeBtn, isSubscribed && styles.subscribedBtn]}
+              style={styles.subscribeBtn}
               activeOpacity={0.8}
               onPress={handleSubscribe}
+              disabled={isToggling}
               testID="subscribe-btn"
             >
-              {isSubscribed ? (
-                <Text style={styles.subscribedText}>Subscribed ✓</Text>
-              ) : (
-                <>
-                  <Sparkles size={16} color="#fff" />
-                  <Text style={styles.subscribeText}>Subscribe · Earn {business.welcomePoints} pts</Text>
-                </>
-              )}
+              {isToggling
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.subscribeText}>Subscribe</Text>}
             </TouchableOpacity>
-            <Animated.View
-              style={[
-                styles.pointsPopup,
-                {
-                  transform: [{ translateY: pointsPopAnim }],
-                  opacity: pointsOpacity,
-                },
-              ]}
-              pointerEvents="none"
-            >
-              <Text style={styles.pointsPopupText}>+{business.welcomePoints} pts 🎉</Text>
-            </Animated.View>
-          </Animated.View>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.subscribeBtn, styles.subscribedBtn]}
+                activeOpacity={1}
+                disabled={isToggling}
+                testID="subscribed-btn"
+              >
+                {isToggling
+                  ? <ActivityIndicator size="small" color={ACCENT} />
+                  : <Text style={styles.subscribedText}>Subscribed ✓</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleUnsubscribe}
+                disabled={isToggling}
+                style={styles.unsubscribeLink}
+                testID="unsubscribe-link"
+              >
+                <Text style={styles.unsubscribeLinkText}>Unsubscribe</Text>
+              </TouchableOpacity>
+            </>
+          )}
           {isSubscribed && (
             <TouchableOpacity
               style={styles.messageBtn}
@@ -719,6 +719,7 @@ export default function BusinessProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        )}
 
         {isSubscribed && (
           <ReferralCard
@@ -761,19 +762,19 @@ export default function BusinessProfileScreen() {
         </View>
 
         <View style={styles.tabContent}>
-          {activeTab === 'offers' && <OffersTab offers={businessOffers} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwnerMode={isOwnerMode} onRequestToggle={handleRequestToggle} />}
+          {activeTab === 'offers' && <OffersTab offers={businessOffers} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwner={isOwner} onRequestToggle={handleRequestToggle} />}
           {activeTab === 'events' && (
             <EventsTab
               events={businessEvents}
               businessId={id ?? ''}
-              isOwnerMode={isOwnerMode}
+              isOwner={isOwner}
               onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
             />
           )}
           {activeTab === 'posts' && (
             <PostsTab
               business={business}
-              isOwnerMode={isOwnerMode}
+              isOwner={isOwner}
               onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
             />
           )}
@@ -886,7 +887,7 @@ export default function BusinessProfileScreen() {
           </View>
         )}
 
-        {isOwnerMode && (
+        {isOwner && (
           <View style={styles.inviteCustomersWrap}>
             <TouchableOpacity
               style={styles.inviteCustomersBtn}
@@ -913,7 +914,7 @@ export default function BusinessProfileScreen() {
           </View>
         )}
 
-        {isOwnerMode && (
+        {isOwner && (
           <View style={styles.qrSection}>
             <View style={styles.qrSectionHeader}>
               <View style={styles.qrSectionTitleRow}>
@@ -1080,7 +1081,7 @@ function OffersTab({
   onOpen,
   filter,
   onFilterChange,
-  isOwnerMode,
+  isOwner,
   onRequestToggle,
 }: {
   offers: StatusedOffer[];
@@ -1090,7 +1091,7 @@ function OffersTab({
   onOpen: (offer: OfferCard) => void;
   filter: OfferFilter;
   onFilterChange: (f: OfferFilter) => void;
-  isOwnerMode: boolean;
+  isOwner: boolean;
   onRequestToggle: (offerId: string) => void;
 }) {
   const counts = useMemo(() => ({
@@ -1114,7 +1115,7 @@ function OffersTab({
 
   return (
     <View>
-      {isOwnerMode && (
+      {isOwner && (
         <View style={styles.ownerBanner}>
           <Pencil size={14} color="#854F0B" />
           <Text style={styles.ownerBannerText}>
@@ -1226,7 +1227,7 @@ function OffersTab({
                   <Text style={styles.offerViewDetails}>View details →</Text>
                 </TouchableOpacity>
               </View>
-              {isOwnerMode && (
+              {isOwner && (
                 <View style={styles.ownerActionRow}>
                   <View style={styles.ownerActionLeft}>
                     {offer.status === 'active' && (
@@ -1282,7 +1283,7 @@ const OFFER_STATUS_STYLES: Record<OfferStatus, { bg: string; fg: string; label: 
 
 type StatusedEvent = EventCard & { status: EventStatus };
 
-function EventsTab({ events, businessId, isOwnerMode, onShowSnack }: { events: EventCard[]; businessId: string; isOwnerMode: boolean; onShowSnack: (msg: string) => void }) {
+function EventsTab({ events, businessId, isOwner, onShowSnack }: { events: EventCard[]; businessId: string; isOwner: boolean; onShowSnack: (msg: string) => void }) {
   const router = useRouter();
   const [filter, setFilter] = useState<EventFilter>('upcoming');
 
@@ -1357,7 +1358,7 @@ function EventsTab({ events, businessId, isOwnerMode, onShowSnack }: { events: E
   );
   return (
     <View>
-      {isOwnerMode && (
+      {isOwner && (
         <View style={styles.ownerBanner}>
           <Pencil size={14} color="#854F0B" />
           <Text style={styles.ownerBannerText}>
@@ -1446,7 +1447,7 @@ function EventsTab({ events, businessId, isOwnerMode, onShowSnack }: { events: E
                 >
                   View details →
                 </Text>
-                {isOwnerMode && (
+                {isOwner && (
                   <View style={styles.ownerActionRow}>
                     <View style={styles.ownerActionLeft}>
                       {event.status === 'upcoming' && (
@@ -1528,11 +1529,11 @@ function EventsTab({ events, businessId, isOwnerMode, onShowSnack }: { events: E
 
 function PostsTab({
   business,
-  isOwnerMode,
+  isOwner,
   onShowSnack,
 }: {
   business: BusinessProfileData;
-  isOwnerMode: boolean;
+  isOwner: boolean;
   onShowSnack: (msg: string) => void;
 }) {
   const router = useRouter();
@@ -1571,7 +1572,7 @@ function PostsTab({
 
   return (
     <View>
-      {isOwnerMode && (
+      {isOwner && (
         <View style={styles.ownerBanner}>
           <Pencil size={14} color="#854F0B" />
           <Text style={styles.ownerBannerText}>
@@ -1580,7 +1581,7 @@ function PostsTab({
         </View>
       )}
 
-      {isOwnerMode && (
+      {isOwner && (
         <TouchableOpacity
           style={styles.newPostBtn}
           onPress={openCreate}
@@ -1595,7 +1596,7 @@ function PostsTab({
       {posts.length === 0 ? (
         <View style={styles.offersEmpty}>
           <Text style={styles.offersEmptyTitle}>No posts yet</Text>
-          {isOwnerMode ? (
+          {isOwner ? (
             <Text style={styles.offersEmptySubtitle}>Tap “New Post” to share your first update</Text>
           ) : null}
         </View>
@@ -1612,7 +1613,7 @@ function PostsTab({
                     <Text style={styles.postTimestamp}>{relativeDate(post.created_at)}</Text>
                   </View>
                 </View>
-                {isOwnerMode && (
+                {isOwner && (
                   <View>
                     <TouchableOpacity
                       hitSlop={10}
@@ -2781,6 +2782,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F5E9',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  unsubscribeLink: {
+    alignSelf: 'center',
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  unsubscribeLinkText: {
+    fontSize: 12,
+    color: '#888780',
+    textDecorationLine: 'underline',
   },
   messageBtn: {
     flexDirection: 'row',

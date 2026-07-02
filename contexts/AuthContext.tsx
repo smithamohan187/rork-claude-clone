@@ -29,11 +29,23 @@ import type { AccountType, ProfileEntry } from '@/types';
 // The refresh token key is owned by api/client.ts (cleared via clearTokens).
 // ─────────────────────────────────────────────────────────────────────────────
 const ACCOUNT_TYPE_KEY = 'account_type';
+
+function resolveUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('http')) return url;
+  const base = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
+  return `${base}${url}`;
+}
 const ACTIVE_PROFILE_ID_KEY = 'active_profile_id';
 
 // Map backend profile row to the ProfileEntry shape used by components
 function toProfileEntry(p: BackendProfile): ProfileEntry {
-  return { id: p.id, type: p.profile_type, displayName: p.display_name, avatarUrl: p.avatar_url ?? '' };
+  return {
+    id: p.id,
+    type: p.profile_type,
+    displayName: p.display_name,
+    avatarUrl: resolveUrl(p.avatar_url) ?? '',
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,9 +105,11 @@ function getTokens(data: AuthTokens | AuthRefreshResponse | null | undefined) {
 // ─────────────────────────────────────────────────────────────────────────────
 function toAuthUser(user: SessionResponse | AuthUser | null | undefined): AuthUser | null {
   if (!user?.id) return null;
+  const u = user as Record<string, unknown>;
   return {
     ...user,
-    name: user.name ?? user.full_name ?? user.email ?? undefined,
+    name:   (u.name ?? u.full_name ?? u.display_name ?? u.email) as string | undefined,
+    avatar: resolveUrl((u.avatar ?? u.avatar_url) as string | null | undefined),
   };
 }
 

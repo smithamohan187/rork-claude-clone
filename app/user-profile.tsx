@@ -154,11 +154,19 @@ export default function UserProfileScreen() {
         <ProfileContextBanner profileType={accountType} />
         <View style={styles.avatarSection}>
           <Surface style={styles.avatarRing} elevation={3}>
-            <Image
-              source={{ uri: currentAvatar ?? '' }}
-              style={styles.avatarImage}
-              testID="user-profile-avatar"
-            />
+            {currentAvatar ? (
+              <Image
+                source={{ uri: currentAvatar }}
+                style={styles.avatarImage}
+                testID="user-profile-avatar"
+              />
+            ) : (
+              <View style={[styles.avatarImage, styles.avatarFallback]} testID="user-profile-avatar">
+                <Text style={styles.avatarInitial}>
+                  {(currentName?.[0] ?? '?').toUpperCase()}
+                </Text>
+              </View>
+            )}
           </Surface>
         </View>
 
@@ -895,6 +903,16 @@ const styles = StyleSheet.create({
     width: 92,
     height: 92,
     borderRadius: 46,
+  },
+  avatarFallback: {
+    backgroundColor: '#1A5C35',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  avatarInitial: {
+    fontSize: 36,
+    fontWeight: '700' as const,
+    color: '#fff',
   },
   userInfoSection: {
     alignItems: 'center' as const,
