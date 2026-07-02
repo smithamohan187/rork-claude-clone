@@ -160,12 +160,12 @@ async function getBusinessById(businessId) {
          0
        ) AS active_offer_count,
        COALESCE(
-         (SELECT ROUND(AVG(rating)::numeric, 1) FROM business_ratings
+         (SELECT ROUND(AVG(rating)::numeric, 1) FROM business_reviews
           WHERE business_id = businesses.id),
          0
        ) AS avg_rating,
        COALESCE(
-         (SELECT COUNT(*)::int FROM business_ratings
+         (SELECT COUNT(*)::int FROM business_reviews
           WHERE business_id = businesses.id),
          0
        ) AS rating_count

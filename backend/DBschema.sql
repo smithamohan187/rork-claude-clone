@@ -657,3 +657,15 @@ INSERT INTO subscription_plans (name, price_monthly, max_offers, max_events, can
 );
 CREATE INDEX idx_posts_business_id ON posts(business_id);
 CREATE INDEX idx_posts_is_active ON posts(is_active);
+
+CREATE TABLE business_reviews (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id  UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  profile_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  rating       SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  review_text  TEXT,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(profile_id, business_id)
+);
+CREATE INDEX idx_reviews_business_id ON business_reviews(business_id);

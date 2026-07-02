@@ -15,6 +15,7 @@ const offersRoutes            = require('./modules/offers/offers.routes');
 const eventsRoutes            = require('./modules/events/events.routes');
 const postsRoutes             = require('./modules/posts/posts.routes');
 const subscriptionRoutes      = require('./modules/subscriptions/subscription.routes');
+const reviewsRoutes           = require('./modules/reviews/reviews.routes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/offers',            offersRoutes);
 app.use('/events',            eventsRoutes);
 app.use('/posts',             postsRoutes);
 app.use('/subscriptions',     subscriptionRoutes);
+app.use('/reviews',           reviewsRoutes);
 
 app.use('/api/v1', api);
 

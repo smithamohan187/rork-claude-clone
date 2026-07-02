@@ -269,6 +269,8 @@ export default function BusinessProfileScreen() {
     businessId: id ?? business.id,
     isSubscriber: isSubscribed,
     isOwner: false,
+    initialAverageRating: Number(realBusiness?.avg_rating ?? 0),
+    initialRatingCount: Number(realBusiness?.rating_count ?? 0),
   });
   const [ratingSheetVisible, setRatingSheetVisible] = useState<boolean>(false);
 
@@ -715,6 +717,11 @@ export default function BusinessProfileScreen() {
           ratingCount={rating.ratingCount}
           breakdown={rating.breakdown}
           reviews={rating.reviews}
+          isSubscribed={isSubscribed}
+          isOwner={isOwner}
+          hasRated={rating.hasRated}
+          userRating={rating.userRating}
+          onRatePress={handleOpenRatingSheet}
         />
 
         <View style={styles.rewardTierSection}>
@@ -2064,11 +2071,21 @@ function RatingsReviewsSection({
   ratingCount,
   breakdown,
   reviews,
+  isSubscribed = false,
+  isOwner = false,
+  hasRated = false,
+  userRating = null,
+  onRatePress,
 }: {
   averageRating: number;
   ratingCount: number;
   breakdown: Record<number, number>;
   reviews: ReviewItem[];
+  isSubscribed?: boolean;
+  isOwner?: boolean;
+  hasRated?: boolean;
+  userRating?: number | null;
+  onRatePress?: () => void;
 }) {
   const textReviews = useMemo(
     () => reviews.filter((r) => r.reviewText && r.reviewText.trim().length > 0).slice(0, 5),
@@ -2079,6 +2096,8 @@ function RatingsReviewsSection({
     return Math.max(1, ...values);
   }, [breakdown]);
 
+  const canRate = isSubscribed && !isOwner;
+
   return (
     <View style={styles.ratingsSection} testID="ratings-reviews-section">
       <View style={styles.ratingsHeaderRow}>
@@ -2088,8 +2107,24 @@ function RatingsReviewsSection({
         ) : null}
       </View>
 
+      {canRate && (
+        <TouchableOpacity
+          style={styles.rateCtaBtn}
+          onPress={onRatePress}
+          activeOpacity={0.8}
+          testID="rate-cta-btn"
+        >
+          <StarIcon size={16} color={hasRated ? '#F59E0B' : '#fff'} fill={hasRated ? '#F59E0B' : 'transparent'} />
+          <Text style={styles.rateCtaText}>
+            {hasRated ? `You rated ${userRating} stars — Edit` : 'Rate this business'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {ratingCount === 0 ? (
-        <Text style={styles.reviewsEmpty}>Be the first to rate this business!</Text>
+        <Text style={styles.reviewsEmpty}>
+          {canRate ? 'No ratings yet — be the first!' : 'No ratings yet'}
+        </Text>
       ) : (
         <>
           <View style={styles.ratingsSummaryRow}>
@@ -2630,6 +2665,22 @@ const styles = StyleSheet.create({
   },
   rateBusinessTextRated: {
     color: '#B45309',
+  },
+  rateCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ACCENT,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  rateCtaText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#fff',
   },
   ratingsSection: {
     marginHorizontal: 16,
