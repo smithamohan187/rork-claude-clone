@@ -117,6 +117,13 @@ export default function TabLayout() {
 
   const router = useRouter();
 
+  const handleMembersTabPress = useCallback((e: { preventDefault: () => void }) => {
+    if (isBusiness) {
+      e.preventDefault();
+      router.push('/business-members' as any);
+    }
+  }, [isBusiness, router]);
+
   const handleRewardsTabPress = useCallback((e: { preventDefault: () => void }) => {
     if (isBusiness) {
       e.preventDefault();
@@ -158,7 +165,7 @@ export default function TabLayout() {
   return (
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen name="feed" options={feedOptions} />
-      <Tabs.Screen name="marketplace" options={marketplaceOptions} />
+      <Tabs.Screen name="marketplace" options={marketplaceOptions} listeners={{ tabPress: handleMembersTabPress }} />
       <Tabs.Screen
         name="rewards"
         options={rewardsOptions}

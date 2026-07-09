@@ -2,6 +2,8 @@
 import { apiClient, getAccessToken, API_BASE_URL } from '@/api/client';
 import { Platform } from 'react-native';
 
+export type EventType = 'In Person' | 'Online' | 'Hybrid';
+
 export interface Event {
   id: string;
   type: 'event';
@@ -12,10 +14,14 @@ export interface Event {
   location: string | null;
   starts_at: string;
   ends_at: string | null;
+  event_type: EventType;
   status: 'upcoming' | 'ongoing' | 'past' | 'cancelled';
   effective_status: 'upcoming' | 'past' | 'cancelled';
   created_at: string;
   updated_at: string;
+  like_count?: number;
+  liked_by_me?: boolean;
+  comment_count?: number;
 }
 
 export interface CreateEventPayload {
@@ -24,6 +30,7 @@ export interface CreateEventPayload {
   location?: string | null;
   starts_at: string;
   ends_at?: string | null;
+  event_type?: EventType;
 }
 
 export type UpdateEventPayload = Partial<CreateEventPayload> & { image_url?: string | null };

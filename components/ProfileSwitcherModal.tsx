@@ -142,8 +142,8 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
                   testID="switcher-business"
                 >
                   <View style={styles.avatarWrap}>
-                    {businessProfile.avatarUrl ? (
-                      <Image source={{ uri: businessProfile.avatarUrl }} style={styles.avatar} contentFit="cover" />
+                    {(businessProfile.logoUrl ?? businessProfile.avatarUrl) ? (
+                      <Image source={{ uri: businessProfile.logoUrl ?? businessProfile.avatarUrl }} style={styles.avatar} contentFit="cover" />
                     ) : (
                       <View style={[styles.avatar, styles.avatarFallback, styles.avatarFallbackBusiness]}>
                         <Text style={[styles.avatarInitial, styles.avatarInitialBusiness]}>

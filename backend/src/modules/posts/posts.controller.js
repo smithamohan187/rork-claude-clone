@@ -23,7 +23,7 @@ const getPostByIdHandler = asyncHandler(async (req, res) => {
 });
 
 const getBusinessPostsHandler = asyncHandler(async (req, res) => {
-  const posts = await postsService.getPostsForBusiness(req.params.businessId, req.query.status);
+  const posts = await postsService.getPostsForBusiness(req.params.businessId, req.query.status, req.user.activeProfileId);
   res.json(ok({ posts }));
 });
 

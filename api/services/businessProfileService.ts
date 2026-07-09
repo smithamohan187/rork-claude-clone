@@ -13,6 +13,7 @@ export interface BusinessHour {
 export interface BusinessProfile {
   id: string;
   profile_id: string;
+  owner_user_id: string;
   name: string;
   description: string | null;
   business_type: 'goodwill' | 'incentivised';

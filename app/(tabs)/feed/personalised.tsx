@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   usePersonalisedFeed,
   type FeedItem,
+  type PostFeedItem,
   type SubscribedBusiness,
 } from '@/hooks/usePersonalisedFeed';
 import UnifiedTopHeader from '@/components/feed/UnifiedTopHeader';
@@ -25,8 +26,6 @@ import { EventFeedCard } from '@/components/feed/EventFeedCard';
 import { DiscoveryCard } from '@/components/feed/DiscoveryCard';
 import PostFeedCard from '@/components/feed/PostFeedCard';
 import { BusinessNudgeBanner } from '@/components/feed/BusinessNudgeBanner';
-import { usePosts } from '@/contexts/PostsContext';
-import type { BusinessPost } from '@/mocks/posts';
 import { FeedSkeleton } from '@/components/feed/FeedSkeleton';
 // TODO: restore when business profile check is wired to real API
 // import apiClient from '@/services/apiClient';
@@ -49,7 +48,7 @@ interface FeedRenderItem {
 interface PostRenderItem {
   __kind: 'post';
   key: string;
-  post: BusinessPost;
+  post: PostFeedItem;
 }
 
 type RenderItem = FeedRenderItem | DiscoveryRenderItem | PostRenderItem;
@@ -61,7 +60,9 @@ export default function PersonalisedFeedScreen() {
   const {
     subscribedBusinesses,
     feedItems,
+    postItems,
     discoveryBusinesses,
+    mode,
     userPoints,
     rewardsSummary,
     loading,
@@ -70,8 +71,22 @@ export default function PersonalisedFeedScreen() {
     subscribeToDiscovery,
     toggleBookmark,
     toggleInterested,
+    toggleSavePost,
+    toggleFeedLike,
   } = usePersonalisedFeed();
-  const { posts: businessPosts } = usePosts();
+
+  const recommendationHeading = useMemo<string | null>(() => {
+    switch (mode) {
+      case 'location_recommendations':
+        return 'Popular near you';
+      case 'top_rated':
+        return 'Trending on TouchPoints';
+      case 'category_recommendations':
+        return 'Businesses you may like';
+      default:
+        return null;
+    }
+  }, [mode]);
 
   const listRef = useRef<FlatList<RenderItem>>(null);
   const discoveryOffsetRef = useRef<number>(0);
@@ -122,7 +137,7 @@ export default function PersonalisedFeedScreen() {
   const mergedData = useMemo<RenderItem[]>(() => {
     const out: RenderItem[] = [];
     let discoveryIdx = 0;
-    const postEntries: PostRenderItem[] = businessPosts.map((p) => ({ __kind: 'post' as const, key: `p-${p.id}`, post: p }));
+    const postEntries: PostRenderItem[] = postItems.map((p) => ({ __kind: 'post' as const, key: `p-${p.id}`, post: p }));
     const feedEntries: FeedRenderItem[] = feedItems.map((item) => ({ __kind: 'feed' as const, key: `f-${item.feedType}-${item.id}`, item }));
     const sorted: (FeedRenderItem | PostRenderItem)[] = [...postEntries, ...feedEntries].sort((a, b) => {
       const aTime = a.__kind === 'post' ? new Date(a.post.created_at).getTime() : new Date(a.item.createdAt).getTime();
@@ -191,7 +206,7 @@ export default function PersonalisedFeedScreen() {
       discoveryIdx += 1;
     }
     return out;
-  }, [feedItems, discoveryBusinesses, businessPosts, isSearching, trimmedQuery, isBookmarkedFilter]);
+  }, [feedItems, postItems, discoveryBusinesses, isSearching, trimmedQuery, isBookmarkedFilter]);
 
   const firstDiscoveryIndex = useMemo(() => mergedData.findIndex((r) => r.__kind === 'discovery'), [mergedData]);
 
@@ -237,10 +252,8 @@ export default function PersonalisedFeedScreen() {
   }, [openViewerByEntryKey]);
 
   const handleSubscribe = useCallback((business: SubscribedBusiness) => {
-    const picked = subscribeToDiscovery(business.id);
-    if (picked) {
-      showToast(`✅ Subscribed! You'll now earn points with ${picked.name}`);
-    }
+    showToast(`✅ Subscribed! You'll now earn points with ${business.name}`);
+    subscribeToDiscovery(business.id);
   }, [subscribeToDiscovery, showToast]);
 
   const scrollToDiscovery = useCallback(() => {
@@ -298,10 +311,13 @@ const header = useMemo(() => {
         {feedItems.length > 0 ? (
           <Text style={styles.sectionLabel}>My News Feed</Text>
         ) : null}
+        {feedItems.length === 0 && recommendationHeading && discoveryBusinesses.length > 0 ? (
+          <Text style={styles.sectionLabel}>{recommendationHeading}</Text>
+        ) : null}
         <FeedFilterChips selected={selectedChip} onSelect={setSelectedChip} />
       </View>
     );
-  }, [feedItems.length, selectedChip, isSearching, router, scrollToDiscovery, showBusinessNudge, handleDismissNudge, handleSetUpBusiness]);
+  }, [feedItems.length, recommendationHeading, discoveryBusinesses.length, selectedChip, isSearching, router, scrollToDiscovery, showBusinessNudge, handleDismissNudge, handleSetUpBusiness]);
 
   const listFooter = useMemo(() => null, [isSearching]);
 
@@ -317,6 +333,12 @@ const header = useMemo(() => {
           activePanel={getCardPanel(cardId)}
           onOpenPanel={(p) => setCardPanel(cardId)(p)}
           currentUser={CURRENT_USER}
+          isSaved={item.post.is_saved}
+          onToggleSave={() => toggleSavePost(postId)}
+          likeCount={item.post.like_count}
+          likedByMe={item.post.liked_by_me}
+          isOwner={item.post.is_owner}
+          onToggleLike={() => toggleFeedLike('post', postId)}
         />
       );
     }
@@ -342,6 +364,7 @@ const header = useMemo(() => {
           offer={f}
           onPress={() => navigateToOffer(f.id)}
           onToggleBookmark={() => toggleBookmark(f.id)}
+          onToggleLike={(id) => toggleFeedLike('offer', id)}
           onShowToast={showToast}
           activePanel={getCardPanel(cardId)}
           onOpenPanel={(p) => setCardPanel(cardId)(p)}
@@ -354,13 +377,14 @@ const header = useMemo(() => {
         event={f}
         onPress={() => navigateToEvent(f.id)}
         onToggleInterested={() => toggleInterested(f.id)}
+        onToggleLike={(id) => toggleFeedLike('event', id)}
         onShowToast={showToast}
         activePanel={getCardPanel(cardId)}
         onOpenPanel={(p) => setCardPanel(cardId)(p)}
         currentUser={CURRENT_USER}
       />
     );
-  }, [handleSubscribe, navigateToBusiness, navigateToOffer, navigateToEvent, navigateToPostViewer, toggleBookmark, toggleInterested, showToast, getCardPanel, setCardPanel]);
+  }, [handleSubscribe, navigateToBusiness, navigateToOffer, navigateToEvent, navigateToPostViewer, toggleBookmark, toggleInterested, toggleSavePost, toggleFeedLike, showToast, getCardPanel, setCardPanel]);
 
   const emptyComponent = useMemo(() => {
     if (loading) return null;

@@ -19,7 +19,7 @@ import { X, ImagePlus, Calendar, MapPin, Trash2, ChevronLeft } from 'lucide-reac
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useEvents } from '@/hooks/useEvents';
-import { uploadEventImage } from '@/api/services/eventsService';
+import { uploadEventImage, type EventType } from '@/api/services/eventsService';
 
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
@@ -61,6 +61,7 @@ export default function CreateEventScreen() {
   const [location, setLocation]       = useState('');
   const [startsAt, setStartsAt]       = useState<Date | null>(null);
   const [endsAt, setEndsAt]           = useState<Date | null>(null);
+  const [eventType, setEventType]     = useState<EventType>('In Person');
   const [imageUri, setImageUri]       = useState<string | null>(null);
   const [errors, setErrors]           = useState<FormErrors>({});
   const [publishing, setPublishing]   = useState(false);
@@ -109,6 +110,7 @@ export default function CreateEventScreen() {
         location: location.trim() || null,
         starts_at: startsAt!.toISOString(),
         ends_at: endsAt ? endsAt.toISOString() : null,
+        event_type: eventType,
       });
       if (imageUri) await uploadEventImage(event.id, imageUri);
       router.back();
@@ -202,6 +204,26 @@ export default function CreateEventScreen() {
               placeholder="Address or venue name"
               theme={{ colors: { background: '#fff' } }}
             />
+          </View>
+
+          {/* Event Type */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Event Type</Text>
+            <View style={styles.segmentRow}>
+              {(['In Person', 'Online', 'Hybrid'] as EventType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.segmentBtn, eventType === type && styles.segmentBtnActive]}
+                  onPress={() => setEventType(type)}
+                  activeOpacity={0.7}
+                  testID={`event-type-${type.replace(' ', '-').toLowerCase()}`}
+                >
+                  <Text style={[styles.segmentBtnText, eventType === type && styles.segmentBtnTextActive]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Event Date */}
@@ -402,6 +424,32 @@ const styles = StyleSheet.create({
   },
   dateBtnPlaceholder: {
     color: TEXT_MUTED,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segmentBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  segmentBtnActive: {
+    borderColor: PURPLE,
+    backgroundColor: '#E8F5EE',
+  },
+  segmentBtnText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: TEXT_MUTED,
+  },
+  segmentBtnTextActive: {
+    color: PURPLE,
+    fontWeight: '700' as const,
   },
   clearDateBtn: {
     flexDirection: 'row',

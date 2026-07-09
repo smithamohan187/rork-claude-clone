@@ -128,6 +128,8 @@ export function useCreateBusiness() {
         setCity(biz.city ?? '');
         setInhouseReferral(biz.inhouse_referral ?? false);
         setInhouseReferralUrl(biz.inhouse_referral_url ?? '');
+        setLogoUri(biz.logo_url ?? null);
+        setCoverUri(biz.cover_url ?? null);
         if (biz.hours && biz.hours.length > 0) setHours(biz.hours);
       })
       .catch(() => {});

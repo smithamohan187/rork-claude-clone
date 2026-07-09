@@ -28,8 +28,8 @@ const upload = multer({ storage });
 
 const router = Router();
 
-// Public business-scoped listing — must come before /:id
-router.get('/business/:businessId', getBusinessEventsHandler);
+// Must come before /:id
+router.get('/business/:businessId', authenticate, getBusinessEventsHandler);
 
 // Protected list — must come before /:id
 router.get('/', authenticate, listMyEventsHandler);

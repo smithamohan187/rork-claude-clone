@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -19,11 +19,11 @@ import { useRouter } from 'expo-router';
 import { usePosts } from '@/contexts/PostsContext';
 import { formatRelativeTime, type BusinessPost } from '@/mocks/posts';
 import { FeedActionBar } from '@/components/feed/FeedActionBar';
-import { CommentSection } from '@/components/feed/CommentSection';
+import LikersSheet from '@/components/feed/LikersSheet';
+import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferralPickerModal, type ReferralPickerSendResult } from '@/components/ReferralPickerModal';
 import type { OfferSharePayload } from '@/contexts/ReferralChatContext';
-import type { CommentItem } from '@/hooks/useComments';
 
 const PURPLE = '#1A5C35';
 
@@ -37,24 +37,6 @@ function easeNext() {
   }
 }
 
-const AVATAR_PALETTE = ['#1A5C35', '#FF7043', '#0F6E56', '#B47700', '#B03A3A', '#00B246'];
-
-function colorForName(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-}
-
-function initialsForName(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
-
 interface Props {
   post: BusinessPost;
   showOwnerControls?: boolean;
@@ -64,6 +46,13 @@ interface Props {
   onOpenPanel?: (panel: 'comments' | 'share' | null) => void;
   currentUser?: { name: string; initials: string; color: string };
   onImagePress?: () => void;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  likeCount?: number;
+  likedByMe?: boolean;
+  isOwner?: boolean;
+  onToggleLike?: () => void;
+  commentCount?: number;
 }
 
 const DEFAULT_USER = { name: 'You', initials: 'YO', color: '#1A5C35' };
@@ -77,47 +66,42 @@ export default function PostFeedCard({
   onOpenPanel,
   currentUser = DEFAULT_USER,
   onImagePress,
+  isSaved,
+  onToggleSave,
+  likeCount,
+  likedByMe,
+  isOwner = false,
+  onToggleLike,
+  commentCount,
 }: Props) {
   const router = useRouter();
-  const { likedIds, toggleLike, addComment, deletePost } = usePosts();
+  const { likedIds, toggleLike: contextToggleLike, deletePost } = usePosts();
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
   const [referOpen, setReferOpen] = useState<boolean>(false);
-  const [saved, setSaved] = useState<boolean>(false);
+  const [likersOpen, setLikersOpen] = useState<boolean>(false);
+  const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
+  const [localSaved, setLocalSaved] = useState<boolean>(false);
+  const saved = isSaved !== undefined ? isSaved : localSaved;
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
-  const [commentText, setCommentText] = useState<string>('');
-  const [submitting, setSubmitting] = useState<boolean>(false);
   // Local fallback when not controlled by parent
-  const [localPanel, setLocalPanel] = useState<'comments' | 'share' | null>(null);
+  const [localPanel, setLocalPanel] = useState<'share' | null>(null);
   const panel = onOpenPanel ? activePanel : localPanel;
 
   const setPanel = useCallback((p: 'comments' | 'share' | null) => {
+    if (p === 'comments') { setCommentSheetOpen(true); return; }
     if (onOpenPanel) onOpenPanel(p);
-    else setLocalPanel(p);
+    else setLocalPanel(p as 'share' | null);
   }, [onOpenPanel]);
 
-  const liked = !!likedIds[post.id];
-
-  const commentItems = useMemo<CommentItem[]>(
-    () =>
-      post.comments.map((c) => ({
-        id: c.id,
-        author: c.user,
-        authorInitials: initialsForName(c.user),
-        avatarColor: colorForName(c.user),
-        body: c.text,
-        createdAt: c.time,
-        likeCount: 0,
-        isBusinessReply: false,
-        parentId: null,
-      })),
-    [post.comments],
-  );
+  // Use props-driven like state when available, fall back to context
+  const liked = onToggleLike !== undefined ? (likedByMe ?? false) : !!likedIds[post.id];
+  const resolvedLikeCount = onToggleLike !== undefined ? (likeCount ?? post.likes) : post.likes;
+  const handleLike = onToggleLike ?? (() => contextToggleLike(post.id));
 
   const handleToggleComments = useCallback(() => {
-    easeNext();
-    setPanel(panel === 'comments' ? null : 'comments');
-  }, [panel, setPanel]);
+    setCommentSheetOpen(true);
+  }, []);
 
   const handleToggleShare = useCallback(() => {
     const settings = getBusinessReferralSettings(post.business_id);
@@ -154,25 +138,17 @@ export default function PostFeedCard({
   );
 
   const handleSave = useCallback(() => {
-    setSaved((prev) => {
-      const next = !prev;
-      onShowToast?.(next ? 'Saved to bookmarks' : 'Removed from bookmarks');
-      return next;
-    });
-  }, [onShowToast]);
-
-  const handleSubmitComment = useCallback(async () => {
-    const body = commentText.trim();
-    if (!body) return;
-    setSubmitting(true);
-    addComment(post.id, body);
-    setCommentText('');
-    try {
-      await new Promise((r) => setTimeout(r, 200));
-    } finally {
-      setSubmitting(false);
+    if (onToggleSave) {
+      onToggleSave();
+      onShowToast?.(saved ? 'Removed from bookmarks' : 'Saved to bookmarks');
+    } else {
+      setLocalSaved((prev) => {
+        const next = !prev;
+        onShowToast?.(next ? 'Saved to bookmarks' : 'Removed from bookmarks');
+        return next;
+      });
     }
-  }, [commentText, addComment, post.id]);
+  }, [onShowToast, onToggleSave, saved]);
 
   const handleEdit = useCallback(() => {
     setMenuOpen(false);
@@ -192,7 +168,6 @@ export default function PostFeedCard({
 
   const _router = router;
 
-  const showComments = panel === 'comments';
   const showShare = panel === 'share';
 
   return (
@@ -237,7 +212,7 @@ export default function PostFeedCard({
             hitSlop={6}
             activeOpacity={0.7}
           >
-            <Bookmark size={15} color={saved ? '#1A5C35' : '#fff'} fill={saved ? '#1A5C35' : 'transparent'} />
+            <Bookmark size={15} color={saved ? '#E53935' : '#fff'} fill={saved ? '#E53935' : 'transparent'} />
           </TouchableOpacity>
           {saveTooltip ? (
             <View style={[styles.saveTooltip, { top: 40, right: 0 }]} pointerEvents="none">
@@ -245,32 +220,50 @@ export default function PostFeedCard({
             </View>
           ) : null}
         </TouchableOpacity>
-      ) : null}
+      ) : (
+        <TouchableOpacity
+          style={styles.saveRow}
+          onPress={handleSave}
+          hitSlop={6}
+          activeOpacity={0.7}
+        >
+          <Bookmark size={14} color={saved ? '#E53935' : '#888780'} fill={saved ? '#E53935' : 'transparent'} />
+          <Text style={[styles.saveRowText, saved && styles.saveRowTextActive]}>
+            {saved ? 'Saved' : 'Save'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Engagement row — same as Offer/Event */}
       <FeedActionBar
-        reactionCount={post.likes}
+        reactionCount={resolvedLikeCount}
         hasLiked={liked}
-        commentCount={post.comments.length}
-        showComments={showComments}
+        isOwner={isOwner}
+        commentCount={commentCount ?? post.comments.length}
+        showComments={commentSheetOpen}
         showShare={showShare}
-        onLike={() => toggleLike(post.id)}
+        onLike={handleLike}
+        onOpenLikers={() => setLikersOpen(true)}
         onComment={handleToggleComments}
         onShare={handleToggleShare}
         onRefer={handleRefer}
       />
 
-      {showComments ? (
-        <CommentSection
-          comments={commentItems}
-          commentText={commentText}
-          setCommentText={setCommentText}
-          submitting={submitting}
-          onSubmit={handleSubmitComment}
-          currentUserInitials={currentUser.initials}
-          currentUserColor={currentUser.color}
-        />
-      ) : null}
+      <LikersSheet
+        visible={likersOpen}
+        contentType="post"
+        contentId={post.id}
+        likeCount={resolvedLikeCount}
+        onClose={() => setLikersOpen(false)}
+      />
+
+      <CommentSheet
+        visible={commentSheetOpen}
+        contentType="post"
+        contentId={post.id}
+        initialCommentCount={commentCount ?? post.comments.length}
+        onClose={() => setCommentSheetOpen(false)}
+      />
 
       <SharePostSheet
         visible={showShare}
@@ -531,6 +524,23 @@ const styles = StyleSheet.create({
   saveTooltipText: {
     color: '#fff',
     fontSize: 11,
+    fontWeight: '600',
+  },
+  saveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    marginTop: 4,
+  },
+  saveRowText: {
+    fontSize: 12,
+    color: '#888780',
+  },
+  saveRowTextActive: {
+    color: '#1A5C35',
     fontWeight: '600',
   },
 });

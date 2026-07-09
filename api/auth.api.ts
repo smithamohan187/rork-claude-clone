@@ -41,6 +41,7 @@ export type BackendProfile = {
   profile_type:  'personal' | 'business';
   display_name:  string;
   avatar_url:    string | null;
+  logo_url?:     string | null;
 };
 
 export type SessionResponse = {

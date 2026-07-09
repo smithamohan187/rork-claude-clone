@@ -53,7 +53,9 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
     onPress(profile);
   }, [profile, onPress]);
 
-  const resolved = resolveAvatarUrl(profile.avatarUrl);
+  const resolved = resolveAvatarUrl(
+    profile.type === 'business' && profile.logoUrl ? profile.logoUrl : profile.avatarUrl
+  );
   const initial = (profile.displayName?.[0] ?? '?').toUpperCase();
 
   return (

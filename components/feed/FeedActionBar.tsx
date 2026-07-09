@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { TouchableRipple } from 'react-native-paper';
-import { ThumbsUp, MessageCircle, Share2, UserPlus } from 'lucide-react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MessageCircle, Share2, UserPlus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 interface Props {
   reactionCount: number;
   hasLiked: boolean;
+  isOwner: boolean;
   commentCount: number;
   showComments: boolean;
   showShare: boolean;
   onLike: () => void;
+  onOpenLikers: () => void;
   onComment: () => void;
   onShare: () => void;
   onRefer?: () => void;
@@ -18,14 +21,17 @@ interface Props {
 
 const PRIMARY = '#1A5C35';
 const MUTED = '#1A5C35';
+const LIKED_COLOR = '#E53935';
 
 export const FeedActionBar = React.memo(function FeedActionBar({
   reactionCount,
   hasLiked,
+  isOwner,
   commentCount,
   showComments,
   showShare,
   onLike,
+  onOpenLikers,
   onComment,
   onShare,
   onRefer,
@@ -44,31 +50,37 @@ export const FeedActionBar = React.memo(function FeedActionBar({
   }, [hasLiked, scale]);
 
   const handleLike = useCallback(() => {
+    if (isOwner) return;
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
     onLike();
-  }, [onLike]);
+  }, [onLike, isOwner]);
+
+  const handleLikePress = isOwner ? onOpenLikers : handleLike;
 
   return (
     <View style={styles.bar} testID="feed-action-bar">
       <TouchableRipple
-        onPress={handleLike}
+        onPress={handleLikePress}
         style={styles.btn}
         borderless
         rippleColor="rgba(83,52,183,0.08)"
-        accessibilityLabel="Like"
+        accessibilityLabel={isOwner ? 'View likes' : 'Like'}
       >
         <View style={styles.inner}>
           <Animated.View style={{ transform: [{ scale }] }}>
-            <ThumbsUp
+            <MaterialCommunityIcons
+              name={hasLiked ? 'heart' : 'heart-outline'}
               size={18}
-              color={hasLiked ? PRIMARY : MUTED}
-              fill={hasLiked ? PRIMARY : 'transparent'}
+              color={hasLiked ? LIKED_COLOR : PRIMARY}
             />
           </Animated.View>
-          <Text style={[styles.label, hasLiked && styles.labelActive]}>
-            {reactionCount > 0 ? `${reactionCount}` : 'Like'}
+          <Text
+            style={[styles.label, hasLiked && styles.labelLiked]}
+            onPress={reactionCount > 0 ? onOpenLikers : undefined}
+          >
+            {reactionCount > 0 ? `${reactionCount}` : (isOwner ? 'Likes' : 'Like')}
           </Text>
         </View>
       </TouchableRipple>
@@ -138,8 +150,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: MUTED,
   },
-  labelActive: {
-    color: PRIMARY,
+  labelLiked: {
+    color: LIKED_COLOR,
   },
   labelPrimary: {
     color: PRIMARY,

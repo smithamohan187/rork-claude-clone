@@ -1,41 +1,181 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  Pressable,
-  ScrollView,
-  TextInput,
+  ActivityIndicator,
+  Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
   TouchableOpacity,
+  View,
 } from 'react-native';
-import { X, Send } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { X, Send, CornerDownRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { PostComment } from '@/mocks/posts';
+import { useComments } from '@/hooks/useComments';
+import { useAuth } from '@/contexts/AuthContext';
+import type { Comment, ContentType } from '@/api/services/commentsService';
 
-const PURPLE = '#1A5C35';
+const GREEN = '#1A5C35';
 
 interface Props {
   visible: boolean;
-  comments: PostComment[];
+  contentType: ContentType;
+  contentId: string;
+  initialCommentCount?: number;
   onClose: () => void;
-  onSend: (text: string) => void;
 }
 
-export default function CommentSheet({ visible, comments, onClose, onSend }: Props) {
-  const [input, setInput] = useState<string>('');
-  const scrollRef = useRef<ScrollView | null>(null);
-  const insets = useSafeAreaInsets();
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return `${Math.floor(d / 7)}w`;
+}
 
-  const handleSend = useCallback(() => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    onSend(trimmed);
-    setInput('');
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-  }, [input, onSend]);
+function Avatar({ name, url, size = 34 }: { name: string | null; url: string | null; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  const initial = name ? name.charAt(0).toUpperCase() : '?';
+  if (url && !failed) {
+    return (
+      <Image
+        source={{ uri: url }}
+        style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+        onError={() => setFailed(true)}
+        contentFit="cover"
+      />
+    );
+  }
+  return (
+    <View style={[styles.avatar, styles.avatarFallback, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Text style={[styles.avatarInitial, { fontSize: size * 0.38 }]}>{initial}</Text>
+    </View>
+  );
+}
+
+interface CommentRowProps {
+  comment: Comment;
+  currentProfileId: string | null;
+  onReply: (comment: Comment) => void;
+  onDelete: (commentId: string) => void;
+  onLoadReplies: (commentId: string) => void;
+  isReply?: boolean;
+}
+
+function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplies, isReply = false }: CommentRowProps) {
+  const canDelete = !comment.is_deleted && currentProfileId && comment.profile_id === currentProfileId;
+
+  const handleLongPress = useCallback(() => {
+    if (!canDelete) return;
+    Alert.alert('Delete comment', 'Remove this comment?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => onDelete(comment.id) },
+    ]);
+  }, [canDelete, comment.id, onDelete]);
+
+  const shownReplies = comment.replies ?? [];
+  const hiddenCount = (comment.reply_count ?? 0) - shownReplies.length;
+
+  return (
+    <View style={isReply ? styles.replyWrapper : undefined}>
+      <Pressable
+        onLongPress={handleLongPress}
+        style={({ pressed }) => [styles.commentRow, pressed && styles.commentRowPressed]}
+      >
+        <Avatar name={comment.display_name} url={comment.avatar_url} size={isReply ? 28 : 34} />
+        <View style={styles.commentBody}>
+          {!comment.is_deleted && (
+            <View style={styles.commentMeta}>
+              <Text style={styles.commentName}>{comment.display_name ?? 'User'}</Text>
+              <Text style={styles.commentTime}>{relativeTime(comment.created_at)}</Text>
+            </View>
+          )}
+          <Text style={[styles.commentText, comment.is_deleted && styles.commentDeleted]}>
+            {comment.body}
+          </Text>
+          {!comment.is_deleted && !isReply && (
+            <TouchableOpacity onPress={() => onReply(comment)} hitSlop={8} style={styles.replyBtn}>
+              <CornerDownRight size={12} color="#9aa0a6" />
+              <Text style={styles.replyBtnText}>Reply</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Pressable>
+
+      {shownReplies.map((r) => (
+        <CommentRow
+          key={r.id}
+          comment={r}
+          currentProfileId={currentProfileId}
+          onReply={onReply}
+          onDelete={onDelete}
+          onLoadReplies={onLoadReplies}
+          isReply
+        />
+      ))}
+
+      {hiddenCount > 0 && (
+        <TouchableOpacity onPress={() => onLoadReplies(comment.id)} style={styles.loadRepliesBtn}>
+          <Text style={styles.loadRepliesText}>View {hiddenCount} more {hiddenCount === 1 ? 'reply' : 'replies'}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+export default function CommentSheet({ visible, contentType, contentId, initialCommentCount = 0, onClose }: Props) {
+  const insets = useSafeAreaInsets();
+  const { activeProfileId } = useAuth();
+  const inputRef = useRef<TextInput>(null);
+  const [inputText, setInputText] = useState('');
+  const [replyTarget, setReplyTarget] = useState<Comment | null>(null);
+  const [sending, setSending] = useState(false);
+
+  const { comments, commentCount, loading, hasMore, loadMore, submitComment, removeComment, loadReplies } =
+    useComments({ contentType, contentId, enabled: visible });
+
+  useEffect(() => {
+    if (!visible) {
+      setInputText('');
+      setReplyTarget(null);
+    }
+  }, [visible]);
+
+  const handleReply = useCallback((comment: Comment) => {
+    setReplyTarget(comment);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  const handleDismissReply = useCallback(() => {
+    setReplyTarget(null);
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    const body = inputText.trim();
+    if (!body || sending) return;
+    setSending(true);
+    const parent = replyTarget?.id;
+    setInputText('');
+    setReplyTarget(null);
+    try {
+      await submitComment(body, parent);
+    } catch {
+      // error already handled by hook
+    } finally {
+      setSending(false);
+    }
+  }, [inputText, sending, replyTarget, submitComment]);
+
+  const displayCount = Math.max(commentCount, initialCommentCount);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -45,61 +185,80 @@ export default function CommentSheet({ visible, comments, onClose, onSend }: Pro
         style={styles.kav}
         pointerEvents="box-none"
       >
-        <View style={styles.sheet} testID="comment-sheet">
+        <View style={styles.sheet}>
           <View style={styles.handle} />
+
           <View style={styles.header}>
-            <Text style={styles.title}>Comments</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={10}>
-              <X size={22} color="#1A5C35" />
+            <Text style={styles.headerTitle}>
+              {displayCount > 0 ? `${displayCount} Comment${displayCount === 1 ? '' : 's'}` : 'Comments'}
+            </Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+              <X size={22} color={GREEN} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            ref={scrollRef}
+          <FlatList
+            data={comments}
+            keyExtractor={(c) => c.id}
             style={styles.list}
             contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {comments.length === 0 ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>Be the first to comment</Text>
-              </View>
-            ) : (
-              comments.map((c) => (
-                <View key={c.id} style={styles.row}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{c.user.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.bodyCol}>
-                    <View style={styles.bodyHead}>
-                      <Text style={styles.user}>{c.user}</Text>
-                      <Text style={styles.time}>{c.time}</Text>
-                    </View>
-                    <Text style={styles.text}>{c.text}</Text>
-                  </View>
-                </View>
-              ))
+            renderItem={({ item }) => (
+              <CommentRow
+                comment={item}
+                currentProfileId={activeProfileId ?? null}
+                onReply={handleReply}
+                onDelete={removeComment}
+                onLoadReplies={loadReplies}
+              />
             )}
-          </ScrollView>
+            ListEmptyComponent={
+              loading ? null : (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>Be the first to comment</Text>
+                </View>
+              )
+            }
+            ListFooterComponent={
+              loading ? <ActivityIndicator size="small" color={GREEN} style={styles.loader} /> :
+              hasMore && comments.length > 0 ? (
+                <TouchableOpacity onPress={loadMore} style={styles.loadMoreBtn}>
+                  <Text style={styles.loadMoreText}>Load more comments</Text>
+                </TouchableOpacity>
+              ) : null
+            }
+            showsVerticalScrollIndicator={false}
+          />
 
-          <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder="Write a comment…"
-              placeholderTextColor="#9aa0a6"
-              style={styles.input}
-              multiline
-              testID="comment-input"
-            />
-            <TouchableOpacity
-              onPress={handleSend}
-              style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
-              disabled={!input.trim()}
-              testID="comment-send"
-            >
-              <Send size={18} color="#fff" />
-            </TouchableOpacity>
+          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            {replyTarget && (
+              <View style={styles.replyBanner}>
+                <Text style={styles.replyBannerText} numberOfLines={1}>
+                  Replying to <Text style={styles.replyBannerName}>{replyTarget.display_name ?? 'user'}</Text>
+                </Text>
+                <TouchableOpacity onPress={handleDismissReply} hitSlop={8}>
+                  <X size={14} color="#9aa0a6" />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.inputRow}>
+              <TextInput
+                ref={inputRef}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder={replyTarget ? `Reply to ${replyTarget.display_name ?? 'user'}…` : 'Write a comment…'}
+                placeholderTextColor="#9aa0a6"
+                style={styles.input}
+                multiline
+                maxLength={2000}
+              />
+              <TouchableOpacity
+                onPress={handleSend}
+                disabled={!inputText.trim() || sending}
+                style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
+              >
+                <Send size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -121,7 +280,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingTop: 8,
-    maxHeight: '80%',
+    maxHeight: '82%',
     minHeight: '50%',
   },
   handle: {
@@ -141,10 +300,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#EEE',
   },
-  title: {
+  headerTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1A5C35',
+    color: GREEN,
   },
   closeBtn: {
     width: 32,
@@ -153,7 +312,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   list: {
-    flexGrow: 0,
+    flexGrow: 1,
+    flexShrink: 1,
   },
   listContent: {
     padding: 16,
@@ -164,58 +324,120 @@ const styles = StyleSheet.create({
     paddingVertical: 36,
   },
   emptyText: {
-    color: '#1A5C35',
+    color: '#9aa0a6',
     fontSize: 14,
   },
-  row: {
+  loader: {
+    marginVertical: 16,
+  },
+  loadMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadMoreText: {
+    color: GREEN,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  commentRow: {
     flexDirection: 'row',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#F1EEF7',
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EDE9F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
+  commentRowPressed: {
+    backgroundColor: '#F9F9F9',
   },
-  avatarText: {
-    color: PURPLE,
-    fontWeight: '700',
-  },
-  bodyCol: {
+  commentBody: {
     flex: 1,
+    marginLeft: 10,
   },
-  bodyHead: {
+  commentMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 2,
   },
-  user: {
-    fontSize: 14,
+  commentName: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#1A5C35',
+    color: GREEN,
   },
-  time: {
+  commentTime: {
     fontSize: 11,
     color: '#9aa0a6',
   },
-  text: {
+  commentText: {
     fontSize: 14,
     color: '#222',
-    marginTop: 2,
+    lineHeight: 20,
+  },
+  commentDeleted: {
+    color: '#9aa0a6',
+    fontStyle: 'italic',
+  },
+  replyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  replyBtnText: {
+    fontSize: 12,
+    color: '#9aa0a6',
+    fontWeight: '600',
+  },
+  replyWrapper: {
+    marginLeft: 44,
+  },
+  loadRepliesBtn: {
+    marginLeft: 44,
+    paddingVertical: 6,
+  },
+  loadRepliesText: {
+    fontSize: 12,
+    color: GREEN,
+    fontWeight: '600',
+  },
+  avatar: {
+    backgroundColor: '#EDE9F6',
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    color: GREEN,
+    fontWeight: '700',
+  },
+  inputArea: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EEE',
+    backgroundColor: '#fff',
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  replyBannerText: {
+    fontSize: 12,
+    color: '#9aa0a6',
+    flex: 1,
+    marginRight: 8,
+  },
+  replyBannerName: {
+    fontWeight: '700',
+    color: GREEN,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#EEE',
-    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
@@ -226,14 +448,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 10 : 6,
     fontSize: 14,
-    color: '#1A5C35',
+    color: '#1A1A1A',
     marginRight: 8,
   },
   sendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: PURPLE,
+    backgroundColor: GREEN,
     alignItems: 'center',
     justifyContent: 'center',
   },

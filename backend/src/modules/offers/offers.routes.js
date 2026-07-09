@@ -31,8 +31,7 @@ const upload = multer({ storage });
 
 const router = Router();
 
-// Public routes — no auth required
-router.get('/business/:businessId', getBusinessOffersHandler);
+router.get('/business/:businessId', authenticate, getBusinessOffersHandler);
 
 // /my must come before /:id to avoid being captured as a param
 router.get('/my', authenticate, listMyOffersHandler);

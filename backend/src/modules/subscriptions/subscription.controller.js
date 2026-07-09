@@ -39,4 +39,32 @@ const statusHandler = asyncHandler(async (req, res) => {
   res.json(ok(result));
 });
 
-module.exports = { subscribeHandler, unsubscribeHandler, statusHandler };
+const myBusinessesHandler = asyncHandler(async (req, res) => {
+  const result = await subscriptionService.getSubscribedBusinesses(req.user.userId);
+  res.json(ok(result));
+});
+
+const membersHandler = asyncHandler(async (req, res) => {
+  const { business_id } = req.query; // optional — service derives from JWT when absent
+  try {
+    const result = await subscriptionService.getBusinessMembers(req.user.userId, business_id ?? null);
+    res.json(ok(result));
+  } catch (err) {
+    if (err.status === 403) return res.status(403).json(fail(err.message));
+    throw err;
+  }
+});
+
+const removeMemberHandler = asyncHandler(async (req, res) => {
+  const { business_id, member_profile_id } = req.body; // business_id optional
+  if (!member_profile_id) return res.status(400).json(fail('member_profile_id is required'));
+  try {
+    const result = await subscriptionService.removeBusinessMember(req.user.userId, business_id ?? null, member_profile_id);
+    res.json(ok(result));
+  } catch (err) {
+    if (err.status === 403) return res.status(403).json(fail(err.message));
+    throw err;
+  }
+});
+
+module.exports = { subscribeHandler, unsubscribeHandler, statusHandler, myBusinessesHandler, membersHandler, removeMemberHandler };

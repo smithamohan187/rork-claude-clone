@@ -16,6 +16,13 @@ const eventsRoutes            = require('./modules/events/events.routes');
 const postsRoutes             = require('./modules/posts/posts.routes');
 const subscriptionRoutes      = require('./modules/subscriptions/subscription.routes');
 const reviewsRoutes           = require('./modules/reviews/reviews.routes');
+const savedBusinessRoutes     = require('./modules/savedBusinesses/savedBusiness.routes');
+const savedOfferRoutes        = require('./modules/savedOffers/savedOffer.routes');
+const savedEventRoutes        = require('./modules/savedEvents/savedEvent.routes');
+const savedPostRoutes         = require('./modules/savedPosts/savedPost.routes');
+const feedRoutes              = require('./modules/feed/feed.routes');
+const likesRoutes             = require('./modules/likes/likes.routes');
+const commentsRoutes          = require('./modules/comments/comments.routes');
 
 const app = express();
 
@@ -47,6 +54,13 @@ app.use('/events',            eventsRoutes);
 app.use('/posts',             postsRoutes);
 app.use('/subscriptions',     subscriptionRoutes);
 app.use('/reviews',           reviewsRoutes);
+app.use('/saved-businesses',  savedBusinessRoutes);
+app.use('/saved-offers',      savedOfferRoutes);
+app.use('/saved-events',      savedEventRoutes);
+app.use('/saved-posts',       savedPostRoutes);
+app.use('/feed',              feedRoutes);
+app.use('/likes',             likesRoutes);
+app.use('/comments',          commentsRoutes);
 
 app.use('/api/v1', api);
 

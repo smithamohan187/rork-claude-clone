@@ -32,7 +32,7 @@ async function toggleStatus(userId, offerId, newStatus) {
 async function listMyOffers(userId, filter) {
   const businessId = await offersModel.getBusinessIdByUserId(userId);
   if (!businessId) return [];
-  return offersModel.getOffersByBusinessId(businessId, filter);
+  return offersModel.getOffersByBusinessId(businessId, filter, null);
 }
 
 async function getOffer(offerId) {
@@ -51,8 +51,8 @@ async function getActiveOffersForBusiness(businessId) {
   return offersModel.getActiveOffersByBusinessId(businessId);
 }
 
-async function getBusinessOffers(businessId, filter) {
-  return offersModel.getOffersByBusinessId(businessId, filter);
+async function getBusinessOffers(businessId, filter, profileId) {
+  return offersModel.getOffersByBusinessId(businessId, filter, profileId);
 }
 
 async function uploadOfferImage(userId, offerId, imageUrl) {

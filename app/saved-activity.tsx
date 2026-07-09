@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Button, Snackbar, Divider } from 'react-native-paper';
@@ -19,20 +21,17 @@ import {
   MapPin,
   Check,
 } from 'lucide-react-native';
+import { useSavedBusinesses } from '@/hooks/useSavedBusinesses';
+import type { SavedBusinessItem } from '@/api/services/savedBusinessService';
+import { useSavedOffers } from '@/hooks/useSavedOffers';
+import type { SavedOfferItem } from '@/api/services/savedOfferService';
+import { useSavedEvents } from '@/hooks/useSavedEvents';
+import type { SavedEventItem } from '@/api/services/savedEventService';
+import { useSavedPosts } from '@/hooks/useSavedPosts';
+import type { SavedPostItem } from '@/api/services/savedPostService';
+import { FileText } from 'lucide-react-native';
 
-type TabKey = 'favourites' | 'offers' | 'events';
-
-interface FavouriteBusiness {
-  id: string;
-  name: string;
-  category: string;
-  city: string;
-  initials: string;
-  color: string;
-  isSubscribed: boolean;
-  welcomePoints: number;
-  subscriberCount: string;
-}
+type TabKey = 'favourites' | 'offers' | 'events' | 'posts';
 
 interface SavedOffer {
   id: string;
@@ -59,77 +58,67 @@ interface JoinedEvent {
   status: 'upcoming' | 'past';
 }
 
-const INITIAL_FAVOURITES: FavouriteBusiness[] = [
-  {
-    id: '1',
-    name: "Richard's Pastry",
-    category: 'Food & Bakery',
-    city: 'Kochi',
-    initials: 'RP',
-    color: '#1A5C35',
-    isSubscribed: true,
-    welcomePoints: 50,
-    subscriberCount: '1.2k',
-  },
-  {
-    id: '2',
-    name: 'Kochi Fitness Hub',
-    category: 'Fitness',
-    city: 'Kochi',
-    initials: 'KF',
-    color: '#0F6E56',
-    isSubscribed: false,
-    welcomePoints: 30,
-    subscriberCount: '843',
-  },
-  {
-    id: '3',
-    name: 'The Beauty Lounge',
-    category: 'Beauty & Wellness',
-    city: 'Ernakulam',
-    initials: 'BL',
-    color: '#993556',
-    isSubscribed: false,
-    welcomePoints: 75,
-    subscriberCount: '2.1k',
-  },
-];
 
-const INITIAL_OFFERS: SavedOffer[] = [
-  {
-    id: '1',
-    title: '20% off all pastries today',
-    businessName: "Richard's Pastry",
-    businessInitials: 'RP',
+function formatExpiry(isoDate: string | null): string {
+  if (!isoDate) return 'No expiry';
+  const d = new Date(isoDate);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const isPast = d < new Date();
+  return `${isPast ? 'Expired' : 'Expires'} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function toSavedOfferUI(item: SavedOfferItem): SavedOffer {
+  const isExpired = item.expires_at ? new Date(item.expires_at) < new Date() : false;
+  return {
+    id: item.id,
+    title: item.title,
+    businessName: item.business_name,
+    businessInitials: getInitials(item.business_name),
     businessColor: '#1A5C35',
     offerType: 'Discount',
-    discountPercent: '20%',
-    expiresAt: 'Expires 21 Apr 2025',
-    isExpired: false,
-  },
-  {
-    id: '2',
-    title: 'Buy 1 get 1 free on all smoothies',
-    businessName: 'Green Bowl Cafe',
-    businessInitials: 'GB',
-    businessColor: '#0F6E56',
-    offerType: 'Promotion',
     discountPercent: null,
-    expiresAt: 'Expires 30 Apr 2025',
-    isExpired: false,
-  },
-  {
-    id: '3',
-    title: 'Flat 500 off on first facial',
-    businessName: 'The Beauty Lounge',
-    businessInitials: 'BL',
-    businessColor: '#993556',
-    offerType: 'Flash Sale',
-    discountPercent: null,
-    expiresAt: 'Expired 10 Apr 2025',
-    isExpired: true,
-  },
-];
+    expiresAt: formatExpiry(item.expires_at),
+    isExpired,
+  };
+}
+
+const EVENT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const EVENT_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function formatEventDate(iso: string): string {
+  const d = new Date(iso);
+  return `${EVENT_DAYS[d.getDay()]}, ${d.getDate()} ${EVENT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function formatEventTime(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  const min = m < 10 ? `0${m}` : String(m);
+  return `${hr}:${min} ${ampm}`;
+}
+
+function toSavedEventUI(item: SavedEventItem): JoinedEvent {
+  const dbStatus = item.status;
+  const uiStatus: JoinedEvent['status'] = (dbStatus === 'upcoming' || dbStatus === 'ongoing') ? 'upcoming' : 'past';
+  const timeStr = item.ends_at
+    ? `${formatEventTime(item.starts_at)} – ${formatEventTime(item.ends_at)}`
+    : formatEventTime(item.starts_at);
+  return {
+    id: item.id,
+    title: item.title,
+    businessName: item.business_name,
+    businessInitials: getInitials(item.business_name),
+    businessColor: '#1A5C35',
+    eventType: item.event_type,
+    date: formatEventDate(item.starts_at),
+    time: timeStr,
+    location: item.location ?? '',
+    status: uiStatus,
+  };
+}
 
 const INITIAL_EVENTS: JoinedEvent[] = [
   {
@@ -224,9 +213,10 @@ function hexWithAlpha(hex: string, alpha: number): string {
 export default function SavedActivityScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('favourites');
-  const [favourites, setFavourites] = useState<FavouriteBusiness[]>(INITIAL_FAVOURITES);
-  const [offers, setOffers] = useState<SavedOffer[]>(INITIAL_OFFERS);
-  const [events] = useState<JoinedEvent[]>(INITIAL_EVENTS);
+  const { businesses, isLoading, unsave } = useSavedBusinesses();
+  const { offers: savedOffers, isLoading: offersLoading, remove: removeSavedOffer } = useSavedOffers();
+  const { events: savedEvents, isLoading: eventsLoading } = useSavedEvents();
+  const { posts: savedPosts, isLoading: postsLoading, remove: removePost } = useSavedPosts();
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
 
@@ -235,24 +225,31 @@ export default function SavedActivityScreen() {
     setSnackVisible(true);
   };
 
-  const handleRemoveFavourite = (id: string) => {
-    setFavourites((prev) => prev.filter((f) => f.id !== id));
+  const handleRemoveFavourite = useCallback((id: string) => {
+    unsave(id);
     showSnack('Removed from favourites');
-  };
+  }, [unsave]);
 
-  const handleRemoveOffer = (id: string) => {
-    setOffers((prev) => prev.filter((o) => o.id !== id));
+  const handleRemoveOffer = useCallback((id: string) => {
+    removeSavedOffer(id);
     showSnack('Removed from saved');
-  };
+  }, [removeSavedOffer]);
+
+  const handleRemovePost = useCallback((id: string) => {
+    removePost(id);
+    showSnack('Removed from saved');
+  }, [removePost]);
 
   const tabs: { key: TabKey; label: string; icon: typeof Heart }[] = [
     { key: 'favourites', label: 'Favourites', icon: Heart },
     { key: 'offers', label: 'Saved Offers', icon: Bookmark },
     { key: 'events', label: 'Events', icon: Calendar },
+    { key: 'posts', label: 'Posts', icon: FileText },
   ];
 
-  const upcomingEvents = events.filter((e) => e.status === 'upcoming');
-  const pastEvents = events.filter((e) => e.status === 'past');
+  const mappedEvents = savedEvents.map(toSavedEventUI);
+  const upcomingEvents = mappedEvents.filter((e) => e.status === 'upcoming');
+  const pastEvents = mappedEvents.filter((e) => e.status === 'past');
 
   return (
     <View style={styles.root} testID="saved-activity-screen">
@@ -299,34 +296,50 @@ export default function SavedActivityScreen() {
       </SafeAreaView>
 
       {activeTab === 'favourites' && (
-        <FavouritesTab
-          items={favourites}
-          onRemove={handleRemoveFavourite}
-          onView={(id) => router.push(`/business-profile/${id}` as never)}
-          onExplore={() => router.back()}
-        />
+        isLoading && businesses.length === 0
+          ? <ActivityIndicator style={{ marginTop: 60 }} color="#1A5C35" />
+          : <FavouritesTab
+              items={businesses}
+              onRemove={handleRemoveFavourite}
+              onView={(id) => router.push(`/business-profile/${id}` as never)}
+              onExplore={() => router.back()}
+            />
       )}
 
       {activeTab === 'offers' && (
-        <OffersTab
-          items={offers}
-          onRemove={handleRemoveOffer}
-          onView={(id) =>
-            router.push({ pathname: '/view-offer', params: { offerId: id } } as never)
-          }
-          onExplore={() => router.back()}
-        />
+        offersLoading && savedOffers.length === 0
+          ? <ActivityIndicator style={{ marginTop: 60 }} color="#1A5C35" />
+          : <OffersTab
+              items={savedOffers.map(toSavedOfferUI)}
+              onRemove={handleRemoveOffer}
+              onView={(id) =>
+                router.push({ pathname: '/view-offer', params: { offerId: id } } as never)
+              }
+              onExplore={() => router.back()}
+            />
       )}
 
       {activeTab === 'events' && (
-        <EventsTab
-          upcoming={upcomingEvents}
-          past={pastEvents}
-          onView={(id) =>
-            router.push({ pathname: '/view-event', params: { eventId: id } } as never)
-          }
-          onExplore={() => router.back()}
-        />
+        eventsLoading && savedEvents.length === 0
+          ? <ActivityIndicator style={{ marginTop: 60 }} color="#1A5C35" />
+          : <EventsTab
+              upcoming={upcomingEvents}
+              past={pastEvents}
+              onView={(id) =>
+                router.push({ pathname: '/view-event', params: { eventId: id } } as never)
+              }
+              onExplore={() => router.back()}
+            />
+      )}
+
+      {activeTab === 'posts' && (
+        postsLoading && savedPosts.length === 0
+          ? <ActivityIndicator style={{ marginTop: 60 }} color="#1A5C35" />
+          : <PostsTab
+              items={savedPosts}
+              onRemove={handleRemovePost}
+              onExplore={() => router.back()}
+            />
       )}
 
       <Snackbar
@@ -342,8 +355,21 @@ export default function SavedActivityScreen() {
   );
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join('');
+}
+
+function formatSubscriberCount(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
+}
+
 interface FavouritesTabProps {
-  items: FavouriteBusiness[];
+  items: SavedBusinessItem[];
   onRemove: (id: string) => void;
   onView: (id: string) => void;
   onExplore: () => void;
@@ -367,48 +393,49 @@ function FavouritesTab({ items, onRemove, onView, onExplore }: FavouritesTabProp
       data={items}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
-      renderItem={({ item }) => (
-        <View style={styles.card} testID={`fav-${item.id}`}>
-          <View style={styles.row}>
-            <View style={[styles.logoSquare, { backgroundColor: item.color }]}>
-              <Text style={styles.logoInitials}>{item.initials}</Text>
-            </View>
-            <View style={styles.rowCenter}>
-              <Text style={styles.bizName}>{item.name}</Text>
-              <Text style={styles.muted}>
-                {item.category} · {item.city}
-              </Text>
-              {item.isSubscribed ? (
-                <View style={[styles.chip, styles.chipTeal]}>
-                  <Text style={styles.chipTealText}>Subscribed ✓</Text>
-                </View>
+      renderItem={({ item }) => {
+        const meta = [item.category_name, item.city].filter(Boolean).join(' · ');
+        return (
+          <View style={styles.card} testID={`fav-${item.id}`}>
+            <View style={styles.row}>
+              {item.logo_url ? (
+                <Image
+                  source={{ uri: item.logo_url }}
+                  style={styles.logoSquare}
+                  contentFit="cover"
+                />
               ) : (
-                <View style={[styles.chip, styles.chipPurple]}>
-                  <Text style={styles.chipPurpleText}>
-                    Join & earn {item.welcomePoints} pts
-                  </Text>
+                <View style={[styles.logoSquare, { backgroundColor: '#1A5C35' }]}>
+                  <Text style={styles.logoInitials}>{getInitials(item.name)}</Text>
                 </View>
               )}
+              <View style={styles.rowCenter}>
+                <Text style={styles.bizName} numberOfLines={1}>{item.name}</Text>
+                {!!meta && <Text style={styles.muted}>{meta}</Text>}
+                {item.avg_rating != null && (
+                  <Text style={styles.muted}>★ {Number(item.avg_rating).toFixed(1)}</Text>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => onRemove(item.id)}
+                hitSlop={10}
+                testID={`remove-fav-${item.id}`}
+              >
+                <Heart size={20} color="#E24B4A" fill="#E24B4A" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={() => onRemove(item.id)}
-              hitSlop={10}
-              testID={`remove-fav-${item.id}`}
-            >
-              <Heart size={20} color="#E24B4A" fill="#E24B4A" />
-            </TouchableOpacity>
+            <Divider style={styles.innerDivider} />
+            <View style={styles.rowBetween}>
+              <Text style={styles.smallMuted}>
+                {formatSubscriberCount(item.subscriber_count)} subscribers
+              </Text>
+              <TouchableOpacity onPress={() => onView(item.id)}>
+                <Text style={styles.viewLink}>View Business →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <Divider style={styles.innerDivider} />
-          <View style={styles.rowBetween}>
-            <Text style={styles.smallMuted}>
-              {item.subscriberCount} subscribers
-            </Text>
-            <TouchableOpacity onPress={() => onView(item.id)}>
-              <Text style={styles.viewLink}>View Business →</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        );
+      }}
     />
   );
 }
@@ -650,6 +677,69 @@ function EventCard({ item, onView }: EventCardProps) {
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+interface PostsTabProps {
+  items: SavedPostItem[];
+  onRemove: (id: string) => void;
+  onExplore: () => void;
+}
+
+function PostsTab({ items, onRemove, onExplore }: PostsTabProps) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileText size={40} color="#E8F5EE" />}
+        title="No saved posts"
+        subtitle="Tap the bookmark on any post to save it here"
+        ctaLabel="Explore Feed"
+        onCta={onExplore}
+      />
+    );
+  }
+
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={styles.listContent}
+      renderItem={({ item }) => (
+        <View style={styles.card} testID={`post-${item.id}`}>
+          <View style={styles.rowStart}>
+            {item.business_logo ? (
+              <Image
+                source={{ uri: item.business_logo }}
+                style={styles.logoSquare}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.logoSquare, { backgroundColor: '#1A5C35' }]}>
+                <Text style={styles.logoInitials}>{getInitials(item.business_name)}</Text>
+              </View>
+            )}
+            <View style={[styles.offerCenter, { marginLeft: 10 }]}>
+              <View style={[styles.typeBadge, { backgroundColor: '#E8F5EE' }]}>
+                <Text style={[styles.typeBadgeText, { color: '#1A5C35' }]}>Post</Text>
+              </View>
+              <Text style={styles.offerTitle} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.muted}>{item.business_name}</Text>
+              {!!item.content && (
+                <Text style={styles.postContentPreview} numberOfLines={2}>{item.content}</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={() => onRemove(item.id)}
+              hitSlop={10}
+              style={{ paddingLeft: 8 }}
+              testID={`remove-post-${item.id}`}
+            >
+              <Bookmark size={18} color="#1A5C35" fill="#1A5C35" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    />
   );
 }
 
@@ -1037,5 +1127,11 @@ const styles = StyleSheet.create({
   },
   snackbarWrapper: {
     bottom: 20,
+  },
+  postContentPreview: {
+    fontSize: 11,
+    color: '#888780',
+    marginTop: 3,
+    lineHeight: 15,
   },
 });

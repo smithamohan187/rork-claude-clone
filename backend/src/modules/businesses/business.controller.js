@@ -5,6 +5,7 @@ const {
   uploadBusinessCoverPhoto,
   completeOnboarding,
   getPublicBusinessProfile,
+  fetchDashboardSummary,
 } = require('./business.service');
 const { ok } = require('../../utils/apiResponse');
 
@@ -61,6 +62,12 @@ const getBusinessProfileHandler = asyncHandler(async (req, res) => {
   return res.status(200).json(ok({ business }));
 });
 
+const getDashboardSummaryHandler = asyncHandler(async (req, res) => {
+  const summary = await fetchDashboardSummary(req.user.userId);
+  if (!summary) return res.status(404).json({ success: false, data: null, error: 'Business not found' });
+  res.status(200).json(ok(summary));
+});
+
 module.exports = {
   getMyBusinessHandler,
   registerBusinessHandler,
@@ -68,4 +75,5 @@ module.exports = {
   uploadPhotoHandler,
   completeOnboardingHandler,
   getBusinessProfileHandler,
+  getDashboardSummaryHandler,
 };

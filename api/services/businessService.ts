@@ -1,6 +1,14 @@
 import { apiClient, getAccessToken, API_BASE_URL } from '../client';
 import { Platform } from 'react-native';
 
+const BASE_URL = API_BASE_URL.replace(/\/$/, '');
+
+function resolveUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${BASE_URL}${url}`;
+}
+
 async function buildFormData(fieldName: string, uri: string): Promise<FormData> {
   const form = new FormData();
 
@@ -80,7 +88,12 @@ export async function fetchMyBusiness(): Promise<BusinessFullData | null> {
   if (__DEV__) console.log('[fetch] Fetching my business');
   const result = await apiClient.get<BusinessFullData | null>('/businesses/me');
   if (!result.success) throw new Error(result.error ?? 'Failed to fetch business');
-  return result.data ?? null;
+  if (!result.data) return null;
+  return {
+    ...result.data,
+    logo_url: resolveUrl(result.data.logo_url),
+    cover_url: resolveUrl(result.data.cover_url),
+  };
 }
 
 export async function registerBusiness(payload: RegisterBusinessPayload): Promise<BusinessData> {

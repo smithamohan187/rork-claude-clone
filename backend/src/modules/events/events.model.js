@@ -25,11 +25,11 @@ const EFFECTIVE_STATUS_CASE = `
 `;
 
 async function insertEvent(data) {
-  const { business_id, title, description, location, starts_at, ends_at, image_url } = data;
+  const { business_id, title, description, location, starts_at, ends_at, image_url, event_type } = data;
   const { rows } = await query(
     `INSERT INTO events
-       (business_id, title, description, location, starts_at, ends_at, image_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (business_id, title, description, location, starts_at, ends_at, image_url, event_type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
     [
       business_id,
@@ -39,12 +39,13 @@ async function insertEvent(data) {
       starts_at,
       ends_at ?? null,
       image_url ?? null,
+      event_type ?? 'In Person',
     ]
   );
   return rows[0];
 }
 
-async function getEventsByBusiness(businessId, filter) {
+async function getEventsByBusiness(businessId, filter, profileId) {
   let whereClause = 'WHERE business_id = $1';
   if (filter === 'upcoming') {
     whereClause += " AND status != 'cancelled' AND starts_at > NOW()";
@@ -59,11 +60,15 @@ async function getEventsByBusiness(businessId, filter) {
     filter === 'upcoming' ? 'ORDER BY starts_at ASC' : 'ORDER BY starts_at DESC';
 
   const { rows } = await query(
-    `SELECT *, ${EFFECTIVE_STATUS_CASE}
+    `SELECT *,
+       ${EFFECTIVE_STATUS_CASE},
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'event' AND l.content_id = events.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'event' AND l.content_id = events.id AND l.profile_id = $2::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'event' AND c.content_id = events.id AND c.is_deleted = FALSE) AS comment_count
      FROM events
      ${whereClause}
      ${order}`,
-    [businessId]
+    [businessId, profileId ?? null]
   );
   return rows;
 }
@@ -79,7 +84,7 @@ async function getEventById(eventId) {
 }
 
 async function updateEvent(eventId, data) {
-  const { title, description, location, starts_at, ends_at, image_url } = data;
+  const { title, description, location, starts_at, ends_at, image_url, event_type } = data;
   const { rows } = await query(
     `UPDATE events SET
        title       = COALESCE($1, title),
@@ -88,8 +93,9 @@ async function updateEvent(eventId, data) {
        starts_at   = COALESCE($4, starts_at),
        ends_at     = $5,
        image_url   = COALESCE($6, image_url),
+       event_type  = COALESCE($7, event_type),
        updated_at  = NOW()
-     WHERE id = $7
+     WHERE id = $8
      RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
     [
       title ?? null,
@@ -98,6 +104,7 @@ async function updateEvent(eventId, data) {
       starts_at ?? null,
       ends_at ?? null,
       image_url ?? null,
+      event_type ?? null,
       eventId,
     ]
   );

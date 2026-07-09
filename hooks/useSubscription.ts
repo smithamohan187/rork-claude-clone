@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   subscribeToBusiness,
@@ -8,18 +9,18 @@ import {
 } from '@/api/services/subscriptionService';
 
 export function useSubscription(businessId: string) {
-  const { activeProfile } = useAuth();
+  const { authUser } = useAuth();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
-  useEffect(() => {
-    if (!businessId || !activeProfile) return;
+  useFocusEffect(useCallback(() => {
+    if (!businessId || !authUser) return;
     let cancelled = false;
     getSubscriptionStatus(businessId)
       .then((data) => { if (!cancelled) setIsSubscribed(data.isSubscribed); })
-      .catch(() => { /* silently fail — default stays false */ });
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [businessId, activeProfile?.id]);
+  }, [businessId, authUser?.id]));
 
   const subscribe = useCallback(async () => {
     if (isToggling) return;

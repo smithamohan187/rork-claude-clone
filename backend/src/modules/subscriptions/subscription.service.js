@@ -21,15 +21,38 @@ async function unsubscribeFromBusiness(userId, businessId) {
 }
 
 async function getSubscriptionStatus(userId, businessId) {
-  const profileId = await subscriptionModel.getActiveProfileId(userId);
-  if (!profileId) return { isSubscribed: false };
+  const row = await subscriptionModel.getSubscriptionByUserId(userId, businessId);
+  return { isSubscribed: !!row };
+}
 
-  const row = await subscriptionModel.getSubscription(profileId, businessId);
-  return { isSubscribed: row?.is_active ?? false };
+async function getSubscribedBusinesses(userId) {
+  const profileId = await subscriptionModel.getActiveProfileId(userId);
+  if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
+  return subscriptionModel.getSubscribedBusinesses(profileId);
+}
+
+async function getBusinessMembers(userId, businessId = null) {
+  const ownedId = await subscriptionModel.getBusinessIdByUserId(userId);
+  if (!ownedId) throw Object.assign(new Error('No business found for this user'), { status: 403 });
+  const targetId = businessId ?? ownedId;
+  if (targetId !== ownedId) throw Object.assign(new Error('Not authorised to view these members'), { status: 403 });
+  return subscriptionModel.getBusinessMembers(ownedId);
+}
+
+async function removeBusinessMember(userId, businessId = null, memberProfileId) {
+  const ownedId = await subscriptionModel.getBusinessIdByUserId(userId);
+  if (!ownedId) throw Object.assign(new Error('No business found for this user'), { status: 403 });
+  const targetId = businessId ?? ownedId;
+  if (targetId !== ownedId) throw Object.assign(new Error('Not authorised to remove this member'), { status: 403 });
+  await subscriptionModel.removeSubscriber(ownedId, memberProfileId);
+  return { removed: true };
 }
 
 module.exports = {
   subscribeToBusiness,
   unsubscribeFromBusiness,
   getSubscriptionStatus,
+  getSubscribedBusinesses,
+  getBusinessMembers,
+  removeBusinessMember,
 };

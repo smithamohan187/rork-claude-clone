@@ -45,6 +45,7 @@ function toProfileEntry(p: BackendProfile): ProfileEntry {
     type: p.profile_type,
     displayName: p.display_name,
     avatarUrl: resolveUrl(p.avatar_url) ?? '',
+    logoUrl: resolveUrl(p.logo_url) ?? undefined,
   };
 }
 

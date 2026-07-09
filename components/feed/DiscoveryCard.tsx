@@ -40,8 +40,8 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const coverUri = useMemo(
-    () => pickFeedImage(business.id, [business.category, business.name, business.bio]),
-    [business.id, business.category, business.name, business.bio],
+    () => business.coverUrl || pickFeedImage(business.id, [business.category, business.name, business.bio]),
+    [business.coverUrl, business.id, business.category, business.name, business.bio],
   );
 
   const initials = business.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();

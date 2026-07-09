@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -28,23 +29,9 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import { useSubscribedBusinesses, SubscribedBusinessItem } from '@/hooks/useSubscribedBusinesses';
 
 type Tier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
-type Category = 'Food & Drink' | 'Retail' | 'Wellness' | 'Beauty' | 'Tech' | 'Fitness';
-
-interface SubscribedBusiness {
-  id: string;
-  name: string;
-  category: Category;
-  description: string;
-  cover: string;
-  subscribedAt: string;
-  rating: number;
-  tags: string[];
-  points: number;
-  activeOffers: number;
-  tier: Tier;
-}
 
 const TIER_COLORS: Record<Tier, { dot: string; text: string; bg: string }> = {
   Bronze: { dot: '#cd7f32', text: '#b5651d', bg: 'rgba(255,255,255,0.92)' },
@@ -53,15 +40,6 @@ const TIER_COLORS: Record<Tier, { dot: string; text: string; bg: string }> = {
   Platinum: { dot: '#38bdf8', text: '#0369a1', bg: 'rgba(255,255,255,0.92)' },
 };
 
-const CATEGORIES: ReadonlyArray<'All' | Category> = [
-  'All',
-  'Food & Drink',
-  'Retail',
-  'Wellness',
-  'Beauty',
-  'Tech',
-  'Fitness',
-];
 
 interface ChatMessage {
   id: string;
@@ -87,130 +65,32 @@ const MOCK_CHAT_HISTORY: Record<string, ChatMessage[]> = {
   ],
 };
 
-const MOCK_SUBSCRIPTIONS: SubscribedBusiness[] = [
-  {
-    id: 'b1',
-    name: 'The Bermondsey Roastery',
-    category: 'Food & Drink',
-    description: 'Small-batch coffee roasted daily in South London. Cosy cafe & brunch.',
-    cover: 'https://images.unsplash.com/photo-1559496417-e7f25cb247f3?w=1200&q=80',
-    subscribedAt: '12 Jan 2025',
-    rating: 4.8,
-    tags: ['Coffee', 'Brunch', 'Organic'],
-    points: 1240,
-    activeOffers: 3,
-    tier: 'Gold',
-  },
-  {
-    id: 'b2',
-    name: 'Camden Wellness Co.',
-    category: 'Wellness',
-    description: 'Yoga, meditation and holistic wellness studio in the heart of Camden.',
-    cover: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=1200&q=80',
-    subscribedAt: '04 Feb 2025',
-    rating: 4.9,
-    tags: ['Yoga', 'Meditation'],
-    points: 860,
-    activeOffers: 2,
-    tier: 'Silver',
-  },
-  {
-    id: 'b3',
-    name: 'Shoreditch Tech Hub',
-    category: 'Tech',
-    description: 'Co-working, gadget repairs and creator workshops in East London.',
-    cover: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&q=80',
-    subscribedAt: '21 Feb 2025',
-    rating: 4.6,
-    tags: ['Co-working', 'Workshops'],
-    points: 320,
-    activeOffers: 1,
-    tier: 'Bronze',
-  },
-  {
-    id: 'b4',
-    name: 'Notting Hill Beauty Bar',
-    category: 'Beauty',
-    description: 'Independent salon offering nails, lashes and skincare treatments.',
-    cover: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&q=80',
-    subscribedAt: '08 Mar 2025',
-    rating: 4.7,
-    tags: ['Nails', 'Lashes', 'Skincare'],
-    points: 1820,
-    activeOffers: 4,
-    tier: 'Platinum',
-  },
-  {
-    id: 'b5',
-    name: 'Hackney Hot Iron',
-    category: 'Fitness',
-    description: 'Boutique strength gym with small group classes and 1:1 coaching.',
-    cover: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=1200&q=80',
-    subscribedAt: '17 Mar 2025',
-    rating: 4.8,
-    tags: ['Strength', 'PT', 'Classes'],
-    points: 540,
-    activeOffers: 2,
-    tier: 'Silver',
-  },
-  {
-    id: 'b6',
-    name: 'Marylebone Mercantile',
-    category: 'Retail',
-    description: 'Curated homeware and gifts from independent British makers.',
-    cover: 'https://images.unsplash.com/photo-1481437156560-3205f6a55735?w=1200&q=80',
-    subscribedAt: '02 Apr 2025',
-    rating: 4.5,
-    tags: ['Homeware', 'Gifts'],
-    points: 210,
-    activeOffers: 1,
-    tier: 'Bronze',
-  },
-  {
-    id: 'b7',
-    name: 'Brixton Bakehouse',
-    category: 'Food & Drink',
-    description: 'Sourdough, pastries and seasonal cakes baked fresh every morning.',
-    cover: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=1200&q=80',
-    subscribedAt: '15 Apr 2025',
-    rating: 4.9,
-    tags: ['Bakery', 'Sourdough'],
-    points: 990,
-    activeOffers: 2,
-    tier: 'Gold',
-  },
-];
 
 const BG = '#f5f6f8' as const;
 
 export default function SubscribedBusinessesScreen() {
   const router = useRouter();
-  const [items, setItems] = useState<SubscribedBusiness[]>(MOCK_SUBSCRIPTIONS);
-  const [query, setQuery] = useState<string>('');
-  const [activeCategory, setActiveCategory] = useState<'All' | Category>('All');
+  const {
+    businesses,
+    filteredBusinesses,
+    categories,
+    isLoading,
+    searchQuery,
+    setSearchQuery,
+    activeFilter,
+    setActiveFilter,
+    unsubscribe,
+  } = useSubscribedBusinesses();
 
-  const [unsubTarget, setUnsubTarget] = useState<SubscribedBusiness | null>(null);
-  const [messageTarget, setMessageTarget] = useState<SubscribedBusiness | null>(null);
-
-  const filtered = useMemo<SubscribedBusiness[]>(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter((b) => {
-      const matchCat = activeCategory === 'All' || b.category === activeCategory;
-      if (!matchCat) return false;
-      if (!q) return true;
-      return (
-        b.name.toLowerCase().includes(q) ||
-        b.description.toLowerCase().includes(q)
-      );
-    });
-  }, [items, query, activeCategory]);
+  const [unsubTarget, setUnsubTarget] = useState<SubscribedBusinessItem | null>(null);
+  const [messageTarget, setMessageTarget] = useState<SubscribedBusinessItem | null>(null);
 
   const handleUnsubscribe = useCallback((id: string) => {
-    setItems((prev) => prev.filter((b) => b.id !== id));
+    void unsubscribe(id);
     setUnsubTarget(null);
-  }, []);
+  }, [unsubscribe]);
 
-  const renderItem = useCallback(({ item }: { item: SubscribedBusiness }) => (
+  const renderItem = useCallback(({ item }: { item: SubscribedBusinessItem }) => (
     <BusinessCard
       item={item}
       onMessage={() => setMessageTarget(item)}
@@ -232,7 +112,7 @@ export default function SubscribedBusinessesScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle}>My Business Community</Text>
-            <Text style={styles.headerSubtitle}>{items.length} businesses</Text>
+            <Text style={styles.headerSubtitle}>{businesses.length} businesses</Text>
           </View>
           <View style={styles.backBtn} />
         </View>
@@ -244,12 +124,12 @@ export default function SubscribedBusinessesScreen() {
               style={styles.searchInput}
               placeholder="Search your subscriptions"
               placeholderTextColor="#9ca3af"
-              value={query}
-              onChangeText={setQuery}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
               testID="subs-search"
             />
-            {query.length > 0 ? (
-              <TouchableOpacity onPress={() => setQuery('')} hitSlop={8} testID="subs-clear">
+            {searchQuery.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8} testID="subs-clear">
                 <X size={16} color={Colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
@@ -261,12 +141,12 @@ export default function SubscribedBusinessesScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipsRow}
         >
-          {CATEGORIES.map((c) => {
-            const active = activeCategory === c;
+          {categories.map((c) => {
+            const active = activeFilter === c;
             return (
               <TouchableOpacity
                 key={c}
-                onPress={() => setActiveCategory(c)}
+                onPress={() => setActiveFilter(c)}
                 style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
                 testID={`subs-chip-${c}`}
               >
@@ -279,22 +159,30 @@ export default function SubscribedBusinessesScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(b) => b.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🔍</Text>
-            <Text style={styles.emptyTitle}>No businesses found</Text>
-            <Text style={styles.emptySub}>
-              Try a different search or clear the category filter.
-            </Text>
-          </View>
-        }
-      />
+      {isLoading && businesses.length === 0 ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
+      ) : (
+        <FlatList
+          data={filteredBusinesses}
+          keyExtractor={(b) => b.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>{businesses.length === 0 ? '🔔' : '🔍'}</Text>
+              <Text style={styles.emptyTitle}>
+                {businesses.length === 0 ? 'No subscriptions yet' : 'No businesses found'}
+              </Text>
+              <Text style={styles.emptySub}>
+                {businesses.length === 0
+                  ? 'Subscribe to businesses to see them here.'
+                  : 'Try a different search or clear the category filter.'}
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       <UnsubscribeSheet
         target={unsubTarget}
@@ -315,7 +203,7 @@ function BusinessCard({
   onMessage,
   onUnsubscribe,
 }: {
-  item: SubscribedBusiness;
+  item: SubscribedBusinessItem;
   onMessage: () => void;
   onUnsubscribe: () => void;
 }) {
@@ -433,7 +321,7 @@ function UnsubscribeSheet({
   onClose,
   onConfirm,
 }: {
-  target: SubscribedBusiness | null;
+  target: SubscribedBusinessItem | null;
   onClose: () => void;
   onConfirm: (id: string) => void;
 }) {
@@ -477,7 +365,7 @@ function MessageSheet({
   target,
   onClose,
 }: {
-  target: SubscribedBusiness | null;
+  target: SubscribedBusinessItem | null;
   onClose: () => void;
 }) {
   const visible = !!target;

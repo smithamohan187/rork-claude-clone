@@ -103,7 +103,7 @@ async function toggleOfferStatus(offerId, newStatus) {
   return rows[0] ?? null;
 }
 
-async function getOffersByBusinessId(businessId, statusFilter) {
+async function getOffersByBusinessId(businessId, statusFilter, profileId) {
   let whereExtra = '';
   if (statusFilter === 'active') {
     whereExtra = `AND status = 'active' AND (expires_at IS NULL OR expires_at >= NOW())`;
@@ -119,12 +119,15 @@ async function getOffersByBusinessId(businessId, statusFilter) {
          WHEN status = 'expired' THEN 'expired'
          WHEN expires_at IS NOT NULL AND expires_at < NOW() THEN 'expired'
          ELSE status
-       END AS effective_status
+       END AS effective_status,
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'offer' AND l.content_id = offers.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'offer' AND l.content_id = offers.id AND l.profile_id = $2::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'offer' AND c.content_id = offers.id AND c.is_deleted = FALSE) AS comment_count
      FROM offers
      WHERE business_id = $1
      ${whereExtra}
      ORDER BY created_at DESC`,
-    [businessId]
+    [businessId, profileId ?? null]
   );
   return rows;
 }

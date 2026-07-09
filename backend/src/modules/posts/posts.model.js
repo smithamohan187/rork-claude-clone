@@ -32,13 +32,23 @@ async function getPostById(id) {
   return rows[0] ?? null;
 }
 
-async function getPostsByBusinessId(businessId, isActive) {
+async function getPostsByBusinessId(businessId, isActive, profileId) {
+  const hasActiveFilter = isActive !== undefined;
+  const profileParamNum = hasActiveFilter ? 3 : 2;
+  const params = hasActiveFilter
+    ? [businessId, isActive, profileId ?? null]
+    : [businessId, profileId ?? null];
+
   const { rows } = await query(
-    `SELECT * FROM posts
+    `SELECT *,
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id AND l.profile_id = $${profileParamNum}::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'post' AND c.content_id = posts.id AND c.is_deleted = FALSE) AS comment_count
+     FROM posts
      WHERE business_id = $1
-       ${isActive !== undefined ? 'AND is_active = $2' : ''}
+       ${hasActiveFilter ? 'AND is_active = $2' : ''}
      ORDER BY created_at DESC`,
-    isActive !== undefined ? [businessId, isActive] : [businessId]
+    params
   );
   return rows;
 }

@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { getFeed, type FeedApiItem, type FeedMode, type RecommendedBusiness } from '@/api/services/feedService';
+import { subscribeToBusiness } from '@/api/services/subscriptionService';
+import { toggleSaveOffer } from '@/api/services/savedOfferService';
+import { toggleSaveEvent } from '@/api/services/savedEventService';
+import { toggleSavePost } from '@/api/services/savedPostService';
+import { toggleLike as apiToggleLike } from '@/api/services/likesService';
 
 export interface SubscribedBusiness {
   id: string;
   name: string;
   logoUrl: string;
+  coverUrl: string | null;
   category: string;
   categoryColor: string;
   subscriberCount: number;
@@ -18,9 +26,14 @@ export interface OfferFeedItem {
   businessLogo: string;
   title: string;
   description: string;
-  expiryDate: string;
+  image_url: string | null;
+  expiryDate: string | null;
   createdAt: string;
   bookmarked: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  is_owner: boolean;
+  comment_count: number;
 }
 
 export interface EventFeedItem {
@@ -30,10 +43,36 @@ export interface EventFeedItem {
   businessName: string;
   businessLogo: string;
   title: string;
+  description: string | null;
+  image_url: string | null;
   venue: string;
-  startDate: string;
+  startDate: string | null;
   createdAt: string;
   interested: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  is_owner: boolean;
+  comment_count: number;
+}
+
+export interface PostFeedItem {
+  feedType: 'post';
+  id: string;
+  type: 'post';
+  business_id: string;
+  business_name: string;
+  business_logo: string;
+  title: string;
+  text: string;
+  image_url: string | null;
+  created_at: string;
+  likes: number;
+  comments: [];
+  is_saved: boolean;
+  like_count: number;
+  liked_by_me: boolean;
+  is_owner: boolean;
+  comment_count: number;
 }
 
 export type FeedItem = OfferFeedItem | EventFeedItem;
@@ -46,260 +85,337 @@ export interface RewardSummary {
   tierColor: string;
 }
 
-const daysFromNow = (d: number): string => {
-  const date = new Date();
-  date.setDate(date.getDate() + d);
-  return date.toISOString();
+function mapToOffer(item: FeedApiItem): OfferFeedItem {
+  return {
+    feedType: 'offer',
+    id: item.item_id,
+    businessId: item.business_id,
+    businessName: item.business_name,
+    businessLogo: item.business_logo ?? '',
+    title: item.title,
+    description: item.content ?? '',
+    image_url: item.image_url,
+    expiryDate: item.relevant_date,
+    createdAt: item.created_at,
+    bookmarked: item.is_saved ?? false,
+    like_count: item.like_count ?? 0,
+    liked_by_me: item.liked_by_me ?? false,
+    is_owner: item.is_owner ?? false,
+    comment_count: item.comment_count ?? 0,
+  };
+}
+
+function mapToEvent(item: FeedApiItem): EventFeedItem {
+  return {
+    feedType: 'event',
+    id: item.item_id,
+    businessId: item.business_id,
+    businessName: item.business_name,
+    businessLogo: item.business_logo ?? '',
+    title: item.title,
+    description: item.content,
+    image_url: item.image_url,
+    venue: item.business_name,
+    startDate: item.relevant_date,
+    createdAt: item.created_at,
+    interested: item.is_saved ?? false,
+    like_count: item.like_count ?? 0,
+    liked_by_me: item.liked_by_me ?? false,
+    is_owner: item.is_owner ?? false,
+    comment_count: item.comment_count ?? 0,
+  };
+}
+
+function mapToPost(item: FeedApiItem): PostFeedItem {
+  return {
+    feedType: 'post',
+    id: item.item_id,
+    type: 'post',
+    business_id: item.business_id,
+    business_name: item.business_name,
+    business_logo: item.business_logo ?? '',
+    title: item.title,
+    text: item.content ?? '',
+    image_url: item.image_url,
+    created_at: item.created_at,
+    likes: item.like_count ?? 0,
+    comments: [],
+    is_saved: item.is_saved ?? false,
+    like_count: item.like_count ?? 0,
+    liked_by_me: item.liked_by_me ?? false,
+    is_owner: item.is_owner ?? false,
+    comment_count: item.comment_count ?? 0,
+  };
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Food: '#1A5C35',
+  Fitness: '#10B981',
+  Beauty: '#EC4899',
+  Retail: '#3B82F6',
+  Events: '#00B246',
+  Health: '#8B5CF6',
+  Tech: '#F59E0B',
 };
 
-const MOCK_SUBSCRIBED: SubscribedBusiness[] = [
-  {
-    id: 'b1',
-    name: 'Nourish Kitchen',
-    logoUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=160&h=160&fit=crop',
-    category: 'Food',
-    categoryColor: '#1A5C35',
-    subscriberCount: 1240,
-    bio: 'Farm-to-table brunch & dinner',
-  },
-  {
-    id: 'b5',
-    name: 'Rivera Coffee',
-    logoUrl: 'https://images.unsplash.com/photo-1559305616-3f99cd43e353?w=160&h=160&fit=crop',
-    category: 'Food',
-    categoryColor: '#1A5C35',
-    subscriberCount: 3400,
-    bio: 'Specialty coffee & pastries',
-  },
-];
-
-const MOCK_FEED: FeedItem[] = [
-  {
-    feedType: 'offer',
-    id: 'o1',
-    businessId: 'b1',
-    businessName: 'Nourish Kitchen',
-    businessLogo: MOCK_SUBSCRIBED[0].logoUrl,
-    title: 'Weekend Brunch — 20% Off',
-    description: "We're absolutely thrilled to share some exciting news with our loyal customers and community! After months of hard work and preparation, we're rolling out a brand-new loyalty rewards programme that is designed specifically to give back to the people who matter most — YOU. Every purchase you make, every referral you bring in, and every event you attend now earns you TouchPoint that can be redeemed for exclusive discounts, VIP access to special events, early product launches, and personalised offers curated just for you. We believe that every interaction with our business should feel rewarding, and this is our way of saying thank you for your continued trust and support. Stay tuned for more updates as we roll out exciting new reward tiers and partner benefits over the coming weeks. We can't wait for you to experience everything we've been building for you!",
-    expiryDate: daysFromNow(2),
-    createdAt: daysFromNow(-1),
-    bookmarked: false,
-  },
-  {
-    feedType: 'event',
-    id: 'e1',
-    businessId: 'b5',
-    businessName: 'Rivera Coffee',
-    businessLogo: MOCK_SUBSCRIBED[1].logoUrl,
-    title: 'Latte Art Throwdown',
-    venue: 'Rivera Coffee · Fort Kochi',
-    startDate: daysFromNow(6),
-    createdAt: daysFromNow(-2),
-    interested: false,
-  },
-  {
-    feedType: 'offer',
-    id: 'o2',
-    businessId: 'b5',
-    businessName: 'Rivera Coffee',
-    businessLogo: MOCK_SUBSCRIBED[1].logoUrl,
-    title: 'Double Points Monday',
-    description: 'Earn 2× TouchPoint on every espresso, pour-over, and pastry, all day Monday.',
-    expiryDate: daysFromNow(9),
-    createdAt: daysFromNow(-3),
-    bookmarked: false,
-  },
-  {
-    feedType: 'offer',
-    id: 'o3',
-    businessId: 'b1',
-    businessName: 'Nourish Kitchen',
-    businessLogo: MOCK_SUBSCRIBED[0].logoUrl,
-    title: 'Chef\u2019s Table: Spring Tasting',
-    description: 'A five-course pairing menu by Chef Arun. Members save 15% on the full tasting.',
-    expiryDate: daysFromNow(14),
-    createdAt: daysFromNow(-5),
-    bookmarked: false,
-  },
-  {
-    feedType: 'event',
-    id: 'e2',
-    businessId: 'b1',
-    businessName: 'Nourish Kitchen',
-    businessLogo: MOCK_SUBSCRIBED[0].logoUrl,
-    title: 'Farmers Market Pop-Up',
-    venue: 'Marine Drive Plaza',
-    startDate: daysFromNow(11),
-    createdAt: daysFromNow(-6),
-    interested: false,
-  },
-];
-
-const MOCK_DISCOVERY: SubscribedBusiness[] = [
-  {
-    id: 'b2',
-    name: 'FitZone Gym',
-    logoUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=160&h=160&fit=crop',
-    category: 'Fitness',
-    categoryColor: '#10B981',
-    subscriberCount: 860,
-    bio: 'Performance training, group classes',
-  },
-  {
-    id: 'b3',
-    name: 'Glow Beauty Studio',
-    logoUrl: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=160&h=160&fit=crop',
-    category: 'Beauty',
-    categoryColor: '#EC4899',
-    subscriberCount: 2100,
-    bio: 'Skincare, facials, brow bar',
-  },
-  {
-    id: 'b4',
-    name: 'Urban Threads',
-    logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=160&h=160&fit=crop',
-    category: 'Retail',
-    categoryColor: '#3B82F6',
-    subscriberCount: 530,
-    bio: 'Independent fashion boutique',
-  },
-  {
-    id: 'b6',
-    name: 'SoundWave Events',
-    logoUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=160&h=160&fit=crop',
-    category: 'Events',
-    categoryColor: '#00B246',
-    subscriberCount: 4200,
-    bio: 'Live music, festivals, meetups',
-  },
-];
-
-const MOCK_REWARD: RewardSummary = {
-  id: 'r1',
-  title: 'Free Coffee',
-  emoji: '🎁',
-  pointsRequired: 500,
-  tierColor: '#1A5C35',
-};
-
-const MOCK_POINTS = 240;
+function mapToDiscovery(biz: RecommendedBusiness): SubscribedBusiness {
+  return {
+    id: biz.id,
+    name: biz.name,
+    logoUrl: biz.logo_url ?? '',
+    coverUrl: biz.cover_url ?? null,
+    category: biz.category,
+    categoryColor: CATEGORY_COLORS[biz.category] ?? '#1A5C35',
+    subscriberCount: biz.subscriber_count,
+    bio: biz.description ?? '',
+  };
+}
 
 export interface UsePersonalisedFeedResult {
   subscribedBusinesses: SubscribedBusiness[];
   feedItems: FeedItem[];
+  postItems: PostFeedItem[];
   discoveryBusinesses: SubscribedBusiness[];
+  mode: FeedMode | null;
   userPoints: number;
   rewardsSummary: RewardSummary | null;
   loading: boolean;
   refreshing: boolean;
   refresh: () => Promise<void>;
-  subscribeToDiscovery: (businessId: string) => SubscribedBusiness | null;
-  toggleBookmark: (offerId: string) => boolean;
-  toggleInterested: (eventId: string) => boolean;
+  subscribeToDiscovery: (businessId: string) => Promise<void>;
+  toggleBookmark: (offerId: string) => void;
+  toggleInterested: (eventId: string) => void;
+  toggleSavePost: (postId: string) => void;
+  toggleFeedLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
+  selectedCategory: string | null;
+  setSelectedCategory: (cat: string | null) => void;
 }
 
 export function usePersonalisedFeed(): UsePersonalisedFeedResult {
-  const [subscribedBusinesses, setSubscribedBusinesses] = useState<SubscribedBusiness[]>([]);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [postItems, setPostItems] = useState<PostFeedItem[]>([]);
+  const [subscribedBusinesses] = useState<SubscribedBusiness[]>([]);
   const [discoveryBusinesses, setDiscoveryBusinesses] = useState<SubscribedBusiness[]>([]);
-  const [userPoints, setUserPoints] = useState<number>(0);
-  const [rewardsSummary, setRewardsSummary] = useState<RewardSummary | null>(null);
+  const [mode, setMode] = useState<FeedMode | null>(null);
+  const [selectedCategory, setSelectedCategoryState] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const mountedRef = useRef<boolean>(true);
+  const selectedCategoryRef = useRef<string | null>(null);
 
-  const load = useCallback(async (isRefresh: boolean) => {
-    console.log('[usePersonalisedFeed] load', { isRefresh });
+  const load = useCallback(async (isRefresh: boolean, category: string | null) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
-    await new Promise((r) => setTimeout(r, isRefresh ? 500 : 700));
+    try {
+      const data = await getFeed({ category: category ?? undefined, limit: 30, offset: 0 });
+      if (!mountedRef.current) return;
 
-    if (!mountedRef.current) return;
+      setMode(data.mode);
 
-    setSubscribedBusinesses(MOCK_SUBSCRIBED);
-    setFeedItems(
-      [...MOCK_FEED]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 30)
-    );
-    setDiscoveryBusinesses(MOCK_DISCOVERY);
-    setUserPoints(MOCK_POINTS);
-    setRewardsSummary(MOCK_REWARD);
-    setLoading(false);
-    setRefreshing(false);
+      if (data.mode === 'feed') {
+        const rawItems = data.items as import('@/api/services/feedService').FeedApiItem[];
+        const offers: OfferFeedItem[] = [];
+        const events: EventFeedItem[] = [];
+        const posts: PostFeedItem[] = [];
+        for (const item of rawItems) {
+          if (item.item_type === 'offer') offers.push(mapToOffer(item));
+          else if (item.item_type === 'event') events.push(mapToEvent(item));
+          else if (item.item_type === 'post') posts.push(mapToPost(item));
+        }
+        setFeedItems([...offers, ...events]);
+        setPostItems(posts);
+        setDiscoveryBusinesses([]);
+      } else {
+        setFeedItems([]);
+        setPostItems([]);
+        const recs = data.items as import('@/api/services/feedService').RecommendedBusiness[];
+        setDiscoveryBusinesses(recs.map(mapToDiscovery));
+      }
+    } catch (err) {
+      if (__DEV__) console.log('[usePersonalisedFeed] load error', err);
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
   }, []);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    load(false);
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      mountedRef.current = true;
+      load(false, selectedCategoryRef.current);
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [load])
+  );
 
   const refresh = useCallback(async () => {
-    await load(true);
+    await load(true, selectedCategoryRef.current);
   }, [load]);
 
-  const subscribeToDiscovery = useCallback((businessId: string): SubscribedBusiness | null => {
-    console.log('[usePersonalisedFeed] subscribeToDiscovery', businessId);
-    let picked: SubscribedBusiness | null = null;
-    setDiscoveryBusinesses((prev) => {
-      const match = prev.find((b) => b.id === businessId);
-      if (!match) return prev;
-      picked = match;
-      return prev.filter((b) => b.id !== businessId);
-    });
-    if (picked) {
-      setSubscribedBusinesses((prev) => {
-        if (prev.some((b) => b.id === businessId)) return prev;
-        return [...prev, picked as SubscribedBusiness];
-      });
-    }
-    return picked;
-  }, []);
+  const setSelectedCategory = useCallback((cat: string | null) => {
+    selectedCategoryRef.current = cat;
+    setSelectedCategoryState(cat);
+    load(false, cat);
+  }, [load]);
 
-  const toggleBookmark = useCallback((offerId: string): boolean => {
-    let next = false;
+  const subscribeToDiscovery = useCallback(async (businessId: string) => {
+    try {
+      await subscribeToBusiness(businessId);
+      setDiscoveryBusinesses((prev) => prev.filter((b) => b.id !== businessId));
+      await load(true, selectedCategoryRef.current);
+    } catch (err) {
+      if (__DEV__) console.log('[usePersonalisedFeed] subscribeToDiscovery error', err);
+    }
+  }, [load]);
+
+  const toggleBookmark = useCallback((offerId: string): void => {
     setFeedItems((prev) =>
       prev.map((it) => {
         if (it.feedType === 'offer' && it.id === offerId) {
-          next = !it.bookmarked;
-          return { ...it, bookmarked: next };
+          return { ...it, bookmarked: !it.bookmarked };
         }
         return it;
       })
     );
-    return next;
+    // Persist to backend; revert optimistic update on failure
+    toggleSaveOffer(offerId).catch(() => {
+      setFeedItems((prev) =>
+        prev.map((it) =>
+          it.feedType === 'offer' && it.id === offerId
+            ? { ...it, bookmarked: !it.bookmarked }
+            : it
+        )
+      );
+    });
   }, []);
 
-  const toggleInterested = useCallback((eventId: string): boolean => {
-    let next = false;
+  const toggleInterested = useCallback((eventId: string): void => {
     setFeedItems((prev) =>
       prev.map((it) => {
         if (it.feedType === 'event' && it.id === eventId) {
-          next = !it.interested;
-          return { ...it, interested: next };
+          return { ...it, interested: !it.interested };
         }
         return it;
       })
     );
-    return next;
+    // Persist to backend; revert optimistic update on failure
+    toggleSaveEvent(eventId).catch(() => {
+      setFeedItems((prev) =>
+        prev.map((it) =>
+          it.feedType === 'event' && it.id === eventId
+            ? { ...it, interested: !it.interested }
+            : it
+        )
+      );
+    });
+  }, []);
+
+  const toggleFeedLike = useCallback((contentType: 'offer' | 'event' | 'post', contentId: string): void => {
+    if (contentType === 'offer' || contentType === 'event') {
+      // Optimistic update
+      setFeedItems((prev) =>
+        prev.map((it) => {
+          if (it.feedType === contentType && it.id === contentId) {
+            const wasLiked = it.liked_by_me;
+            return { ...it, liked_by_me: !wasLiked, like_count: Math.max(0, it.like_count + (wasLiked ? -1 : 1)) };
+          }
+          return it;
+        })
+      );
+      apiToggleLike(contentType, contentId)
+        .then((res) => {
+          setFeedItems((prev) =>
+            prev.map((it) =>
+              it.feedType === contentType && it.id === contentId
+                ? { ...it, liked_by_me: res.liked, like_count: res.like_count }
+                : it
+            )
+          );
+        })
+        .catch(() => {
+          setFeedItems((prev) =>
+            prev.map((it) => {
+              if (it.feedType === contentType && it.id === contentId) {
+                const wasLiked = !it.liked_by_me;
+                return { ...it, liked_by_me: wasLiked, like_count: Math.max(0, it.like_count + (wasLiked ? 1 : -1)) };
+              }
+              return it;
+            })
+          );
+        });
+    } else {
+      // post
+      setPostItems((prev) =>
+        prev.map((it) => {
+          if (it.id === contentId) {
+            const wasLiked = it.liked_by_me;
+            return { ...it, liked_by_me: !wasLiked, like_count: Math.max(0, it.like_count + (wasLiked ? -1 : 1)) };
+          }
+          return it;
+        })
+      );
+      apiToggleLike('post', contentId)
+        .then((res) => {
+          setPostItems((prev) =>
+            prev.map((it) =>
+              it.id === contentId ? { ...it, liked_by_me: res.liked, like_count: res.like_count } : it
+            )
+          );
+        })
+        .catch(() => {
+          setPostItems((prev) =>
+            prev.map((it) => {
+              if (it.id === contentId) {
+                const wasLiked = !it.liked_by_me;
+                return { ...it, liked_by_me: wasLiked, like_count: Math.max(0, it.like_count + (wasLiked ? 1 : -1)) };
+              }
+              return it;
+            })
+          );
+        });
+    }
+  }, []);
+
+  const toggleSavePostCallback = useCallback((postId: string): void => {
+    setPostItems((prev) =>
+      prev.map((it) => {
+        if (it.id === postId) {
+          return { ...it, is_saved: !it.is_saved };
+        }
+        return it;
+      })
+    );
+    // Persist to backend; revert optimistic update on failure
+    toggleSavePost(postId).catch(() => {
+      setPostItems((prev) =>
+        prev.map((it) =>
+          it.id === postId ? { ...it, is_saved: !it.is_saved } : it
+        )
+      );
+    });
   }, []);
 
   return {
     subscribedBusinesses,
     feedItems,
+    postItems,
     discoveryBusinesses,
-    userPoints,
-    rewardsSummary,
+    mode,
+    userPoints: 0,
+    rewardsSummary: null,
     loading,
     refreshing,
     refresh,
     subscribeToDiscovery,
     toggleBookmark,
     toggleInterested,
+    toggleSavePost: toggleSavePostCallback,
+    toggleFeedLike,
+    selectedCategory,
+    setSelectedCategory,
   };
 }

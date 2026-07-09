@@ -146,6 +146,7 @@ async function getBusinessById(businessId) {
   const { rows } = await query(
     `SELECT
        businesses.*,
+       p.user_id        AS owner_user_id,
        bc.name AS category_name,
        COALESCE(
          (SELECT COUNT(*)::int FROM subscriptions
@@ -171,6 +172,7 @@ async function getBusinessById(businessId) {
        ) AS rating_count
      FROM businesses
      LEFT JOIN business_categories bc ON bc.id = businesses.category_id
+     LEFT JOIN profiles p ON p.id = businesses.profile_id
      WHERE businesses.id = $1`,
     [businessId]
   );
@@ -238,6 +240,38 @@ async function setUserActiveProfile(client, userId, profileId) {
   );
 }
 
+/**
+ * Return the three dashboard counts for a single business in one round-trip.
+ * Reuses the exact same WHERE clauses as getBusinessById (subscriber/offer)
+ * and getEventsByBusiness 'upcoming' filter (events).
+ */
+async function getDashboardSummary(businessId) {
+  const { rows } = await query(
+    `SELECT
+       COALESCE(
+         (SELECT COUNT(*)::int FROM subscriptions
+          WHERE business_id = $1 AND is_active = true),
+         0
+       ) AS subscriber_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM offers
+          WHERE business_id = $1
+            AND status = 'active'
+            AND (expires_at IS NULL OR expires_at > NOW())),
+         0
+       ) AS active_offer_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM events
+          WHERE business_id = $1
+            AND status != 'cancelled'
+            AND starts_at > NOW()),
+         0
+       ) AS upcoming_event_count`,
+    [businessId]
+  );
+  return rows[0];
+}
+
 module.exports = {
   getActiveProfileId,
   getFreePlanId,
@@ -257,4 +291,5 @@ module.exports = {
   getBusinessProfileByUserId,
   getPersonalProfileByUserId,
   setUserActiveProfile,
+  getDashboardSummary,
 };

@@ -309,6 +309,7 @@ CREATE TABLE events (
   longitude     DECIMAL(11, 8),
   starts_at     TIMESTAMPTZ NOT NULL,
   ends_at       TIMESTAMPTZ,
+  event_type    VARCHAR(20) DEFAULT 'In Person' CHECK (event_type IN ('In Person', 'Online', 'Hybrid')),
   max_attendees INT,
   status        VARCHAR(20) DEFAULT 'upcoming' CHECK (status IN (
                   'upcoming', 'ongoing', 'past', 'cancelled'
@@ -528,6 +529,19 @@ CREATE TABLE saved_offers (
 
 CREATE INDEX idx_saved_offers_profile_id ON saved_offers(profile_id);
 
+-- -------------------------------------------------------
+
+CREATE TABLE saved_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  event_id   UUID NOT NULL REFERENCES events(id)   ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(profile_id, event_id)
+);
+
+CREATE INDEX idx_saved_events_profile_id ON saved_events(profile_id);
+
 -- ============================================================
 -- DOMAIN 11: CHAT
 -- ============================================================
@@ -669,3 +683,52 @@ CREATE TABLE business_reviews (
   UNIQUE(profile_id, business_id)
 );
 CREATE INDEX idx_reviews_business_id ON business_reviews(business_id);
+
+CREATE TABLE saved_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  event_id   UUID NOT NULL REFERENCES events(id)   ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(profile_id, event_id)
+);
+CREATE INDEX idx_saved_events_profile_id ON saved_events(profile_id);
+
+ALTER TABLE events
+  ADD COLUMN event_type VARCHAR(20) DEFAULT 'In Person'
+  CHECK (event_type IN ('In Person', 'Online', 'Hybrid'));
+
+  CREATE TABLE saved_posts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  post_id    UUID NOT NULL REFERENCES posts(id)    ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(profile_id, post_id)
+);
+CREATE INDEX idx_saved_posts_profile_id ON saved_posts(profile_id);
+
+CREATE TABLE likes (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type TEXT        NOT NULL CHECK (content_type IN ('offer', 'event', 'post')),
+  content_id   UUID        NOT NULL,
+  profile_id   UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (content_type, content_id, profile_id)
+);
+
+CREATE INDEX idx_likes_content ON likes (content_type, content_id);
+CREATE INDEX idx_likes_profile  ON likes (profile_id);
+
+CREATE TABLE comments (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type      TEXT        NOT NULL CHECK (content_type IN ('offer', 'event', 'post')),
+  content_id        UUID        NOT NULL,
+  profile_id        UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  parent_comment_id UUID        REFERENCES comments(id) ON DELETE CASCADE,
+  body              TEXT        NOT NULL,
+  is_deleted        BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_comments_content ON comments (content_type, content_id);
+CREATE INDEX idx_comments_parent  ON comments (parent_comment_id);
+CREATE INDEX idx_comments_profile ON comments (profile_id);

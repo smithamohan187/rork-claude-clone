@@ -259,13 +259,20 @@ async function getSessionByUserId(userId) {
   const activeProfile = activeRows[0] ?? null;
   if (!activeProfile) return null;
 
-  // Fetch all profiles so the frontend can build the profile switcher
+  // Fetch all profiles so the frontend can build the profile switcher.
+  // LEFT JOIN businesses to include logo_url for business profiles.
   const { rows: allProfiles } = await query(
-    `SELECT id, profile_type, display_name, avatar_url
-     FROM profiles
-     WHERE user_id = $1
-       AND is_active = TRUE
-     ORDER BY profile_type ASC`,
+    `SELECT
+       p.id,
+       p.profile_type,
+       p.display_name,
+       p.avatar_url,
+       b.logo_url
+     FROM profiles p
+     LEFT JOIN businesses b ON b.profile_id = p.id
+     WHERE p.user_id = $1
+       AND p.is_active = TRUE
+     ORDER BY p.profile_type ASC`,
     [userId]
   );
 

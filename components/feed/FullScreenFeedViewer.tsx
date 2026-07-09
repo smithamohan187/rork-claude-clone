@@ -471,8 +471,8 @@ function FeedPage({
   const [expanded, setExpanded] = useState<boolean>(false);
 
   const coverUri = useMemo(
-    () => pickFeedImage(item.id, [item.title, description, item.businessName]),
-    [item.id, item.title, description, item.businessName],
+    () => item.image_url || pickFeedImage(item.id, [item.title, description, item.businessName]),
+    [item.image_url, item.id, item.title, description, item.businessName],
   );
 
   const saved = isOffer ? !!item.bookmarked : !!item.interested;

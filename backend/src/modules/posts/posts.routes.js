@@ -29,7 +29,7 @@ const router = Router();
 
 // /my and /business/:id must come before /:id — static routes precede dynamic params
 router.get('/my', authenticate, getPostsHandler);
-router.get('/business/:businessId', getBusinessPostsHandler);
+router.get('/business/:businessId', authenticate, getBusinessPostsHandler);
 router.get('/:id', getPostByIdHandler);
 
 router.post('/',           authenticate, validateRequest(createPostSchema), createPostHandler);

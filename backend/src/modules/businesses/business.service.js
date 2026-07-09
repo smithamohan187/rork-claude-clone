@@ -15,6 +15,7 @@ const {
   getBusinessProfileByUserId,
   getPersonalProfileByUserId,
   setUserActiveProfile,
+  getDashboardSummary,
 } = require('./business.model');
 const { getClient } = require('../../config/database');
 
@@ -192,6 +193,14 @@ async function getPublicBusinessProfile(businessId) {
   return { ...business, hours };
 }
 
+async function fetchDashboardSummary(userId) {
+  const businessProfile = await getBusinessProfileByUserId(userId);
+  if (!businessProfile) return null;
+  const business = await getBusinessByProfileId(businessProfile.id);
+  if (!business) return null;
+  return getDashboardSummary(business.id);
+}
+
 module.exports = {
   registerBusiness,
   uploadBusinessLogo,
@@ -199,4 +208,5 @@ module.exports = {
   completeOnboarding,
   fetchMyBusiness,
   getPublicBusinessProfile,
+  fetchDashboardSummary,
 };

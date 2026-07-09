@@ -5,6 +5,7 @@ export interface ProfileEntry {
   type: 'personal' | 'business';
   displayName: string;
   avatarUrl: string;
+  logoUrl?: string;
 }
 
 export interface User {

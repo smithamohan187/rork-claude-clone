@@ -21,7 +21,7 @@ async function createEvent(userId, payload) {
 async function listMyEvents(userId, filter) {
   const businessId = await eventsModel.getBusinessIdByUserId(userId);
   if (!businessId) return [];
-  return eventsModel.getEventsByBusiness(businessId, filter);
+  return eventsModel.getEventsByBusiness(businessId, filter, null);
 }
 
 async function getEvent(eventId) {
@@ -45,8 +45,8 @@ async function cancelEvent(userId, eventId) {
   return updated;
 }
 
-async function getEventsForBusiness(businessId, filter) {
-  return eventsModel.getEventsByBusiness(businessId, filter);
+async function getEventsForBusiness(businessId, filter, profileId) {
+  return eventsModel.getEventsByBusiness(businessId, filter, profileId);
 }
 
 async function toggleEventStatus(userId, eventId) {

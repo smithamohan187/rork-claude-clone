@@ -7,9 +7,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import type { EventFeedItem } from '@/hooks/usePersonalisedFeed';
-import { useComments } from '@/hooks/useComments';
 import { FeedActionBar } from '@/components/feed/FeedActionBar';
-import { CommentSection } from '@/components/feed/CommentSection';
+import LikersSheet from '@/components/feed/LikersSheet';
+import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 
@@ -20,7 +20,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 interface Props {
   event: EventFeedItem;
   onPress: () => void;
-  onToggleInterested: () => boolean;
+  onToggleInterested: () => void;
+  onToggleLike: (contentId: string) => void;
   onShowToast: (msg: string) => void;
   activePanel: 'comments' | 'share' | null;
   onOpenPanel: (panel: 'comments' | 'share' | null) => void;
@@ -39,6 +40,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   event,
   onPress,
   onToggleInterested,
+  onToggleLike,
   onShowToast,
   activePanel,
   onOpenPanel,
@@ -52,34 +54,25 @@ export const EventFeedCard = React.memo(function EventFeedCard({
 
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
+  const [likersOpen, setLikersOpen] = useState<boolean>(false);
+  const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
   const coverUri = useMemo(
-    () => pickFeedImage(event.id, ['events', event.title, event.venue, event.businessName]),
-    [event.id, event.title, event.venue, event.businessName],
+    () => event.image_url || pickFeedImage(event.id, ['events', event.title, event.venue, event.businessName]),
+    [event.image_url, event.id, event.title, event.venue, event.businessName],
   );
-
-  const {
-    comments,
-    reactionCount,
-    hasLiked,
-    submitting,
-    commentText,
-    setCommentText,
-    toggleLike,
-    submitComment,
-  } = useComments(event.id, 'event');
 
   const handleInterested = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
-    const now = onToggleInterested();
-    onShowToast(now ? 'Added to your events' : 'Removed from your events');
-  }, [onToggleInterested, onShowToast]);
+    const willBeInterested = !event.interested;
+    onToggleInterested();
+    onShowToast(willBeInterested ? 'Added to your events' : 'Removed from your events');
+  }, [onToggleInterested, onShowToast, event.interested]);
 
   const handleToggleComments = useCallback(() => {
-    easeNext();
-    onOpenPanel(activePanel === 'comments' ? null : 'comments');
-  }, [activePanel, onOpenPanel]);
+    setCommentSheetOpen(true);
+  }, []);
 
   const handleToggleShare = useCallback(() => {
     const settings = getBusinessReferralSettings(event.businessId);
@@ -104,13 +97,6 @@ export const EventFeedCard = React.memo(function EventFeedCard({
     router.push(`/my-referrals${query}` as never);
   }, [router, event.businessId, event.id]);
 
-  const handleSubmitComment = useCallback(() => {
-    submitComment(currentUser.name, currentUser.initials, currentUser.color).catch((e) =>
-      console.log('[Event] comment error', e),
-    );
-  }, [submitComment, currentUser]);
-
-  const showComments = activePanel === 'comments';
   const showShare = activePanel === 'share';
 
   return (
@@ -152,8 +138,8 @@ export const EventFeedCard = React.memo(function EventFeedCard({
           >
             <Bookmark
               size={15}
-              color={event.interested ? '#1A5C35' : '#fff'}
-              fill={event.interested ? '#1A5C35' : 'transparent'}
+              color={event.interested ? '#E53935' : '#fff'}
+              fill={event.interested ? '#E53935' : 'transparent'}
             />
           </TouchableOpacity>
           {saveTooltip ? (
@@ -191,28 +177,34 @@ export const EventFeedCard = React.memo(function EventFeedCard({
       </View>
 
       <FeedActionBar
-        reactionCount={reactionCount}
-        hasLiked={hasLiked}
-        commentCount={comments.length}
-        showComments={showComments}
+        reactionCount={event.like_count}
+        hasLiked={event.liked_by_me}
+        isOwner={event.is_owner}
+        commentCount={event.comment_count ?? 0}
+        showComments={commentSheetOpen}
         showShare={showShare}
-        onLike={toggleLike}
+        onLike={() => onToggleLike(event.id)}
+        onOpenLikers={() => setLikersOpen(true)}
         onComment={handleToggleComments}
         onShare={handleToggleShare}
         onRefer={handleRefer}
       />
 
-      {showComments ? (
-        <CommentSection
-          comments={comments}
-          commentText={commentText}
-          setCommentText={setCommentText}
-          submitting={submitting}
-          onSubmit={handleSubmitComment}
-          currentUserInitials={currentUser.initials}
-          currentUserColor={currentUser.color}
-        />
-      ) : null}
+      <LikersSheet
+        visible={likersOpen}
+        contentType="event"
+        contentId={event.id}
+        likeCount={event.like_count}
+        onClose={() => setLikersOpen(false)}
+      />
+
+      <CommentSheet
+        visible={commentSheetOpen}
+        contentType="event"
+        contentId={event.id}
+        initialCommentCount={event.comment_count ?? 0}
+        onClose={() => setCommentSheetOpen(false)}
+      />
 
       <SharePostSheet
         visible={showShare}

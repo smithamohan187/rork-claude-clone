@@ -38,7 +38,7 @@ async function listMyPosts(userId, filter) {
     filter === 'active'   ? true  :
     filter === 'disabled' ? false :
     undefined;
-  return postsModel.getPostsByBusinessId(businessId, isActive);
+  return postsModel.getPostsByBusinessId(businessId, isActive, null);
 }
 
 async function getPost(postId) {
@@ -53,12 +53,12 @@ async function deletePost(userId, postId) {
   if (!deleted) throw new Error('Post not found');
 }
 
-async function getPostsForBusiness(businessId, filter) {
+async function getPostsForBusiness(businessId, filter, profileId) {
   const isActive =
     filter === 'active'   ? true  :
     filter === 'disabled' ? false :
     undefined;
-  return postsModel.getPostsByBusinessId(businessId, isActive);
+  return postsModel.getPostsByBusinessId(businessId, isActive, profileId);
 }
 
 async function uploadPostImage(userId, postId, imageUrl) {

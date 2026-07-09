@@ -71,12 +71,14 @@ import { StarRatingDisplay } from '@/components/ratings/StarRatingDisplay';
 import { RatingBottomSheet } from '@/components/ratings/RatingBottomSheet';
 import { useBusinessRating, type ReviewItem } from '@/hooks/useBusinessRating';
 import { Star as StarIcon } from 'lucide-react-native';
-import { usePosts } from '@/contexts/PostsContext';
+import LikeButton from '@/components/feed/LikeButton';
 import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import type { BusinessProfile } from '@/api/services/businessProfileService';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useSavedBusiness } from '@/hooks/useSavedBusiness';
+import MembersTab from '@/components/MembersTab';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ACCENT = '#1A5C35';
@@ -118,7 +120,7 @@ const MOCK_REWARDS_CATALOG: Record<string, CatalogItem[]> = {
   ],
 };
 
-type TabKey = 'offers' | 'events' | 'posts' | 'about';
+type TabKey = 'offers' | 'events' | 'posts' | 'about' | 'members';
 
 type OfferStatus = 'active' | 'expired' | 'disabled';
 type EventStatus = 'upcoming' | 'past' | 'cancelled';
@@ -155,8 +157,9 @@ export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
   const { business: realBusiness, loading: profileLoading, error: profileError,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
-  const { activeProfile } = useAuth();
+  const { authUser, activeProfile } = useAuth();
   const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '');
+  const { isSaved, isSaving, save: saveBusinessFn, unsave: unsaveBusinessFn } = useSavedBusiness(id ?? '');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
   const [showSubscribeBanner, setShowSubscribeBanner] = useState<boolean>(
@@ -164,7 +167,6 @@ export default function BusinessProfileScreen() {
   );
   const subscribeBannerSlide = useRef(new Animated.Value(subscribeParam === '1' ? 0 : -80)).current;
   const [savedOffers, setSavedOffers] = useState<Record<string, boolean>>({});
-  const [isFavorited, setIsFavorited] = useState<boolean>(false);
   const [favTooltipVisible, setFavTooltipVisible] = useState<boolean>(false);
 
   useEffect(() => {
@@ -172,11 +174,10 @@ export default function BusinessProfileScreen() {
     const t = setTimeout(() => setFavTooltipVisible(false), 1500);
     return () => clearTimeout(t);
   }, [favTooltipVisible]);
-  const [favLoading, setFavLoading] = useState<boolean>(false);
   const heartScale = useRef(new Animated.Value(1)).current;
 
   const handleToggleFavorite = useCallback(() => {
-    if (favLoading) return;
+    if (isSaving) return;
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -184,21 +185,19 @@ export default function BusinessProfileScreen() {
       Animated.timing(heartScale, { toValue: 1.3, duration: 120, useNativeDriver: true }),
       Animated.timing(heartScale, { toValue: 1, duration: 120, useNativeDriver: true }),
     ]).start();
-    setFavLoading(true);
-    const next = !isFavorited;
-    setTimeout(() => {
-      setIsFavorited(next);
-      setFavLoading(false);
-      console.log('[BusinessProfile] Toggled favorite:', next);
-    }, 450);
-  }, [favLoading, isFavorited, heartScale]);
+    if (isSaved) {
+      unsaveBusinessFn();
+    } else {
+      saveBusinessFn();
+    }
+  }, [isSaving, isSaved, heartScale, saveBusinessFn, unsaveBusinessFn]);
 
   const tabUnderlineX = useRef(new Animated.Value(0)).current;
 
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   const isOwner = useMemo(
-    () => !!activeProfile && !!realBusiness && activeProfile.id === realBusiness.profile_id,
-    [activeProfile, realBusiness],
+    () => !!authUser && !!realBusiness && authUser.id === realBusiness.owner_user_id,
+    [authUser, realBusiness],
   );
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
@@ -311,7 +310,13 @@ export default function BusinessProfileScreen() {
     }
   }, [businessOffers, toggleOfferDisable]);
 
-  const tabWidth = useMemo(() => (SCREEN_WIDTH - 32) / TAB_ITEMS.length, []);
+  const visibleTabs = useMemo(
+    () => isOwner
+      ? [...TAB_ITEMS, { key: 'members' as TabKey, label: 'Members' }]
+      : TAB_ITEMS,
+    [isOwner],
+  );
+  const tabWidth = useMemo(() => (SCREEN_WIDTH - 32) / visibleTabs.length, [visibleTabs.length]);
 
   const handleTabPress = useCallback(
     (tab: TabKey, index: number) => {
@@ -443,19 +448,19 @@ export default function BusinessProfileScreen() {
                 hitSlop={12}
                 onPress={handleToggleFavorite}
                 onLongPress={() => setFavTooltipVisible(true)}
-                disabled={favLoading}
+                disabled={isSaving}
                 accessibilityLabel="Bookmark this business"
                 accessibilityHint="Save this business to your bookmarks"
                 testID="business-profile-fav"
               >
-                {favLoading ? (
+                {isSaving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Animated.View style={{ transform: [{ scale: heartScale }] }}>
                     <Heart
                       size={20}
-                      color={isFavorited ? '#E24B4A' : '#888780'}
-                      fill={isFavorited ? '#E24B4A' : 'transparent'}
+                      color={isSaved ? '#E24B4A' : '#888780'}
+                      fill={isSaved ? '#E24B4A' : 'transparent'}
                     />
                   </Animated.View>
                 )}
@@ -656,7 +661,7 @@ export default function BusinessProfileScreen() {
 
         <View style={styles.tabBarWrap}>
           <View style={styles.tabBar}>
-            {TAB_ITEMS.map((tab, index) => (
+            {visibleTabs.map((tab, index) => (
               <TouchableOpacity
                 key={tab.key}
                 style={styles.tabItem}
@@ -708,6 +713,12 @@ export default function BusinessProfileScreen() {
               isEditing={isEditing}
               draft={draft}
               updateDraft={updateDraft}
+            />
+          )}
+          {activeTab === 'members' && isOwner && (
+            <MembersTab
+              businessId={id ?? ''}
+              onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
             />
           )}
         </View>
@@ -1023,6 +1034,7 @@ function OffersTab({
   isOwner: boolean;
   onRequestToggle: (offerId: string) => void;
 }) {
+  const [commentOpenFor, setCommentOpenFor] = useState<string | null>(null);
   const counts = useMemo(() => ({
     all: offers.length,
     active: offers.filter((o) => o.effective_status === 'active').length,
@@ -1158,6 +1170,26 @@ function OffersTab({
                   <Text style={styles.offerViewDetails}>View details →</Text>
                 </TouchableOpacity>
               </View>
+              <View style={styles.likeRow}>
+                <LikeButton
+                  contentType="offer"
+                  contentId={offer.id}
+                  initialLikeCount={offer.like_count ?? 0}
+                  initialHasLiked={offer.liked_by_me ?? false}
+                  isOwner={isOwner}
+                />
+                <TouchableOpacity style={styles.postLikeBtn} onPress={() => setCommentOpenFor(offer.id)} hitSlop={8}>
+                  <MessageCircle size={18} color="#6B7280" />
+                  <Text style={styles.postLikeCount}>{offer.comment_count ?? 0}</Text>
+                </TouchableOpacity>
+                <CommentSheet
+                  visible={commentOpenFor === offer.id}
+                  contentType="offer"
+                  contentId={offer.id}
+                  initialCommentCount={offer.comment_count ?? 0}
+                  onClose={() => setCommentOpenFor(null)}
+                />
+              </View>
               {isOwner && (
                 <View style={styles.ownerActionRow}>
                   <View style={styles.ownerActionLeft}>
@@ -1215,6 +1247,7 @@ const OFFER_STATUS_STYLES: Record<OfferStatus, { bg: string; fg: string; label: 
 function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; isOwner: boolean; onShowSnack: (msg: string) => void }) {
   const router = useRouter();
   const [filter, setFilter] = useState<EventFilter>('upcoming');
+  const [commentOpenFor, setCommentOpenFor] = useState<string | null>(null);
   const { events, isLoading, toggleStatus } = useBusinessEvents(businessId, filter);
   const [eventConfirmDialog, setEventConfirmDialog] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
 
@@ -1346,6 +1379,26 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                 >
                   View details →
                 </Text>
+                <View style={styles.likeRow}>
+                  <LikeButton
+                    contentType="event"
+                    contentId={event.id}
+                    initialLikeCount={event.like_count ?? 0}
+                    initialHasLiked={event.liked_by_me ?? false}
+                    isOwner={isOwner}
+                  />
+                  <TouchableOpacity style={styles.postLikeBtn} onPress={() => setCommentOpenFor(event.id)} hitSlop={8}>
+                    <MessageCircle size={18} color="#6B7280" />
+                    <Text style={styles.postLikeCount}>{event.comment_count ?? 0}</Text>
+                  </TouchableOpacity>
+                  <CommentSheet
+                    visible={commentOpenFor === event.id}
+                    contentType="event"
+                    contentId={event.id}
+                    initialCommentCount={event.comment_count ?? 0}
+                    onClose={() => setCommentOpenFor(null)}
+                  />
+                </View>
                 {isOwner && (
                   <View style={styles.ownerActionRow}>
                     <View style={styles.ownerActionLeft}>
@@ -1450,19 +1503,10 @@ function PostsTab({
   const [postFilter, setPostFilter] = useState<PostFilter>('all');
   const { posts, isLoading, toggleDisable: togglePostDisable, deletePost: apiDeletePost } =
     useBusinessPosts(business.id, postFilter);
-  const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+  const [commentOpenFor, setCommentOpenFor] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ visible: boolean; postId: string | null }>({ visible: false, postId: null });
   const [postDisableConfirm, setPostDisableConfirm] = useState<{ visible: boolean; postId: string | null; currentIsActive: boolean }>({ visible: false, postId: null, currentIsActive: true });
-  const { toggleLike: ctxToggleLike, likedIds } = usePosts();
-
-  const handleToggleLike = useCallback((postId: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setLikedPosts((prev) => ({ ...prev, [postId]: !prev[postId] }));
-    ctxToggleLike(postId);
-  }, [ctxToggleLike]);
 
   const openCreate = useCallback(() => {
     setMenuOpenFor(null);
@@ -1556,7 +1600,6 @@ function PostsTab({
         </View>
       ) : (
         posts.map((post) => {
-          const liked = !!likedIds[post.id] || !!likedPosts[post.id];
           const dimmed = !post.is_active;
           return (
             <View key={post.id} style={[styles.postCard, dimmed && styles.offerCardDimmed]} testID={`post-${post.id}`}>
@@ -1626,15 +1669,30 @@ function PostsTab({
                 View details →
               </Text>
 
-              <PostEngagementRow
-                postId={post.id}
-                liked={liked}
-                likes={0}
-                comments={[]}
-                onLike={() => handleToggleLike(post.id)}
-                onSendComment={() => {}}
-                onShare={() => onShowSnack('Link copied to clipboard')}
-              />
+              <View style={styles.postFooter}>
+                <LikeButton
+                  contentType="post"
+                  contentId={post.id}
+                  initialLikeCount={post.like_count ?? 0}
+                  initialHasLiked={post.liked_by_me ?? false}
+                  isOwner={isOwner}
+                />
+                <TouchableOpacity style={styles.postLikeBtn} onPress={() => setCommentOpenFor(post.id)} hitSlop={8}>
+                  <MessageCircle size={18} color="#6B7280" />
+                  <Text style={styles.postLikeCount}>{post.comment_count ?? 0}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.postLikeBtn} onPress={() => onShowSnack('Link copied to clipboard')} hitSlop={8}>
+                  <Share2 size={18} color="#6B7280" />
+                  <Text style={styles.postLikeCount}>Share</Text>
+                </TouchableOpacity>
+                <CommentSheet
+                  visible={commentOpenFor === post.id}
+                  contentType="post"
+                  contentId={post.id}
+                  initialCommentCount={post.comment_count ?? 0}
+                  onClose={() => setCommentOpenFor(null)}
+                />
+              </View>
 
               {isOwner && (
                 <View style={styles.ownerActionRow}>
@@ -1737,52 +1795,6 @@ function PostsTab({
   );
 }
 
-function PostEngagementRow({
-  postId,
-  liked,
-  likes,
-  comments,
-  onLike,
-  onSendComment,
-  onShare,
-}: {
-  postId: string;
-  liked: boolean;
-  likes: number;
-  comments: { id: string; user: string; text: string; time: string }[];
-  onLike: () => void;
-  onSendComment: (t: string) => void;
-  onShare: () => void;
-}) {
-  const [open, setOpen] = useState<boolean>(false);
-  return (
-    <View style={styles.postFooter}>
-      <TouchableOpacity
-        style={styles.postLikeBtn}
-        onPress={onLike}
-        hitSlop={8}
-        testID={`post-like-${postId}`}
-      >
-        <Heart size={18} color={liked ? ACCENT : '#6B7280'} fill={liked ? ACCENT : 'transparent'} />
-        <Text style={[styles.postLikeCount, liked && { color: ACCENT }]}>{likes}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.postLikeBtn}
-        onPress={() => setOpen(true)}
-        hitSlop={8}
-        testID={`post-comment-${postId}`}
-      >
-        <MessageCircle size={18} color="#6B7280" />
-        <Text style={styles.postLikeCount}>{comments.length}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.postLikeBtn} onPress={onShare} hitSlop={8} testID={`post-share-${postId}`}>
-        <Share2 size={18} color="#6B7280" />
-        <Text style={styles.postLikeCount}>Share</Text>
-      </TouchableOpacity>
-      <CommentSheet visible={open} comments={comments} onClose={() => setOpen(false)} onSend={onSendComment} />
-    </View>
-  );
-}
 
 function AboutTab({
   business,
@@ -3093,6 +3105,12 @@ const styles = StyleSheet.create({
   },
   offerFooterSpacer: {
     flex: 1,
+  },
+  likeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingHorizontal: 2,
   },
   offerViewDetails: {
     fontSize: 12,

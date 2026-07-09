@@ -47,10 +47,96 @@ async function getSubscriberCount(businessId) {
   return rows[0]?.count ?? 0;
 }
 
+async function getSubscribedBusinesses(profileId) {
+  const { rows } = await query(
+    `SELECT
+       b.id,
+       b.name,
+       b.description,
+       b.cover_url,
+       bc.name AS category_name,
+       s.subscribed_at,
+       COALESCE(
+         (SELECT ROUND(AVG(rating)::numeric, 1)
+          FROM business_reviews WHERE business_id = b.id), 0
+       ) AS avg_rating,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM offers
+          WHERE business_id = b.id
+            AND status = 'active'
+            AND (expires_at IS NULL OR expires_at > NOW())), 0
+       ) AS active_offer_count
+     FROM subscriptions s
+     JOIN businesses b ON b.id = s.business_id
+     LEFT JOIN business_categories bc ON bc.id = b.category_id
+     WHERE s.profile_id = $1 AND s.is_active = true
+     ORDER BY s.subscribed_at DESC`,
+    [profileId]
+  );
+  return rows;
+}
+
+async function getSubscriptionByUserId(userId, businessId) {
+  const { rows } = await query(
+    `SELECT s.is_active FROM subscriptions s
+     JOIN profiles p ON s.profile_id = p.id
+     WHERE p.user_id = $1 AND s.business_id = $2 AND s.is_active = true
+     LIMIT 1`,
+    [userId, businessId]
+  );
+  return rows[0] ?? null;
+}
+
+async function getBusinessIdByUserId(userId) {
+  const { rows } = await query(
+    `SELECT b.id AS business_id FROM businesses b
+     JOIN profiles p ON p.id = b.profile_id
+     WHERE p.user_id = $1 AND p.profile_type = 'business' AND p.is_active = TRUE LIMIT 1`,
+    [userId]
+  );
+  return rows[0]?.business_id ?? null;
+}
+
+async function getBusinessMembers(businessId) {
+  const { rows } = await query(
+    `SELECT
+       p.id           AS profile_id,
+       p.display_name,
+       p.avatar_url,
+       p.city,
+       s.subscribed_at,
+       up.current_balance,
+       rt.name        AS tier_name,
+       rt.color       AS tier_color
+     FROM subscriptions s
+     INNER JOIN profiles p   ON p.id = s.profile_id
+     LEFT  JOIN user_points up
+           ON up.profile_id = s.profile_id AND up.business_id = s.business_id
+     LEFT  JOIN reward_tiers rt ON rt.id = up.tier_id
+     WHERE s.business_id = $1 AND s.is_active = true
+     ORDER BY s.subscribed_at DESC`,
+    [businessId]
+  );
+  return rows;
+}
+
+async function removeSubscriber(businessId, memberProfileId) {
+  await query(
+    `UPDATE subscriptions SET is_active = false, unsubscribed_at = NOW()
+     WHERE business_id = $1 AND profile_id = $2`,
+    [businessId, memberProfileId]
+  );
+}
+
 module.exports = {
   getActiveProfileId,
   getSubscription,
+  getSubscriptionByUserId,
   subscribe,
   unsubscribe,
   getSubscriberCount,
+  getSubscribedBusinesses,
+  getBusinessIdByUserId,
+  getBusinessMembers,
+  removeSubscriber,
 };

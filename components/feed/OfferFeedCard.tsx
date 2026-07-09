@@ -6,9 +6,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import type { OfferFeedItem } from '@/hooks/usePersonalisedFeed';
-import { useComments } from '@/hooks/useComments';
 import { FeedActionBar } from '@/components/feed/FeedActionBar';
-import { CommentSection } from '@/components/feed/CommentSection';
+import LikersSheet from '@/components/feed/LikersSheet';
+import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferralPickerModal, type ReferralPickerSendResult } from '@/components/ReferralPickerModal';
 import type { OfferSharePayload } from '@/contexts/ReferralChatContext';
@@ -22,7 +22,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 interface Props {
   offer: OfferFeedItem;
   onPress: () => void;
-  onToggleBookmark: () => boolean;
+  onToggleBookmark: () => void;
+  onToggleLike: (contentId: string) => void;
   onShowToast: (msg: string) => void;
   activePanel: 'comments' | 'share' | null;
   onOpenPanel: (panel: 'comments' | 'share' | null) => void;
@@ -39,6 +40,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   offer,
   onPress,
   onToggleBookmark,
+  onToggleLike,
   onShowToast,
   activePanel,
   onOpenPanel,
@@ -47,16 +49,8 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
   const [referOpen, setReferOpen] = useState<boolean>(false);
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
-  const {
-    comments,
-    reactionCount,
-    hasLiked,
-    submitting,
-    commentText,
-    setCommentText,
-    toggleLike,
-    submitComment,
-  } = useComments(offer.id, 'offer');
+  const [likersOpen, setLikersOpen] = useState<boolean>(false);
+  const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
 
   const expiryInfo = useMemo(() => {
     const now = new Date();
@@ -74,21 +68,21 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
-    const now = onToggleBookmark();
-    onShowToast(now ? 'Saved to bookmarks' : 'Removed from bookmarks');
-  }, [onToggleBookmark, onShowToast]);
+    const willBeSaved = !offer.bookmarked;
+    onToggleBookmark();
+    onShowToast(willBeSaved ? 'Saved to bookmarks' : 'Removed from bookmarks');
+  }, [onToggleBookmark, onShowToast, offer.bookmarked]);
 
   const initials = offer.businessName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
   const coverUri = useMemo(
-    () => pickFeedImage(offer.id, [offer.title, offer.description, offer.businessName]),
-    [offer.id, offer.title, offer.description, offer.businessName],
+    () => offer.image_url || pickFeedImage(offer.id, [offer.title, offer.description, offer.businessName]),
+    [offer.image_url, offer.id, offer.title, offer.description, offer.businessName],
   );
 
   const handleToggleComments = useCallback(() => {
-    easeNext();
-    onOpenPanel(activePanel === 'comments' ? null : 'comments');
-  }, [activePanel, onOpenPanel]);
+    setCommentSheetOpen(true);
+  }, []);
 
   const handleToggleShare = useCallback(() => {
     const settings = getBusinessReferralSettings(offer.businessId);
@@ -124,13 +118,6 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
     [onShowToast],
   );
 
-  const handleSubmitComment = useCallback(() => {
-    submitComment(currentUser.name, currentUser.initials, currentUser.color).catch((e) =>
-      console.log('[Offer] comment error', e),
-    );
-  }, [submitComment, currentUser]);
-
-  const showComments = activePanel === 'comments';
   const showShare = activePanel === 'share';
 
   return (
@@ -168,8 +155,8 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
           >
             <Bookmark
               size={15}
-              color={offer.bookmarked ? '#1A5C35' : '#fff'}
-              fill={offer.bookmarked ? '#1A5C35' : 'transparent'}
+              color={offer.bookmarked ? '#E53935' : '#fff'}
+              fill={offer.bookmarked ? '#E53935' : 'transparent'}
             />
           </TouchableOpacity>
           {saveTooltip ? (
@@ -211,28 +198,34 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
       </View>
 
       <FeedActionBar
-        reactionCount={reactionCount}
-        hasLiked={hasLiked}
-        commentCount={comments.length}
-        showComments={showComments}
+        reactionCount={offer.like_count}
+        hasLiked={offer.liked_by_me}
+        isOwner={offer.is_owner}
+        commentCount={offer.comment_count ?? 0}
+        showComments={commentSheetOpen}
         showShare={showShare}
-        onLike={toggleLike}
+        onLike={() => onToggleLike(offer.id)}
+        onOpenLikers={() => setLikersOpen(true)}
         onComment={handleToggleComments}
         onShare={handleToggleShare}
         onRefer={handleRefer}
       />
 
-      {showComments ? (
-        <CommentSection
-          comments={comments}
-          commentText={commentText}
-          setCommentText={setCommentText}
-          submitting={submitting}
-          onSubmit={handleSubmitComment}
-          currentUserInitials={currentUser.initials}
-          currentUserColor={currentUser.color}
-        />
-      ) : null}
+      <LikersSheet
+        visible={likersOpen}
+        contentType="offer"
+        contentId={offer.id}
+        likeCount={offer.like_count}
+        onClose={() => setLikersOpen(false)}
+      />
+
+      <CommentSheet
+        visible={commentSheetOpen}
+        contentType="offer"
+        contentId={offer.id}
+        initialCommentCount={offer.comment_count ?? 0}
+        onClose={() => setCommentSheetOpen(false)}
+      />
 
       <ReferralPickerModal
         visible={referOpen}

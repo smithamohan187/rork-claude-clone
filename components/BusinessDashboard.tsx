@@ -18,6 +18,7 @@ import {
   Tag,
   Zap,
   Ticket,
+  Calendar,
   Megaphone,
   CalendarPlus,
   UsersRound,
@@ -39,6 +40,7 @@ import { useCoupons } from '@/contexts/CouponContext';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessDashboard } from '@/hooks/useBusinessDashboard';
 import {
   dashboardStats,
   quickActions,
@@ -61,6 +63,7 @@ const ICON_MAP = {
   Tag,
   Zap,
   Ticket,
+  Calendar,
 } as const;
 
 const ACTION_ICON_MAP = {
@@ -183,6 +186,7 @@ export default function BusinessDashboard() {
   const { currentUser, businessProfileData, activeProfile, profiles } = useAuth();
   const router = useRouter();
   const { coupons } = useCoupons();
+  const { summary, loading: statsLoading, refresh: refreshStats } = useBusinessDashboard();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const hasMultipleProfiles = profiles.length > 1;
@@ -221,11 +225,27 @@ export default function BusinessDashboard() {
   const greeting = useMemo(() => getGreeting(), []);
   const businessName = businessProfileData?.name || currentUser?.name || 'Business';
 
-  const onRefresh = useCallback(() => {
+  const liveStats = useMemo<DashboardStat[]>(() => {
+    const placeholder = statsLoading ? '...' : null;
+    return dashboardStats.map((stat) => {
+      if (stat.id === 'subscribers') {
+        return { ...stat, value: placeholder ?? String(summary?.subscriber_count ?? 0) };
+      }
+      if (stat.id === 'offers') {
+        return { ...stat, value: placeholder ?? String(summary?.active_offer_count ?? 0) };
+      }
+      if (stat.id === 'events') {
+        return { ...stat, value: placeholder ?? String(summary?.upcoming_event_count ?? 0) };
+      }
+      return stat;
+    });
+  }, [summary, statsLoading]);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    console.log('[BusinessDashboard] Refreshing...');
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    await refreshStats();
+    setRefreshing(false);
+  }, [refreshStats]);
 
   const handleActionPress = useCallback((action: QuickAction) => {
     console.log('[BusinessDashboard] Quick action pressed:', action.id);
@@ -275,8 +295,8 @@ export default function BusinessDashboard() {
                 activeOpacity={0.85}
                 testID="biz-profile-switcher-chip"
               >
-                <Image source={{ uri: activeProfile.avatarUrl }} style={styles.profileChipAvatar} contentFit="cover" />
-                <Text style={styles.profileChipName} numberOfLines={1}>{activeProfile.displayName}</Text>
+                <Image source={{ uri: activeProfile?.avatarUrl }} style={styles.profileChipAvatar} contentFit="cover" />
+                <Text style={styles.profileChipName} numberOfLines={1}>{activeProfile?.displayName ?? 'Business'}</Text>
                 <View style={styles.profileChipBadge}>
                   <Text style={styles.profileChipBadgeText}>Business</Text>
                 </View>
@@ -316,7 +336,7 @@ export default function BusinessDashboard() {
         </View>
 
         <View style={styles.statsGrid}>
-          {dashboardStats.map((stat) => {
+          {liveStats.map((stat) => {
             const isNavigable = stat.id === 'subscribers' || stat.id === 'offers';
             return (
               <StatCard
