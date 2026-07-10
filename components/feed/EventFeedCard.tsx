@@ -56,6 +56,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
+  const [localCommentCount, setLocalCommentCount] = useState<number>(event.comment_count ?? 0);
   const coverUri = useMemo(
     () => event.image_url || pickFeedImage(event.id, ['events', event.title, event.venue, event.businessName]),
     [event.image_url, event.id, event.title, event.venue, event.businessName],
@@ -180,7 +181,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
         reactionCount={event.like_count}
         hasLiked={event.liked_by_me}
         isOwner={event.is_owner}
-        commentCount={event.comment_count ?? 0}
+        commentCount={localCommentCount}
         showComments={commentSheetOpen}
         showShare={showShare}
         onLike={() => onToggleLike(event.id)}
@@ -202,7 +203,8 @@ export const EventFeedCard = React.memo(function EventFeedCard({
         visible={commentSheetOpen}
         contentType="event"
         contentId={event.id}
-        initialCommentCount={event.comment_count ?? 0}
+        initialCommentCount={localCommentCount}
+        onCountChange={setLocalCommentCount}
         onClose={() => setCommentSheetOpen(false)}
       />
 

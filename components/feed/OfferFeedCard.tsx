@@ -51,6 +51,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
+  const [localCommentCount, setLocalCommentCount] = useState<number>(offer.comment_count ?? 0);
 
   const expiryInfo = useMemo(() => {
     const now = new Date();
@@ -201,7 +202,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
         reactionCount={offer.like_count}
         hasLiked={offer.liked_by_me}
         isOwner={offer.is_owner}
-        commentCount={offer.comment_count ?? 0}
+        commentCount={localCommentCount}
         showComments={commentSheetOpen}
         showShare={showShare}
         onLike={() => onToggleLike(offer.id)}
@@ -223,7 +224,8 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
         visible={commentSheetOpen}
         contentType="offer"
         contentId={offer.id}
-        initialCommentCount={offer.comment_count ?? 0}
+        initialCommentCount={localCommentCount}
+        onCountChange={setLocalCommentCount}
         onClose={() => setCommentSheetOpen(false)}
       />
 

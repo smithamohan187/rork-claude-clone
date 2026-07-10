@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { TouchableRipple } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { MessageCircle, Share2, UserPlus } from 'lucide-react-native';
@@ -60,6 +60,14 @@ export const FeedActionBar = React.memo(function FeedActionBar({
   const handleLikePress = isOwner ? onOpenLikers : handleLike;
 
   return (
+    <View>
+      {commentCount > 0 && (
+        <TouchableOpacity onPress={onComment} activeOpacity={0.7}>
+          <Text style={styles.commentSummary}>
+            View all {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
+          </Text>
+        </TouchableOpacity>
+      )}
     <View style={styles.bar} testID="feed-action-bar">
       <TouchableRipple
         onPress={handleLikePress}
@@ -117,6 +125,7 @@ export const FeedActionBar = React.memo(function FeedActionBar({
         </>
       ) : null}
     </View>
+    </View>
   );
 });
 
@@ -155,5 +164,13 @@ const styles = StyleSheet.create({
   },
   labelPrimary: {
     color: PRIMARY,
+  },
+  commentSummary: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    paddingHorizontal: 4,
+    paddingTop: 10,
+    paddingBottom: 2,
   },
 });

@@ -81,6 +81,7 @@ export default function PostFeedCard({
   const [referOpen, setReferOpen] = useState<boolean>(false);
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
+  const [localCommentCount, setLocalCommentCount] = useState<number>(commentCount ?? post.comments.length ?? 0);
   const [localSaved, setLocalSaved] = useState<boolean>(false);
   const saved = isSaved !== undefined ? isSaved : localSaved;
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
@@ -239,7 +240,7 @@ export default function PostFeedCard({
         reactionCount={resolvedLikeCount}
         hasLiked={liked}
         isOwner={isOwner}
-        commentCount={commentCount ?? post.comments.length}
+        commentCount={localCommentCount}
         showComments={commentSheetOpen}
         showShare={showShare}
         onLike={handleLike}
@@ -261,7 +262,8 @@ export default function PostFeedCard({
         visible={commentSheetOpen}
         contentType="post"
         contentId={post.id}
-        initialCommentCount={commentCount ?? post.comments.length}
+        initialCommentCount={localCommentCount}
+        onCountChange={setLocalCommentCount}
         onClose={() => setCommentSheetOpen(false)}
       />
 

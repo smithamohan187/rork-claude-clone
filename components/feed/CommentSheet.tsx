@@ -28,6 +28,7 @@ interface Props {
   contentId: string;
   initialCommentCount?: number;
   onClose: () => void;
+  onCountChange?: (count: number) => void;
 }
 
 function relativeTime(iso: string): string {
@@ -132,7 +133,7 @@ function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplie
   );
 }
 
-export default function CommentSheet({ visible, contentType, contentId, initialCommentCount = 0, onClose }: Props) {
+export default function CommentSheet({ visible, contentType, contentId, initialCommentCount = 0, onClose, onCountChange }: Props) {
   const insets = useSafeAreaInsets();
   const { activeProfileId } = useAuth();
   const inputRef = useRef<TextInput>(null);
@@ -149,6 +150,12 @@ export default function CommentSheet({ visible, contentType, contentId, initialC
       setReplyTarget(null);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (visible && onCountChange) {
+      onCountChange(commentCount);
+    }
+  }, [commentCount, visible]);
 
   const handleReply = useCallback((comment: Comment) => {
     setReplyTarget(comment);
