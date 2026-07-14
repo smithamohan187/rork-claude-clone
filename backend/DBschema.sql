@@ -348,6 +348,8 @@ CREATE TABLE reward_config (
   points_per_rupee       DECIMAL(10, 4) DEFAULT 1,
   referral_bonus_points  INT DEFAULT 50,
   welcome_bonus_points   INT DEFAULT 25,
+  share_points           INT DEFAULT 10,
+  purchase_enabled       BOOLEAN NOT NULL DEFAULT TRUE,
   points_validity_days   INT DEFAULT 365,
   is_active              BOOLEAN DEFAULT TRUE,
   created_at             TIMESTAMPTZ DEFAULT NOW(),
@@ -365,7 +367,8 @@ CREATE TABLE reward_tiers (
   color        VARCHAR(20),
   icon         VARCHAR(50),
   perks        TEXT,
-  sort_order   INT DEFAULT 0
+  sort_order   INT DEFAULT 0,
+  is_deleted   BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX idx_reward_tiers_business_id ON reward_tiers(business_id);
@@ -378,6 +381,7 @@ CREATE TABLE rewards_catalog (
   name               VARCHAR(200) NOT NULL,
   description        TEXT,
   image_url          TEXT,
+  type               VARCHAR(20) DEFAULT 'perk' CHECK (type IN ('discount', 'free_item', 'perk')),
   points_required    INT NOT NULL,
   quantity_available INT,
   quantity_redeemed  INT DEFAULT 0,
@@ -746,3 +750,15 @@ CREATE TABLE shares (
 );
 CREATE INDEX idx_shares_content ON shares(content_type, content_id);
 CREATE INDEX idx_shares_profile ON shares(sharer_profile_id);
+
+ALTER TABLE reward_config
+  ADD COLUMN IF NOT EXISTS share_points INT DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS purchase_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE reward_tiers
+  ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE rewards_catalog
+  ADD COLUMN IF NOT EXISTS type VARCHAR(20)
+    CHECK (type IN ('discount', 'free_item', 'perk')) DEFAULT 'perk';
+    

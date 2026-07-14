@@ -24,6 +24,7 @@ const feedRoutes              = require('./modules/feed/feed.routes');
 const likesRoutes             = require('./modules/likes/likes.routes');
 const commentsRoutes          = require('./modules/comments/comments.routes');
 const sharesRoutes            = require('./modules/shares/shares.routes');
+const rewardConfigRoutes      = require('./modules/rewardConfig/rewardConfig.routes');
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use('/feed',              feedRoutes);
 app.use('/likes',             likesRoutes);
 app.use('/comments',          commentsRoutes);
 app.use('/shares',            sharesRoutes);
+app.use('/',                  rewardConfigRoutes);
 
 app.use('/api/v1', api);
 

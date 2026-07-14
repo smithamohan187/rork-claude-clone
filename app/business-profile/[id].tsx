@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import {
   ArrowLeft,
   Heart,
@@ -57,7 +57,7 @@ import { Switch, Snackbar, Dialog, Portal, Button as PaperButton, TextInput as P
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { Copy } from 'lucide-react-native';
-import { REWARD_TIERS } from '@/mocks/businessProfile';
+import { fetchRewardConfig, type RewardConfigFull } from '@/api/services/rewardConfigService';
 import BusinessQRCard from '@/components/business/BusinessQRCard';
 import { QrCode } from 'lucide-react-native';
 import type { BusinessProfileData } from '@/mocks/businessProfile';
@@ -86,39 +86,6 @@ const ACCENT_LIGHT = '#EDE9F6';
 const COVER_HEIGHT = 210;
 const LOGO_SIZE = 80;
 
-type RewardConfig = { welcome_points: number; referral_points: number; share_points: number };
-type CatalogItem = { id: string; name: string; points_required: number; description?: string };
-
-const MOCK_REWARD_CONFIGS: Record<string, RewardConfig> = {
-  'b1': { welcome_points: 100, referral_points: 250, share_points: 25 },
-  'b2': { welcome_points: 50, referral_points: 150, share_points: 10 },
-  'b3': { welcome_points: 200, referral_points: 0, share_points: 20 },
-  'b4': { welcome_points: 0, referral_points: 100, share_points: 15 },
-  'b5': { welcome_points: 75, referral_points: 200, share_points: 0 },
-  'b-touchpoints': { welcome_points: 500, referral_points: 1000, share_points: 50 },
-};
-const DEFAULT_REWARD_CONFIG: RewardConfig = { welcome_points: 100, referral_points: 200, share_points: 20 };
-
-const MOCK_REWARDS_CATALOG: Record<string, CatalogItem[]> = {
-  'b1': [
-    { id: 'r1', name: 'Free Coffee', points_required: 250, description: 'Any size, on the house' },
-    { id: 'r2', name: '15% Off Next Visit', points_required: 500 },
-    { id: 'r3', name: 'Exclusive Merch Drop', points_required: 1500, description: 'Members-only collection' },
-  ],
-  'b2': [
-    { id: 'r1', name: 'Buy 1 Get 1 Free', points_required: 300 },
-    { id: 'r2', name: 'VIP Tasting Night', points_required: 1200, description: 'Quarterly invite-only event' },
-  ],
-  'b3': [
-    { id: 'r1', name: 'Welcome Gift Box', points_required: 200, description: 'Curated selection of favourites' },
-    { id: 'r2', name: 'Skip the Queue Pass', points_required: 800 },
-  ],
-  'b-touchpoints': [
-    { id: 'r1', name: '1 Month Pro Free', points_required: 1000, description: 'Unlock all premium features' },
-    { id: 'r2', name: 'Exclusive Sticker Pack', points_required: 300 },
-    { id: 'r3', name: 'Founder Call', points_required: 5000, description: '30-minute 1:1 with the team' },
-  ],
-};
 
 type TabKey = 'offers' | 'events' | 'posts' | 'about' | 'members';
 
@@ -228,6 +195,24 @@ export default function BusinessProfileScreen() {
   }, [isSaving, isSaved, heartScale, saveBusinessFn, unsaveBusinessFn]);
 
   const tabUnderlineX = useRef(new Animated.Value(0)).current;
+
+  const [rewardData, setRewardData] = useState<RewardConfigFull | null>(null);
+  const [rewardLoading, setRewardLoading] = useState(false);
+
+  const loadRewardConfig = useCallback(async () => {
+    if (!id) return;
+    setRewardLoading(true);
+    try {
+      const data = await fetchRewardConfig(id);
+      setRewardData(data);
+    } catch {
+      // silent fail — sections render empty state
+    } finally {
+      setRewardLoading(false);
+    }
+  }, [id]);
+
+  useFocusEffect(useCallback(() => { loadRewardConfig(); }, [loadRewardConfig]));
 
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   const isOwner = useMemo(
@@ -858,26 +843,36 @@ export default function BusinessProfileScreen() {
           </View>
           <View style={styles.tierTrack}>
             <View style={styles.tierLine} />
-            {REWARD_TIERS.map((tier, index) => (
-              <View key={tier.id} style={styles.tierNode}>
-                <View style={[styles.tierCircle, { backgroundColor: tier.color }]}>
-                  <Text style={styles.tierEmoji}>{tier.icon}</Text>
+            {rewardLoading ? (
+              <ActivityIndicator size="small" color={ACCENT} />
+            ) : (rewardData?.tiers ?? []).length === 0 ? (
+              <Text style={styles.tierPoints}>No tiers configured yet</Text>
+            ) : (
+              (rewardData?.tiers ?? []).map((tier) => (
+                <View key={tier.id} style={styles.tierNode}>
+                  <View style={[styles.tierCircle, { backgroundColor: tier.color ?? '#9CA3AF' }]}>
+                    {tier.icon ? (
+                      <Text style={styles.tierEmoji}>{tier.icon}</Text>
+                    ) : (
+                      <Text style={styles.tierEmoji}>{tier.name.charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.tierName}>{tier.name}</Text>
+                  <Text style={styles.tierPoints}>
+                    {tier.min_points === 0 ? 'Start' : `${formatNumber(tier.min_points)} pts`}
+                  </Text>
                 </View>
-                <Text style={styles.tierName}>{tier.name}</Text>
-                <Text style={styles.tierPoints}>
-                  {tier.pointsRequired === 0 ? 'Start' : `${formatNumber(tier.pointsRequired)} pts`}
-                </Text>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         </View>
 
         {(() => {
-          const cfg = MOCK_REWARD_CONFIGS[id ?? business.id] ?? DEFAULT_REWARD_CONFIG;
-          const rows: { key: string; label: string; value: number; color: string; bg: string; Icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
-            { key: 'welcome', label: 'Welcome Points', value: cfg.welcome_points, color: '#F59E0B', bg: '#FEF3C7', Icon: Gift },
-            { key: 'referral', label: 'Referral Points', value: cfg.referral_points, color: '#00B246', bg: '#E8F5EE', Icon: Users },
-            { key: 'share', label: 'Sharing Points', value: cfg.share_points, color: '#3B82F6', bg: '#DBEAFE', Icon: Share2 },
+          const cfg = rewardData?.config;
+          const rows = [
+            { key: 'welcome',  label: 'Welcome Points',  value: cfg?.welcome_bonus_points  ?? 0, color: '#F59E0B', bg: '#FEF3C7', Icon: Gift },
+            { key: 'referral', label: 'Referral Points', value: cfg?.referral_bonus_points ?? 0, color: '#00B246', bg: '#E8F5EE', Icon: Users },
+            { key: 'share',    label: 'Sharing Points',  value: cfg?.share_points          ?? 0, color: '#3B82F6', bg: '#DBEAFE', Icon: Share2 },
           ];
           return (
             <View style={styles.earnCard} testID="ways-to-earn-card">
@@ -887,33 +882,39 @@ export default function BusinessProfileScreen() {
                 </View>
                 <Text style={styles.earnHeaderTitle}>Ways to Earn</Text>
               </View>
-              {rows.map((row, idx) => {
-                const offered = row.value && row.value > 0;
-                const RowIcon = row.Icon;
-                return (
-                  <View key={row.key}>
-                    <View style={styles.earnRow}>
-                      <View style={[styles.earnRowIcon, { backgroundColor: row.bg }]}>
-                        <RowIcon size={18} color={row.color} />
-                      </View>
-                      <Text style={styles.earnRowLabel}>{row.label}</Text>
-                      {offered ? (
-                        <View style={[styles.earnChip, { backgroundColor: row.bg }]}>
-                          <Text style={[styles.earnChipText, { color: row.color }]}>+{row.value} pts</Text>
+              {rewardLoading ? (
+                <ActivityIndicator size="small" color={ACCENT} style={{ marginVertical: 12 }} />
+              ) : !cfg ? (
+                <Text style={styles.earnNotOffered}>No earning rules configured yet</Text>
+              ) : (
+                rows.map((row, idx) => {
+                  const offered = row.value > 0;
+                  const RowIcon = row.Icon;
+                  return (
+                    <View key={row.key}>
+                      <View style={styles.earnRow}>
+                        <View style={[styles.earnRowIcon, { backgroundColor: row.bg }]}>
+                          <RowIcon size={18} color={row.color} />
                         </View>
-                      ) : (
-                        <Text style={styles.earnNotOffered}>Not offered</Text>
-                      )}
+                        <Text style={styles.earnRowLabel}>{row.label}</Text>
+                        {offered ? (
+                          <View style={[styles.earnChip, { backgroundColor: row.bg }]}>
+                            <Text style={[styles.earnChipText, { color: row.color }]}>+{row.value} pts</Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.earnNotOffered}>Not offered</Text>
+                        )}
+                      </View>
+                      {idx < rows.length - 1 && <View style={styles.earnDivider} />}
                     </View>
-                    {idx < rows.length - 1 && <View style={styles.earnDivider} />}
-                  </View>
-                );
-              })}
+                  );
+                })
+              )}
             </View>
           );
         })()}
 
-        {(MOCK_REWARDS_CATALOG[id ?? business.id]?.length ?? 0) > 0 && (
+        {(rewardData?.rewards ?? []).length > 0 && (
           <View style={styles.catalogCard} testID="rewards-catalog-card">
             <View style={styles.earnHeader}>
               <View style={[styles.earnHeaderIcon, { backgroundColor: '#FEF3C7' }]}>
@@ -921,7 +922,7 @@ export default function BusinessProfileScreen() {
               </View>
               <Text style={styles.earnHeaderTitle}>Rewards You Can Unlock</Text>
             </View>
-            {(MOCK_REWARDS_CATALOG[id ?? business.id] ?? []).map((item, idx, arr) => (
+            {(rewardData?.rewards ?? []).map((item, idx, arr) => (
               <View key={item.id}>
                 <View style={styles.catalogRow}>
                   <View style={styles.catalogIcon}>

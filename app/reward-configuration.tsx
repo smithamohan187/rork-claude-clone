@@ -1,14 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import {
   Button,
   Surface,
@@ -20,7 +19,7 @@ import {
   Portal,
   Modal as PaperModal,
   Divider,
-  Badge,
+  ActivityIndicator,
 } from 'react-native-paper';
 import {
   ArrowLeft,
@@ -38,7 +37,21 @@ import {
   Package,
   Star,
   Trash2,
+  Pencil,
 } from 'lucide-react-native';
+import {
+  fetchRewardConfig,
+  upsertRewardConfig,
+  createTier,
+  updateTier,
+  deleteTier,
+  createReward,
+  updateReward,
+  deleteReward,
+  type RewardTier,
+  type RewardItem,
+} from '@/api/services/rewardConfigService';
+import { fetchMyBusinessId } from '@/api/services/businessDashboardService';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SOFT = '#E8F5EE';
@@ -50,26 +63,7 @@ const BORDER = '#E5E7EB';
 const BG = '#F7F6FB';
 
 type BadgeColor = '#CD7F32' | '#A8A9AD' | '#FFC107' | '#1A5C35';
-
-interface Tier {
-  id: string;
-  name: string;
-  minPoints: number;
-  benefits: string[];
-  color: BadgeColor;
-}
-
 type PrizeType = 'discount' | 'free_item' | 'perk';
-
-interface Prize {
-  id: string;
-  name: string;
-  description: string;
-  type: PrizeType;
-  points: number;
-  stockLimit?: number;
-  active: boolean;
-}
 
 const BADGE_COLORS: BadgeColor[] = ['#CD7F32', '#A8A9AD', '#FFC107', '#1A5C35'];
 
@@ -79,44 +73,45 @@ const PRIZE_TYPE_META: Record<PrizeType, { label: string; color: string; icon: R
   perk: { label: 'Perk', color: AMBER, icon: Star },
 };
 
-const INITIAL_TIERS: Tier[] = [
-  { id: 't1', name: 'Bronze', minPoints: 0, benefits: ['5% off', 'Birthday treat'], color: '#CD7F32' },
-  { id: 't2', name: 'Silver', minPoints: 500, benefits: ['10% off', 'Early access', 'Free shipping'], color: '#A8A9AD' },
-  { id: 't3', name: 'Gold', minPoints: 1500, benefits: ['15% off', 'VIP events', 'Priority support', 'Free drink'], color: '#FFC107' },
-];
-
-const INITIAL_PRIZES: Prize[] = [
-  { id: 'p1', name: '10% Off Next Order', description: 'One-time discount on your next purchase', type: 'discount', points: 200, active: true },
-  { id: 'p2', name: 'Free Coffee', description: 'Redeem for any medium coffee', type: 'free_item', points: 350, stockLimit: 50, active: true },
-  { id: 'p3', name: 'VIP Lounge Access', description: 'Priority seating for one visit', type: 'perk', points: 800, active: false },
-];
-
 export default function RewardConfigurationScreen() {
   const router = useRouter();
 
-  const [welcomePoints, setWelcomePoints] = useState<string>('100');
-  const [referralPoints, setReferralPoints] = useState<string>('50');
-  const [sharingPoints, setSharingPoints] = useState<string>('10');
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [loading, setLoading]   = useState<boolean>(true);
+  const [saving, setSaving]     = useState<boolean>(false);
+
+  // Base config
+  const [welcomePoints,  setWelcomePoints]  = useState<string>('');
+  const [referralPoints, setReferralPoints] = useState<string>('');
+  const [sharingPoints,  setSharingPoints]  = useState<string>('');
   const [purchaseEnabled, setPurchaseEnabled] = useState<boolean>(true);
-  const [pointsPerUnit, setPointsPerUnit] = useState<string>('1');
+  const [pointsPerUnit,  setPointsPerUnit]  = useState<string>('');
 
-  const [tiers, setTiers] = useState<Tier[]>(INITIAL_TIERS);
-  const [prizes, setPrizes] = useState<Prize[]>(INITIAL_PRIZES);
+  // Collections
+  const [tiers,  setTiers]  = useState<RewardTier[]>([]);
+  const [prizes, setPrizes] = useState<RewardItem[]>([]);
 
-  const [showTierModal, setShowTierModal] = useState<boolean>(false);
+  // Tier modal
+  const [showTierModal,     setShowTierModal]     = useState<boolean>(false);
+  const [tierName,          setTierName]          = useState<string>('');
+  const [tierMin,           setTierMin]           = useState<string>('');
+  const [tierBenefits,      setTierBenefits]      = useState<string[]>([]);
+  const [tierBenefitDraft,  setTierBenefitDraft]  = useState<string>('');
+  const [tierColor,         setTierColor]         = useState<BadgeColor>(BADGE_COLORS[3]);
+  const [savingTier,        setSavingTier]        = useState<boolean>(false);
+
+  // Prize modal
   const [showPrizeModal, setShowPrizeModal] = useState<boolean>(false);
+  const [prizeName,      setPrizeName]      = useState<string>('');
+  const [prizeDesc,      setPrizeDesc]      = useState<string>('');
+  const [prizeType,      setPrizeType]      = useState<PrizeType>('discount');
+  const [prizePoints,    setPrizePoints]    = useState<string>('');
+  const [prizeStock,     setPrizeStock]     = useState<string>('');
+  const [savingPrize,    setSavingPrize]    = useState<boolean>(false);
 
-  const [tierName, setTierName] = useState<string>('');
-  const [tierMin, setTierMin] = useState<string>('');
-  const [tierBenefits, setTierBenefits] = useState<string[]>([]);
-  const [tierBenefitDraft, setTierBenefitDraft] = useState<string>('');
-  const [tierColor, setTierColor] = useState<BadgeColor>(BADGE_COLORS[3]);
-
-  const [prizeName, setPrizeName] = useState<string>('');
-  const [prizeDesc, setPrizeDesc] = useState<string>('');
-  const [prizeType, setPrizeType] = useState<PrizeType>('discount');
-  const [prizePoints, setPrizePoints] = useState<string>('');
-  const [prizeStock, setPrizeStock] = useState<string>('');
+  // Edit mode tracking
+  const [editingTier,  setEditingTier]  = useState<RewardTier | null>(null);
+  const [editingPrize, setEditingPrize] = useState<RewardItem | null>(null);
 
   const resetTierForm = useCallback(() => {
     setTierName('');
@@ -134,6 +129,67 @@ export default function RewardConfigurationScreen() {
     setPrizeStock('');
   }, []);
 
+  const handleOpenAddTier = useCallback(() => {
+    setEditingTier(null);
+    resetTierForm();
+    setShowTierModal(true);
+  }, [resetTierForm]);
+
+  const handleOpenEditTier = useCallback((tier: RewardTier) => {
+    setEditingTier(tier);
+    setTierName(tier.name);
+    setTierMin(String(tier.min_points));
+    setTierBenefits(tier.perks);
+    setTierColor((tier.color as BadgeColor) ?? BADGE_COLORS[3]);
+    setShowTierModal(true);
+  }, []);
+
+  const handleOpenAddPrize = useCallback(() => {
+    setEditingPrize(null);
+    resetPrizeForm();
+    setShowPrizeModal(true);
+  }, [resetPrizeForm]);
+
+  const handleOpenEditPrize = useCallback((prize: RewardItem) => {
+    setEditingPrize(prize);
+    setPrizeName(prize.name);
+    setPrizeDesc(prize.description ?? '');
+    setPrizeType(prize.type ?? 'perk');
+    setPrizePoints(String(prize.points_required));
+    setPrizeStock(prize.quantity_available != null ? String(prize.quantity_available) : '');
+    setShowPrizeModal(true);
+  }, []);
+
+  // Resolve the businessId once on mount
+  useEffect(() => {
+    fetchMyBusinessId().then(id => setBusinessId(id));
+  }, []);
+
+  const loadConfig = useCallback(async () => {
+    if (!businessId) return;
+    setLoading(true);
+    try {
+      const data = await fetchRewardConfig(businessId);
+      if (data.config) {
+        setWelcomePoints(String(data.config.welcome_bonus_points ?? ''));
+        setReferralPoints(String(data.config.referral_bonus_points ?? ''));
+        setSharingPoints(String(data.config.share_points ?? ''));
+        setPurchaseEnabled(data.config.purchase_enabled ?? true);
+        setPointsPerUnit(String(data.config.points_per_rupee ?? ''));
+      }
+      setTiers(data.tiers);
+      setPrizes(data.rewards);
+    } catch (err) {
+      if (__DEV__) console.log('[RewardConfig] load error', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [businessId]);
+
+  useFocusEffect(useCallback(() => {
+    loadConfig();
+  }, [loadConfig]));
+
   const handleAddBenefit = useCallback(() => {
     const v = tierBenefitDraft.trim();
     if (!v) return;
@@ -145,60 +201,137 @@ export default function RewardConfigurationScreen() {
     setTierBenefits(prev => prev.filter((_, i) => i !== idx));
   }, []);
 
-  const handleSaveTier = useCallback(() => {
+  const handleSaveConfig = useCallback(async () => {
+    if (!businessId) return;
+    setSaving(true);
+    try {
+      await upsertRewardConfig(businessId, {
+        welcome_bonus_points:  parseInt(welcomePoints  || '0', 10),
+        referral_bonus_points: parseInt(referralPoints || '0', 10),
+        share_points:          parseInt(sharingPoints  || '0', 10),
+        purchase_enabled:      purchaseEnabled,
+        points_per_rupee:      parseFloat(pointsPerUnit || '0'),
+      });
+      Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save configuration. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, [businessId, welcomePoints, referralPoints, sharingPoints, purchaseEnabled, pointsPerUnit]);
+
+  const handleSaveTier = useCallback(async () => {
     if (!tierName.trim()) {
       Alert.alert('Missing name', 'Please enter a tier name.');
       return;
     }
-    const min = parseInt(tierMin || '0', 10);
-    const newTier: Tier = {
-      id: `t_${Date.now()}`,
-      name: tierName.trim(),
-      minPoints: isNaN(min) ? 0 : min,
-      benefits: tierBenefits,
-      color: tierColor,
-    };
-    setTiers(prev => [...prev, newTier].sort((a, b) => a.minPoints - b.minPoints));
-    resetTierForm();
-    setShowTierModal(false);
-  }, [tierName, tierMin, tierBenefits, tierColor, resetTierForm]);
+    setSavingTier(true);
+    try {
+      const payload = {
+        name:       tierName.trim(),
+        min_points: parseInt(tierMin || '0', 10),
+        color:      tierColor,
+        perks:      tierBenefits,
+      };
+      if (editingTier) {
+        const updated = await updateTier(editingTier.id, payload);
+        setTiers(prev => prev.map(t => t.id === updated.id ? updated : t)
+                             .sort((a, b) => a.min_points - b.min_points));
+      } else {
+        const tier = await createTier(payload);
+        setTiers(prev => [...prev, tier].sort((a, b) => a.min_points - b.min_points));
+      }
+      resetTierForm();
+      setEditingTier(null);
+      setShowTierModal(false);
+    } catch (err) {
+      Alert.alert('Error', editingTier ? 'Failed to update tier. Please try again.' : 'Failed to add tier. Please try again.');
+    } finally {
+      setSavingTier(false);
+    }
+  }, [editingTier, tierName, tierMin, tierBenefits, tierColor, resetTierForm]);
 
   const handleRemoveTier = useCallback((id: string) => {
-    setTiers(prev => prev.filter(t => t.id !== id));
+    Alert.alert(
+      'Delete Tier',
+      'Are you sure you want to delete this tier? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTier(id);
+              setTiers(prev => prev.filter(t => t.id !== id));
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete tier. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   }, []);
 
-  const handleSavePrize = useCallback(() => {
+  const handleSavePrize = useCallback(async () => {
     if (!prizeName.trim()) {
       Alert.alert('Missing name', 'Please enter a prize name.');
       return;
     }
     const pts = parseInt(prizePoints || '0', 10);
-    const stock = prizeStock.trim() ? parseInt(prizeStock, 10) : undefined;
-    const newPrize: Prize = {
-      id: `p_${Date.now()}`,
-      name: prizeName.trim(),
-      description: prizeDesc.trim(),
-      type: prizeType,
-      points: isNaN(pts) ? 0 : pts,
-      stockLimit: stock && !isNaN(stock) ? stock : undefined,
-      active: true,
-    };
-    setPrizes(prev => [newPrize, ...prev]);
-    resetPrizeForm();
-    setShowPrizeModal(false);
-  }, [prizeName, prizeDesc, prizeType, prizePoints, prizeStock, resetPrizeForm]);
+    if (!pts || pts < 1) {
+      Alert.alert('Missing points', 'Please enter the required points.');
+      return;
+    }
+    setSavingPrize(true);
+    try {
+      const stock = prizeStock.trim() ? parseInt(prizeStock, 10) : null;
+      const qty = stock && !isNaN(stock) ? stock : null;
+      const payload = {
+        name:               prizeName.trim(),
+        description:        prizeDesc.trim() || null,
+        type:               prizeType,
+        points_required:    pts,
+        quantity_available: qty,
+      };
+      if (editingPrize) {
+        const updated = await updateReward(editingPrize.id, payload);
+        setPrizes(prev => prev.map(p => p.id === updated.id ? updated : p));
+      } else {
+        const reward = await createReward(payload);
+        setPrizes(prev => [reward, ...prev]);
+      }
+      resetPrizeForm();
+      setEditingPrize(null);
+      setShowPrizeModal(false);
+    } catch (err) {
+      Alert.alert('Error', editingPrize ? 'Failed to update prize. Please try again.' : 'Failed to add prize. Please try again.');
+    } finally {
+      setSavingPrize(false);
+    }
+  }, [editingPrize, prizeName, prizeDesc, prizeType, prizePoints, prizeStock, resetPrizeForm]);
 
-  const togglePrizeActive = useCallback((id: string) => {
-    setPrizes(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
+  const handleRemovePrize = useCallback((id: string) => {
+    Alert.alert(
+      'Delete Prize',
+      'This prize will no longer appear to members. Existing redemptions are preserved.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteReward(id);
+              setPrizes(prev => prev.filter(p => p.id !== id));
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete prize. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   }, []);
-
-  const handleSaveConfig = useCallback(() => {
-    console.log('[RewardConfig] Saving', {
-      welcomePoints, referralPoints, sharingPoints, purchaseEnabled, pointsPerUnit,
-      tiers, prizes,
-    });
-    Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.');
-  }, [welcomePoints, referralPoints, sharingPoints, purchaseEnabled, pointsPerUnit, tiers, prizes]);
 
   const paperTheme = useMemo(() => ({
     colors: { primary: PURPLE },
@@ -221,272 +354,296 @@ export default function RewardConfigurationScreen() {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Surface style={styles.section} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
-              <Coins size={18} color={PURPLE} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Points Setup</Text>
-              <Text style={styles.sectionDesc}>Define how members earn points</Text>
-            </View>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <View style={styles.fieldLabelRow}>
-              <Users size={14} color={MUTED} />
-              <Text style={styles.fieldLabel}>Welcome Points</Text>
-            </View>
-            <Text style={styles.fieldHint}>Points awarded when user subscribes</Text>
-            <TextInput
-              mode="outlined"
-              value={welcomePoints}
-              onChangeText={(t) => setWelcomePoints(t.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              right={<TextInput.Affix text="pts" />}
-              theme={paperTheme}
-              outlineColor={BORDER}
-              activeOutlineColor={PURPLE}
-              style={styles.input}
-              testID="welcome-points"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <View style={styles.fieldLabelRow}>
-              <Share2 size={14} color={MUTED} />
-              <Text style={styles.fieldLabel}>Referral Points</Text>
-            </View>
-            <Text style={styles.fieldHint}>Points when user refers a friend</Text>
-            <TextInput
-              mode="outlined"
-              value={referralPoints}
-              onChangeText={(t) => setReferralPoints(t.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              right={<TextInput.Affix text="pts" />}
-              theme={paperTheme}
-              outlineColor={BORDER}
-              activeOutlineColor={PURPLE}
-              style={styles.input}
-              testID="referral-points"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <View style={styles.fieldLabelRow}>
-              <Share2 size={14} color={MUTED} />
-              <Text style={styles.fieldLabel}>Sharing Points</Text>
-            </View>
-            <Text style={styles.fieldHint}>Points when user shares an offer</Text>
-            <TextInput
-              mode="outlined"
-              value={sharingPoints}
-              onChangeText={(t) => setSharingPoints(t.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              right={<TextInput.Affix text="pts" />}
-              theme={paperTheme}
-              outlineColor={BORDER}
-              activeOutlineColor={PURPLE}
-              style={styles.input}
-              testID="sharing-points"
-            />
-          </View>
-
-          <View style={styles.switchCard}>
-            <View style={styles.switchCardLeft}>
-              <View style={[styles.switchIcon, { backgroundColor: PURPLE_SOFT }]}>
-                <ShoppingBag size={16} color={PURPLE} />
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={PURPLE} size="large" />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Points Setup ─────────────────────────────────────── */}
+          <Surface style={styles.section} elevation={1}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
+                <Coins size={18} color={PURPLE} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.switchTitle}>Purchase Points</Text>
-                <Text style={styles.switchSub}>Reward members on every purchase</Text>
+                <Text style={styles.sectionTitle}>Points Setup</Text>
+                <Text style={styles.sectionDesc}>Define how members earn points</Text>
               </View>
             </View>
-            <Switch
-              value={purchaseEnabled}
-              onValueChange={setPurchaseEnabled}
-              color={PURPLE}
-              testID="purchase-toggle"
-            />
-          </View>
 
-          {purchaseEnabled && (
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Points per unit</Text>
-              <Text style={styles.fieldHint}>Points earned per £1 spent</Text>
+              <View style={styles.fieldLabelRow}>
+                <Users size={14} color={MUTED} />
+                <Text style={styles.fieldLabel}>Welcome Points</Text>
+              </View>
+              <Text style={styles.fieldHint}>Points awarded when user subscribes</Text>
               <TextInput
                 mode="outlined"
-                value={pointsPerUnit}
-                onChangeText={(t) => setPointsPerUnit(t.replace(/[^0-9]/g, ''))}
+                value={welcomePoints}
+                onChangeText={(t) => setWelcomePoints(t.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
-                right={<TextInput.Affix text="pts / £" />}
+                right={<TextInput.Affix text="pts" />}
                 theme={paperTheme}
                 outlineColor={BORDER}
                 activeOutlineColor={PURPLE}
                 style={styles.input}
-                testID="points-per-unit"
+                testID="welcome-points"
               />
             </View>
-          )}
-        </Surface>
 
-        <Surface style={styles.section} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
-              <Trophy size={18} color={PURPLE} />
+            <View style={styles.fieldGroup}>
+              <View style={styles.fieldLabelRow}>
+                <Share2 size={14} color={MUTED} />
+                <Text style={styles.fieldLabel}>Referral Points</Text>
+              </View>
+              <Text style={styles.fieldHint}>Points when user refers a friend</Text>
+              <TextInput
+                mode="outlined"
+                value={referralPoints}
+                onChangeText={(t) => setReferralPoints(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                right={<TextInput.Affix text="pts" />}
+                theme={paperTheme}
+                outlineColor={BORDER}
+                activeOutlineColor={PURPLE}
+                style={styles.input}
+                testID="referral-points"
+              />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Reward Tiers</Text>
-              <Text style={styles.sectionDesc}>{tiers.length} tiers configured</Text>
-            </View>
-            <Button
-              mode="contained-tonal"
-              icon={() => <Plus size={16} color={PURPLE} />}
-              onPress={() => setShowTierModal(true)}
-              buttonColor={PURPLE_SOFT}
-              textColor={PURPLE}
-              compact
-              testID="add-tier"
-            >
-              Add Tier
-            </Button>
-          </View>
 
-          <View style={styles.tiersList}>
-            {tiers.map((tier) => (
-              <Surface key={tier.id} style={styles.tierCard} elevation={0}>
-                <View style={[styles.tierBadge, { backgroundColor: tier.color }]}>
-                  <Text style={styles.tierBadgeText}>{tier.name.charAt(0)}</Text>
+            <View style={styles.fieldGroup}>
+              <View style={styles.fieldLabelRow}>
+                <Share2 size={14} color={MUTED} />
+                <Text style={styles.fieldLabel}>Sharing Points</Text>
+              </View>
+              <Text style={styles.fieldHint}>Points when user shares an offer</Text>
+              <TextInput
+                mode="outlined"
+                value={sharingPoints}
+                onChangeText={(t) => setSharingPoints(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                right={<TextInput.Affix text="pts" />}
+                theme={paperTheme}
+                outlineColor={BORDER}
+                activeOutlineColor={PURPLE}
+                style={styles.input}
+                testID="sharing-points"
+              />
+            </View>
+
+            <View style={styles.switchCard}>
+              <View style={styles.switchCardLeft}>
+                <View style={[styles.switchIcon, { backgroundColor: PURPLE_SOFT }]}>
+                  <ShoppingBag size={16} color={PURPLE} />
                 </View>
-                <View style={styles.tierInfo}>
-                  <View style={styles.tierTopRow}>
-                    <Text style={styles.tierName}>{tier.name}</Text>
-                    <View style={styles.tierPointsPill}>
-                      <Text style={styles.tierPointsText}>{tier.minPoints.toLocaleString()}+ pts</Text>
-                    </View>
-                  </View>
-                  {tier.benefits.length > 0 && (
-                    <View style={styles.chipRow}>
-                      {tier.benefits.map((b, i) => (
-                        <Chip
-                          key={`${tier.id}-b-${i}`}
-                          compact
-                          style={styles.benefitChip}
-                          textStyle={styles.benefitChipText}
-                        >
-                          {b}
-                        </Chip>
-                      ))}
-                    </View>
-                  )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchTitle}>Purchase Points</Text>
+                  <Text style={styles.switchSub}>Reward members on every purchase</Text>
                 </View>
-                <IconButton
-                  icon={() => <Trash2 size={16} color="#EF4444" />}
-                  onPress={() => handleRemoveTier(tier.id)}
-                  size={18}
-                  testID={`remove-tier-${tier.id}`}
+              </View>
+              <Switch
+                value={purchaseEnabled}
+                onValueChange={setPurchaseEnabled}
+                color={PURPLE}
+                testID="purchase-toggle"
+              />
+            </View>
+
+            {purchaseEnabled && (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Points per unit</Text>
+                <Text style={styles.fieldHint}>Points earned per £1 spent</Text>
+                <TextInput
+                  mode="outlined"
+                  value={pointsPerUnit}
+                  onChangeText={(t) => setPointsPerUnit(t.replace(/[^0-9.]/g, ''))}
+                  keyboardType="decimal-pad"
+                  right={<TextInput.Affix text="pts / £" />}
+                  theme={paperTheme}
+                  outlineColor={BORDER}
+                  activeOutlineColor={PURPLE}
+                  style={styles.input}
+                  testID="points-per-unit"
                 />
-              </Surface>
-            ))}
-          </View>
-        </Surface>
+              </View>
+            )}
+          </Surface>
 
-        <Surface style={styles.section} elevation={1}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
-              <Gift size={18} color={PURPLE} />
+          {/* ── Reward Tiers ─────────────────────────────────────── */}
+          <Surface style={styles.section} elevation={1}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
+                <Trophy size={18} color={PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Reward Tiers</Text>
+                <Text style={styles.sectionDesc}>{tiers.length} tiers configured</Text>
+              </View>
+              <Button
+                mode="contained-tonal"
+                icon={() => <Plus size={16} color={PURPLE} />}
+                onPress={handleOpenAddTier}
+                buttonColor={PURPLE_SOFT}
+                textColor={PURPLE}
+                compact
+                testID="add-tier"
+              >
+                Add Tier
+              </Button>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Rewards Catalog</Text>
-              <Text style={styles.sectionDesc}>{prizes.filter(p => p.active).length} active · {prizes.length} total</Text>
-            </View>
-            <Button
-              mode="contained-tonal"
-              icon={() => <Plus size={16} color={PURPLE} />}
-              onPress={() => setShowPrizeModal(true)}
-              buttonColor={PURPLE_SOFT}
-              textColor={PURPLE}
-              compact
-              testID="add-prize"
-            >
-              Add Prize
-            </Button>
-          </View>
 
-          <View style={styles.prizesList}>
-            {prizes.map((prize) => {
-              const meta = PRIZE_TYPE_META[prize.type];
-              const Icon = meta.icon;
-              return (
-                <Surface key={prize.id} style={styles.prizeCard} elevation={0}>
-                  <View style={[styles.prizeIconWrap, { backgroundColor: meta.color + '15' }]}>
-                    <Icon size={18} color={meta.color} />
+            <View style={styles.tiersList}>
+              {tiers.map((tier) => (
+                <Surface key={tier.id} style={styles.tierCard} elevation={0}>
+                  <View style={[styles.tierBadge, { backgroundColor: tier.color ?? PURPLE }]}>
+                    <Text style={styles.tierBadgeText}>{tier.name.charAt(0)}</Text>
                   </View>
-                  <View style={styles.prizeInfo}>
-                    <View style={styles.prizeTopRow}>
-                      <Text style={styles.prizeName} numberOfLines={1}>{prize.name}</Text>
-                      <View style={[styles.typeBadge, { backgroundColor: meta.color + '15' }]}>
-                        <Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                  <View style={styles.tierInfo}>
+                    <View style={styles.tierTopRow}>
+                      <Text style={styles.tierName}>{tier.name}</Text>
+                      <View style={styles.tierPointsPill}>
+                        <Text style={styles.tierPointsText}>{tier.min_points.toLocaleString()}+ pts</Text>
                       </View>
                     </View>
-                    {prize.description.length > 0 && (
-                      <Text style={styles.prizeDesc} numberOfLines={2}>{prize.description}</Text>
+                    {tier.perks.length > 0 && (
+                      <View style={styles.chipRow}>
+                        {tier.perks.map((b, i) => (
+                          <Chip
+                            key={`${tier.id}-b-${i}`}
+                            compact
+                            style={styles.benefitChip}
+                            textStyle={styles.benefitChipText}
+                          >
+                            {b}
+                          </Chip>
+                        ))}
+                      </View>
                     )}
-                    <View style={styles.prizeMetaRow}>
-                      <View style={styles.prizeMeta}>
-                        <Coins size={12} color={MUTED} />
-                        <Text style={styles.prizeMetaText}>{prize.points.toLocaleString()} pts</Text>
-                      </View>
-                      {prize.stockLimit !== undefined && (
-                        <View style={styles.prizeMeta}>
-                          <Package size={12} color={MUTED} />
-                          <Text style={styles.prizeMetaText}>{prize.stockLimit} left</Text>
-                        </View>
-                      )}
-                    </View>
                   </View>
-                  <Switch
-                    value={prize.active}
-                    onValueChange={() => togglePrizeActive(prize.id)}
-                    color={PURPLE}
-                    testID={`toggle-prize-${prize.id}`}
+                  <IconButton
+                    icon={() => <Pencil size={16} color={PURPLE} />}
+                    onPress={() => handleOpenEditTier(tier)}
+                    size={18}
+                    testID={`edit-tier-${tier.id}`}
+                  />
+                  <IconButton
+                    icon={() => <Trash2 size={16} color="#EF4444" />}
+                    onPress={() => handleRemoveTier(tier.id)}
+                    size={18}
+                    testID={`remove-tier-${tier.id}`}
                   />
                 </Surface>
-              );
-            })}
-          </View>
-        </Surface>
+              ))}
+            </View>
+          </Surface>
 
-        <Button
-          mode="contained"
-          onPress={handleSaveConfig}
-          buttonColor={PURPLE}
-          textColor="#fff"
-          style={styles.saveBtn}
-          contentStyle={styles.saveBtnContent}
-          labelStyle={styles.saveBtnLabel}
-          testID="save-config"
-        >
-          Save Configuration
-        </Button>
+          {/* ── Rewards Catalog ───────────────────────────────────── */}
+          <Surface style={styles.section} elevation={1}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
+                <Gift size={18} color={PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Rewards Catalog</Text>
+                <Text style={styles.sectionDesc}>{prizes.length} active prizes</Text>
+              </View>
+              <Button
+                mode="contained-tonal"
+                icon={() => <Plus size={16} color={PURPLE} />}
+                onPress={handleOpenAddPrize}
+                buttonColor={PURPLE_SOFT}
+                textColor={PURPLE}
+                compact
+                testID="add-prize"
+              >
+                Add Prize
+              </Button>
+            </View>
 
-        <View style={{ height: 32 }} />
-      </ScrollView>
+            <View style={styles.prizesList}>
+              {prizes.map((prize) => {
+                const meta = PRIZE_TYPE_META[prize.type ?? 'perk'];
+                const Icon = meta.icon;
+                return (
+                  <Surface key={prize.id} style={styles.prizeCard} elevation={0}>
+                    <View style={[styles.prizeIconWrap, { backgroundColor: meta.color + '15' }]}>
+                      <Icon size={18} color={meta.color} />
+                    </View>
+                    <View style={styles.prizeInfo}>
+                      <View style={styles.prizeTopRow}>
+                        <Text style={styles.prizeName} numberOfLines={1}>{prize.name}</Text>
+                        <View style={[styles.typeBadge, { backgroundColor: meta.color + '15' }]}>
+                          <Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                        </View>
+                      </View>
+                      {!!prize.description && (
+                        <Text style={styles.prizeDesc} numberOfLines={2}>{prize.description}</Text>
+                      )}
+                      <View style={styles.prizeMetaRow}>
+                        <View style={styles.prizeMeta}>
+                          <Coins size={12} color={MUTED} />
+                          <Text style={styles.prizeMetaText}>{prize.points_required.toLocaleString()} pts</Text>
+                        </View>
+                        {prize.quantity_available !== null && prize.quantity_available !== undefined && (
+                          <View style={styles.prizeMeta}>
+                            <Package size={12} color={MUTED} />
+                            <Text style={styles.prizeMetaText}>{prize.quantity_available} left</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    <IconButton
+                      icon={() => <Pencil size={16} color={PURPLE} />}
+                      onPress={() => handleOpenEditPrize(prize)}
+                      size={18}
+                      testID={`edit-prize-${prize.id}`}
+                    />
+                    <IconButton
+                      icon={() => <Trash2 size={16} color="#EF4444" />}
+                      onPress={() => handleRemovePrize(prize.id)}
+                      size={18}
+                      testID={`remove-prize-${prize.id}`}
+                    />
+                  </Surface>
+                );
+              })}
+            </View>
+          </Surface>
+
+          <Button
+            mode="contained"
+            onPress={handleSaveConfig}
+            buttonColor={PURPLE}
+            textColor="#fff"
+            style={styles.saveBtn}
+            contentStyle={styles.saveBtnContent}
+            labelStyle={styles.saveBtnLabel}
+            loading={saving}
+            disabled={saving}
+            testID="save-config"
+          >
+            Save Configuration
+          </Button>
+
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      )}
 
       <Portal>
+        {/* ── Add / Edit Tier Modal ───────────────────────────── */}
         <PaperModal
           visible={showTierModal}
-          onDismiss={() => setShowTierModal(false)}
+          onDismiss={() => { setShowTierModal(false); setEditingTier(null); resetTierForm(); }}
           contentContainerStyle={styles.modalContainer}
         >
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add New Tier</Text>
-            <IconButton icon={() => <X size={20} color={TEXT} />} onPress={() => setShowTierModal(false)} />
+            <Text style={styles.modalTitle}>{editingTier ? 'Edit Tier' : 'Add New Tier'}</Text>
+            <IconButton icon={() => <X size={20} color={TEXT} />} onPress={() => { setShowTierModal(false); setEditingTier(null); resetTierForm(); }} />
           </View>
           <Divider />
           <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 16 }}>
@@ -586,21 +743,24 @@ export default function RewardConfigurationScreen() {
               style={[styles.saveBtn, { marginTop: 20 }]}
               contentStyle={styles.saveBtnContent}
               labelStyle={styles.saveBtnLabel}
+              loading={savingTier}
+              disabled={savingTier}
               testID="save-tier"
             >
-              Add Tier
+              {editingTier ? 'Save Changes' : 'Add Tier'}
             </Button>
           </ScrollView>
         </PaperModal>
 
+        {/* ── Add / Edit Prize Modal ───────────────────────────── */}
         <PaperModal
           visible={showPrizeModal}
-          onDismiss={() => setShowPrizeModal(false)}
+          onDismiss={() => { setShowPrizeModal(false); setEditingPrize(null); resetPrizeForm(); }}
           contentContainerStyle={styles.modalContainer}
         >
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add New Prize</Text>
-            <IconButton icon={() => <X size={20} color={TEXT} />} onPress={() => setShowPrizeModal(false)} />
+            <Text style={styles.modalTitle}>{editingPrize ? 'Edit Prize' : 'Add New Prize'}</Text>
+            <IconButton icon={() => <X size={20} color={TEXT} />} onPress={() => { setShowPrizeModal(false); setEditingPrize(null); resetPrizeForm(); }} />
           </View>
           <Divider />
           <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 16 }}>
@@ -693,9 +853,11 @@ export default function RewardConfigurationScreen() {
               style={[styles.saveBtn, { marginTop: 12 }]}
               contentStyle={styles.saveBtnContent}
               labelStyle={styles.saveBtnLabel}
+              loading={savingPrize}
+              disabled={savingPrize}
               testID="save-prize"
             >
-              Add Prize
+              {editingPrize ? 'Save Changes' : 'Add Prize'}
             </Button>
           </ScrollView>
         </PaperModal>
@@ -748,6 +910,11 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
