@@ -183,21 +183,20 @@ const ActivityRow = React.memo(function ActivityRow({ item }: { item: ActivityIt
 });
 
 export default function BusinessDashboard() {
-  const { currentUser, businessProfileData, activeProfile, profiles } = useAuth();
+  const { authUser, activeProfile, profiles } = useAuth();
   const router = useRouter();
   const { coupons } = useCoupons();
-  const { summary, loading: statsLoading, refresh: refreshStats } = useBusinessDashboard();
+  const { summary, loading: statsLoading, refresh: refreshStats, businessId } = useBusinessDashboard();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const hasMultipleProfiles = profiles.length > 1;
 
   const handleViewAsCustomer = useCallback(() => {
-    if (!currentUser?.id) return;
-    console.log('[BusinessDashboard] View as customer:', currentUser.id);
-    router.push({ pathname: '/business-profile/[id]', params: { id: currentUser.id, preview: '1' } } as never);
-  }, [router, currentUser]);
+    if (!businessId) return;
+    router.push({ pathname: '/business-profile/[id]', params: { id: businessId } } as never);
+  }, [router, businessId]);
 
-  const businessId = currentUser?.id ?? '';
+  const bizId = businessId ?? '';
 
   const redemptionStats = useMemo(() => {
     const start = new Date();
@@ -206,24 +205,24 @@ export default function BusinessDashboard() {
     const todays = coupons.filter(
       (c) =>
         c.status === 'used' &&
-        c.scannedByBusinessId === businessId &&
+        c.scannedByBusinessId === bizId &&
         (c.usedAt ?? 0) >= startTs
     );
     const pts = todays.reduce((s, c) => s + (c.pointsDeducted ?? 0), 0);
     return { count: todays.length, points: pts };
-  }, [coupons, businessId]);
+  }, [coupons, bizId]);
 
   const recentRedemptions = useMemo(() => {
     return coupons
       .filter(
-        (c) => c.status === 'used' && c.scannedByBusinessId === businessId
+        (c) => c.status === 'used' && c.scannedByBusinessId === bizId
       )
       .sort((a, b) => (b.usedAt ?? 0) - (a.usedAt ?? 0))
       .slice(0, 10);
-  }, [coupons, businessId]);
+  }, [coupons, bizId]);
 
   const greeting = useMemo(() => getGreeting(), []);
-  const businessName = businessProfileData?.name || currentUser?.name || 'Business';
+  const businessName = activeProfile?.displayName || authUser?.name || 'Business';
 
   const liveStats = useMemo<DashboardStat[]>(() => {
     const placeholder = statsLoading ? '...' : null;
@@ -263,18 +262,16 @@ export default function BusinessDashboard() {
   }, [router]);
 
   const handleStatPress = useCallback((stat: DashboardStat) => {
-    console.log('[BusinessDashboard] Stat pressed:', stat.id);
     if (stat.id === 'subscribers') {
       router.push('/(tabs)/marketplace' as never);
       return;
     }
     if (stat.id === 'offers') {
-      const businessId = currentUser?.id;
       if (businessId) {
         router.push(`/business-profile/${businessId}` as never);
       }
     }
-  }, [router, currentUser]);
+  }, [router, businessId]);
 
   return (
     <View style={styles.container}>

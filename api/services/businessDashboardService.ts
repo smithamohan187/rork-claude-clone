@@ -11,3 +11,9 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   if (!result.success) throw new Error(result.error ?? 'Failed to load dashboard summary');
   return result.data!;
 }
+
+export async function fetchMyBusinessId(): Promise<string | null> {
+  const result = await apiClient.get<Record<string, unknown>>('/businesses/me');
+  if (!result.success || !result.data) return null;
+  return (result.data as { id?: string }).id ?? null;
+}

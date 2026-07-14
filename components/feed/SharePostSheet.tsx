@@ -32,6 +32,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { phoneContacts as fallbackPhoneContacts } from '@/mocks/data';
+import { logShare } from '@/api/services/sharesService';
 
 const PURPLE = '#00B246';
 const ORANGE = '#1A5C35';
@@ -81,12 +82,13 @@ export const SharePostSheet = React.memo(function SharePostSheet({
 }: Props) {
   const router = useRouter();
   const { currentUser } = useAuth();
-
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? 'https://touchpoint.app';
   const referralCode = useMemo(() => buildReferralCode(currentUser?.id ?? ''), [currentUser?.id]);
-  const shareUrl = useMemo(
-    () => `https://touchpoint.app/post/${postId}?ref=${referralCode}`,
-    [postId, referralCode],
-  );
+  const pathSegment = ({ post: 'post', offer: 'offer', event: 'event', broadcast: 'business' } as const)[postType] ?? 'post';
+ const shareUrl = useMemo(
+  () => `${baseUrl}/${pathSegment}/${postId}?ref=${referralCode}`,
+  [pathSegment, postId, referralCode],
+);
   const shareMessage = useMemo(
     () =>
       `Check out this ${postType} from ${authorName} on TouchPoint — discover local businesses, earn rewards, and get exclusive offers!\n\n${shareUrl}`,
@@ -224,46 +226,58 @@ export const SharePostSheet = React.memo(function SharePostSheet({
     [onToast],
   );
 
-  const handleFacebook = useCallback(
-    () =>
-      openUrl(
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareMessage)}`,
-        'Could not open Facebook',
-      ),
-    [openUrl, shareUrl, shareMessage],
+  const logShareSilently = useCallback(
+    (channel: Parameters<typeof logShare>[2]) => {
+      logShare(postType, postId, channel).catch(() => {});
+    },
+    [postType, postId],
   );
-  const handleTwitter = useCallback(
-    () =>
-      openUrl(
-        `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareMessage)}`,
-        'Could not open X',
-      ),
-    [openUrl, shareUrl, shareMessage],
-  );
+
+  const handleFacebook = useCallback(() => {
+    logShareSilently('facebook');
+    return openUrl(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareMessage)}`,
+      'Could not open Facebook',
+    );
+  }, [openUrl, shareUrl, shareMessage, logShareSilently]);
+
+  const handleTwitter = useCallback(() => {
+    logShareSilently('twitter');
+    return openUrl(
+      `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareMessage)}`,
+      'Could not open X',
+    );
+  }, [openUrl, shareUrl, shareMessage, logShareSilently]);
+
   const handleInstagram = useCallback(async () => {
     try {
+      logShareSilently('instagram');
       await Clipboard.setStringAsync(shareUrl);
       onToast('Link copied — paste in Instagram');
     } catch (e) {
       console.log('[SharePostSheet] instagram failed', e);
     }
-  }, [shareUrl, onToast]);
+  }, [shareUrl, onToast, logShareSilently]);
+
   const handleTikTok = useCallback(async () => {
     try {
+      logShareSilently('tiktok');
       await Clipboard.setStringAsync(shareUrl);
       onToast('Link copied — paste in TikTok');
     } catch (e) {
       console.log('[SharePostSheet] tiktok failed', e);
     }
-  }, [shareUrl, onToast]);
-  const handleWhatsApp = useCallback(
-    () => openUrl(`whatsapp://send?text=${encodeURIComponent(shareMessage)}`, 'WhatsApp is not installed'),
-    [openUrl, shareMessage],
-  );
-  const handleMessenger = useCallback(
-    () => openUrl(`fb-messenger://share?link=${encodeURIComponent(shareUrl)}`, 'Messenger is not installed'),
-    [openUrl, shareUrl],
-  );
+  }, [shareUrl, onToast, logShareSilently]);
+
+  const handleWhatsApp = useCallback(() => {
+    logShareSilently('whatsapp');
+    return openUrl(`whatsapp://send?text=${encodeURIComponent(shareMessage)}`, 'WhatsApp is not installed');
+  }, [openUrl, shareMessage, logShareSilently]);
+
+  const handleMessenger = useCallback(() => {
+    logShareSilently('messenger');
+    return openUrl(`fb-messenger://share?link=${encodeURIComponent(shareUrl)}`, 'Messenger is not installed');
+  }, [openUrl, shareUrl, logShareSilently]);
 
   const navParams = useMemo(
     () => ({
@@ -277,26 +291,29 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   );
 
   const handleOpenSms = useCallback(() => {
+    logShareSilently('sms');
     onClose();
     setTimeout(() => {
       router.push({ pathname: '/share-sms', params: navParams });
     }, 220);
-  }, [router, navParams, onClose]);
+  }, [router, navParams, onClose, logShareSilently]);
 
   const handleOpenEmail = useCallback(() => {
+    logShareSilently('email');
     onClose();
     setTimeout(() => {
       router.push({ pathname: '/share-email', params: navParams });
     }, 220);
-  }, [router, navParams, onClose]);
+  }, [router, navParams, onClose, logShareSilently]);
 
   const handleNativeShare = useCallback(async () => {
     try {
+      logShareSilently('native');
       await RNShare.share({ message: shareMessage, url: shareUrl });
     } catch (e) {
       console.log('[SharePostSheet] native share failed', e);
     }
-  }, [shareMessage, shareUrl]);
+  }, [shareMessage, shareUrl, logShareSilently]);
 
   const sendToSelected = useCallback(async () => {
     if (selected.size === 0) return;
@@ -329,6 +346,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
         await Clipboard.setStringAsync(shareMessage);
         onToast('Message copied to clipboard');
       } else {
+        logShareSilently('contacts');
         onToast('🎉 Shared successfully!');
       }
       onClose();
@@ -336,7 +354,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
       console.log('[SharePostSheet] send sms failed', e);
       onToast('Could not send SMS');
     }
-  }, [selected, contacts, shareMessage, onClose, onToast]);
+  }, [selected, contacts, shareMessage, onClose, onToast, logShareSilently]);
 
   const renderContact = useCallback(
     ({ item }: { item: DeviceContact }) => {

@@ -130,6 +130,12 @@ export async function uploadBusinessCoverPhoto(id: string, uri: string): Promise
   return data.data?.cover_url ?? '';
 }
 
+export async function updateMyBusiness(payload: RegisterBusinessPayload): Promise<BusinessData> {
+  const result = await apiClient.post<BusinessData>('/businesses/register', payload);
+  if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to update business');
+  return result.data;
+}
+
 export async function completeOnboarding(id: string): Promise<void> {
   const result = await apiClient.patch(`/businesses/${id}/onboarding-complete`);
   if (!result.success) throw new Error(result.error ?? 'Failed to complete onboarding');

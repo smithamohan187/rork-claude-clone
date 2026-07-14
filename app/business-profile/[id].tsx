@@ -14,6 +14,7 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  Switch as RNSwitch,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,16 +51,13 @@ import {
   UserPlus,
   Zap,
   Trophy,
+  Check,
 } from 'lucide-react-native';
 import { Switch, Snackbar, Dialog, Portal, Button as PaperButton, TextInput as PaperTextInput } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { Copy } from 'lucide-react-native';
-import {
-  MOCK_BUSINESS,
-  REWARD_TIERS,
-  getBusinessById,
-} from '@/mocks/businessProfile';
+import { REWARD_TIERS } from '@/mocks/businessProfile';
 import BusinessQRCard from '@/components/business/BusinessQRCard';
 import { QrCode } from 'lucide-react-native';
 import type { BusinessProfileData } from '@/mocks/businessProfile';
@@ -74,6 +72,8 @@ import { Star as StarIcon } from 'lucide-react-native';
 import LikeButton from '@/components/feed/LikeButton';
 import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 import type { BusinessProfile } from '@/api/services/businessProfileService';
+import { fetchBusinessCategories } from '@/api/services/categoriesService';
+import { updateMyBusiness, type BusinessHour } from '@/api/services/businessService';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -152,6 +152,41 @@ const EVENT_STATUS_STYLES: Record<EventStatus, { bg: string; fg: string; label: 
   cancelled: { bg: '#FCEBEB', fg: '#A32D2D', label: 'Cancelled' },
 };
 
+const DAYS_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const DEFAULT_HOURS: BusinessHour[] = [0, 1, 2, 3, 4, 5, 6].map(day_of_week => ({
+  day_of_week, open_time: '09:00', close_time: '18:00', is_closed: false,
+}));
+
+function validateDraft(
+  draft: BusinessProfileData,
+  categoryId: string,
+  categories: { id: string }[],
+  hours: BusinessHour[],
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const name = draft.name?.trim() ?? '';
+  if (name.length < 2) errors.name = 'Name must be at least 2 characters';
+  else if (name.length > 100) errors.name = 'Name must be at most 100 characters';
+  if (!categoryId || !categories.some(c => c.id === categoryId))
+    errors.category = 'Please select a valid category';
+  if ((draft.description?.length ?? 0) > 500)
+    errors.description = 'Description must be at most 500 characters';
+  if (!draft.phone?.trim()) errors.phone = 'Phone is required';
+  else if (!/^\+?[\d\s\-()+]{7,20}$/.test(draft.phone.trim()))
+    errors.phone = 'Invalid phone number format';
+  const addr = draft.address?.trim() ?? '';
+  if (addr.length < 5) errors.address = 'Address must be at least 5 characters';
+  hours.forEach(h => {
+    if (!h.is_closed) {
+      if (!h.open_time) errors[`hours_${h.day_of_week}`] = 'Open time required';
+      else if (!h.close_time) errors[`hours_${h.day_of_week}`] = 'Close time required';
+      else if (h.close_time <= h.open_time)
+        errors[`hours_${h.day_of_week}`] = 'Close time must be after open time';
+    }
+  });
+  return errors;
+}
 
 export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
@@ -203,14 +238,14 @@ export default function BusinessProfileScreen() {
   const [snackMsg, setSnackMsg] = useState<string>('');
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
 
-  const initialBusiness = useMemo(() => getBusinessById(id ?? '') ?? MOCK_BUSINESS, [id]);
-  const [business, setBusiness] = useState<BusinessProfileData>(initialBusiness);
-  useEffect(() => {
-    setBusiness(initialBusiness);
-  }, [initialBusiness]);
+  const EMPTY_BUSINESS: BusinessProfileData = {
+    id: '', name: '', category: '', description: '',
+    coverImage: '', logo: '', subscriberCount: 0, activeOfferCount: 0,
+    welcomePoints: 0, phone: '', email: '', website: '',
+    address: '', hours: '', founded: '',
+  };
+  const [business, setBusiness] = useState<BusinessProfileData>(EMPTY_BUSINESS);
 
-  // Seed local state from real backend data when it arrives.
-  // We keep initialBusiness as the initial value to avoid a blank flash before the fetch resolves.
   useEffect(() => {
     if (!realBusiness) return;
     setBusiness((prev) => ({
@@ -234,34 +269,86 @@ export default function BusinessProfileScreen() {
   }, [realBusiness, formattedAddress, formattedHours]);
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [draft, setDraft] = useState<BusinessProfileData>(initialBusiness);
+  const [draft, setDraft] = useState<BusinessProfileData>(EMPTY_BUSINESS);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [draftCategoryId, setDraftCategoryId] = useState<string>('');
+  const [draftHours, setDraftHours] = useState<BusinessHour[]>(DEFAULT_HOURS);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const handleStartEdit = useCallback(() => {
+  const handleStartEdit = useCallback(async () => {
     setDraft(business);
-    setIsEditing(true);
+    setDraftCategoryId(realBusiness?.category_id ?? '');
+    setDraftHours(
+      realBusiness?.hours?.map(h => ({
+        day_of_week: h.day_of_week,
+        open_time: h.open_time ?? undefined,
+        close_time: h.close_time ?? undefined,
+        is_closed: h.is_closed,
+      })) ?? DEFAULT_HOURS,
+    );
+    setFieldErrors({});
+    setSaveError(null);
+    setCategoryDropdownOpen(false);
     setActiveTab('about');
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-  }, [business]);
+    try {
+      const cats = await fetchBusinessCategories();
+      setCategories(cats);
+    } catch { /* non-fatal */ }
+    setIsEditing(true);
+  }, [business, realBusiness]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
     setDraft(business);
+    setFieldErrors({});
+    setSaveError(null);
+    setSaving(false);
   }, [business]);
 
-  const handleSaveEdit = useCallback(() => {
-    setBusiness(draft);
-    setIsEditing(false);
-    setSnackMsg('Business profile updated');
-    setSnackVisible(true);
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleSaveEdit = useCallback(async () => {
+    const errors = validateDraft(draft, draftCategoryId, categories, draftHours);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateMyBusiness({
+        business_name: draft.name.trim(),
+        category_id: draftCategoryId,
+        business_type: realBusiness?.business_type ?? 'goodwill',
+        description: draft.description ?? '',
+        phone: draft.phone ?? '',
+        website: draft.website ?? '',
+        address: draft.address ?? '',
+        hours: draftHours,
+        inhouse_referral: realBusiness?.inhouse_referral ?? false,
+        inhouse_referral_url: realBusiness?.inhouse_referral_url ?? undefined,
+      });
+      setIsEditing(false);
+      setSnackMsg('Business profile updated');
+      setSnackVisible(true);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
+    } finally {
+      setSaving(false);
     }
-  }, [draft]);
+  }, [draft, draftCategoryId, categories, draftHours, realBusiness]);
 
   const updateDraft = useCallback(<K extends keyof BusinessProfileData>(key: K, value: BusinessProfileData[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const updateDraftHour = useCallback((index: number, changes: Partial<BusinessHour>) => {
+    setDraftHours(prev => prev.map((h, i) => i === index ? { ...h, ...changes } : h));
   }, []);
 
   const rating = useBusinessRating({
@@ -491,23 +578,48 @@ export default function BusinessProfileScreen() {
                   label="Business name"
                   value={draft.name}
                   onChangeText={(t) => updateDraft('name', t)}
-                  outlineColor="#E8F5EE"
-                  activeOutlineColor={ACCENT}
+                  outlineColor={fieldErrors.name ? '#E24B4A' : '#E8F5EE'}
+                  activeOutlineColor={fieldErrors.name ? '#E24B4A' : ACCENT}
                   style={styles.inlineInput}
                   dense
                   testID="edit-input-name"
                 />
-                <PaperTextInput
-                  mode="outlined"
-                  label="Category"
-                  value={draft.category}
-                  onChangeText={(t) => updateDraft('category', t)}
-                  outlineColor="#E8F5EE"
-                  activeOutlineColor={ACCENT}
-                  style={[styles.inlineInput, { marginTop: 6 }]}
-                  dense
+                {!!fieldErrors.name && <Text style={styles.inlineError}>{fieldErrors.name}</Text>}
+                <TouchableOpacity
+                  style={[styles.editCategorySelector, !!fieldErrors.category && styles.editCategorySelectorError]}
+                  onPress={() => setCategoryDropdownOpen(v => !v)}
+                  activeOpacity={0.7}
                   testID="edit-input-category"
-                />
+                >
+                  <Text style={[styles.editCategorySelectorText, !draftCategoryId && styles.editCategoryPlaceholder]}>
+                    {categories.find(c => c.id === draftCategoryId)?.name ?? 'Select a category'}
+                  </Text>
+                  <ChevronRight size={14} color="#888" style={{ transform: [{ rotate: categoryDropdownOpen ? '90deg' : '0deg' }] }} />
+                </TouchableOpacity>
+                {!!fieldErrors.category && <Text style={styles.inlineError}>{fieldErrors.category}</Text>}
+                {categoryDropdownOpen && (
+                  <View style={styles.editCategoryList}>
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 180 }}>
+                      {categories.map(cat => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[styles.editCategoryItem, draftCategoryId === cat.id && styles.editCategoryItemSelected]}
+                          onPress={() => {
+                            setDraftCategoryId(cat.id);
+                            setCategoryDropdownOpen(false);
+                            setFieldErrors(prev => ({ ...prev, category: '' }));
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.editCategoryItemText, draftCategoryId === cat.id && styles.editCategoryItemTextSelected]}>
+                            {cat.name}
+                          </Text>
+                          {draftCategoryId === cat.id && <Check size={14} color={ACCENT} />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -713,6 +825,10 @@ export default function BusinessProfileScreen() {
               isEditing={isEditing}
               draft={draft}
               updateDraft={updateDraft}
+              draftHours={draftHours}
+              updateDraftHour={updateDraftHour}
+              fieldErrors={fieldErrors}
+              setFieldErrors={setFieldErrors}
             />
           )}
           {activeTab === 'members' && isOwner && (
@@ -900,12 +1016,18 @@ export default function BusinessProfileScreen() {
           style={styles.editFooterWrap}
           pointerEvents="box-none"
         >
+          {!!saveError && (
+            <View style={styles.saveErrorBanner}>
+              <Text style={styles.saveErrorText}>{saveError}</Text>
+            </View>
+          )}
           <SafeAreaView edges={['bottom']} style={styles.editFooter}>
             <PaperButton
               mode="outlined"
               onPress={handleCancelEdit}
               style={styles.editFooterCancel}
               textColor={ACCENT}
+              disabled={saving}
               testID="edit-cancel-btn"
             >
               Cancel
@@ -915,9 +1037,11 @@ export default function BusinessProfileScreen() {
               onPress={handleSaveEdit}
               style={styles.editFooterSave}
               buttonColor={ACCENT}
+              disabled={saving || Object.keys(fieldErrors).some(k => !!fieldErrors[k])}
+              loading={saving}
               testID="edit-save-btn"
             >
-              Save Changes
+              {saving ? 'Saving…' : 'Save Changes'}
             </PaperButton>
           </SafeAreaView>
         </KeyboardAvoidingView>
@@ -1801,11 +1925,19 @@ function AboutTab({
   isEditing,
   draft,
   updateDraft,
+  draftHours,
+  updateDraftHour,
+  fieldErrors,
+  setFieldErrors,
 }: {
   business: BusinessProfileData;
   isEditing: boolean;
   draft: BusinessProfileData;
   updateDraft: <K extends keyof BusinessProfileData>(key: K, value: BusinessProfileData[K]) => void;
+  draftHours: BusinessHour[];
+  updateDraftHour: (index: number, changes: Partial<BusinessHour>) => void;
+  fieldErrors: Record<string, string>;
+  setFieldErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) {
   if (isEditing) {
     return (
@@ -1814,16 +1946,22 @@ function AboutTab({
           <Text style={styles.editSectionTitle}>About</Text>
           <PaperTextInput
             mode="outlined"
-            label="Description"
+            label="Description (optional)"
             value={draft.description}
-            onChangeText={(t) => updateDraft('description', t)}
-            outlineColor="#E8F5EE"
-            activeOutlineColor={ACCENT}
+            onChangeText={(t) => {
+              updateDraft('description', t);
+              if (fieldErrors.description) setFieldErrors(prev => ({ ...prev, description: '' }));
+            }}
+            outlineColor={fieldErrors.description ? '#E24B4A' : '#E8F5EE'}
+            activeOutlineColor={fieldErrors.description ? '#E24B4A' : ACCENT}
             style={styles.editInput}
             multiline
             numberOfLines={3}
+            maxLength={520}
             testID="edit-about-description"
           />
+          <Text style={styles.editCharCount}>{draft.description?.length ?? 0}/500</Text>
+          {!!fieldErrors.description && <Text style={styles.inlineError}>{fieldErrors.description}</Text>}
         </View>
 
         <View style={styles.editSectionCard}>
@@ -1832,14 +1970,18 @@ function AboutTab({
             mode="outlined"
             label="Phone"
             value={draft.phone}
-            onChangeText={(t) => updateDraft('phone', t)}
-            outlineColor="#E8F5EE"
-            activeOutlineColor={ACCENT}
+            onChangeText={(t) => {
+              updateDraft('phone', t);
+              if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: '' }));
+            }}
+            outlineColor={fieldErrors.phone ? '#E24B4A' : '#E8F5EE'}
+            activeOutlineColor={fieldErrors.phone ? '#E24B4A' : ACCENT}
             style={styles.editInput}
             keyboardType="phone-pad"
             left={<PaperTextInput.Icon icon="phone" />}
             testID="edit-phone"
           />
+          {!!fieldErrors.phone && <Text style={styles.inlineError}>{fieldErrors.phone}</Text>}
           <PaperTextInput
             mode="outlined"
             label="Email"
@@ -1873,30 +2015,78 @@ function AboutTab({
             mode="outlined"
             label="Address"
             value={draft.address}
-            onChangeText={(t) => updateDraft('address', t)}
-            outlineColor="#E8F5EE"
-            activeOutlineColor={ACCENT}
+            onChangeText={(t) => {
+              updateDraft('address', t);
+              if (fieldErrors.address) setFieldErrors(prev => ({ ...prev, address: '' }));
+            }}
+            outlineColor={fieldErrors.address ? '#E24B4A' : '#E8F5EE'}
+            activeOutlineColor={fieldErrors.address ? '#E24B4A' : ACCENT}
             style={styles.editInput}
             multiline
             left={<PaperTextInput.Icon icon="map-marker" />}
             testID="edit-address"
           />
+          {!!fieldErrors.address && <Text style={styles.inlineError}>{fieldErrors.address}</Text>}
         </View>
 
         <View style={styles.editSectionCard}>
           <Text style={styles.editSectionTitle}>Opening hours</Text>
-          <PaperTextInput
-            mode="outlined"
-            label="Opening hours"
-            value={draft.hours}
-            onChangeText={(t) => updateDraft('hours', t)}
-            outlineColor="#E8F5EE"
-            activeOutlineColor={ACCENT}
-            style={styles.editInput}
-            multiline
-            left={<PaperTextInput.Icon icon="clock-outline" />}
-            testID="edit-hours"
-          />
+          {draftHours.map((h, index) => (
+            <View key={h.day_of_week}>
+              <View style={styles.editHoursRow}>
+                <Text style={styles.editHoursDay}>{DAYS_LABELS[h.day_of_week]}</Text>
+                <RNSwitch
+                  value={!h.is_closed}
+                  onValueChange={(v) => {
+                    updateDraftHour(index, { is_closed: !v });
+                    if (fieldErrors[`hours_${h.day_of_week}`])
+                      setFieldErrors(prev => ({ ...prev, [`hours_${h.day_of_week}`]: '' }));
+                  }}
+                  trackColor={{ false: '#D6D3E0', true: ACCENT }}
+                  thumbColor={Platform.OS === 'android' ? (!h.is_closed ? '#fff' : '#f4f3f4') : undefined}
+                  ios_backgroundColor="#D6D3E0"
+                />
+                {!h.is_closed ? (
+                  <View style={styles.editHoursTimeRow}>
+                    <TextInput
+                      style={[styles.editHoursTimeInput, !!fieldErrors[`hours_${h.day_of_week}`] && styles.editHoursTimeInputError]}
+                      value={h.open_time ?? ''}
+                      onChangeText={(v) => {
+                        updateDraftHour(index, { open_time: v });
+                        if (fieldErrors[`hours_${h.day_of_week}`])
+                          setFieldErrors(prev => ({ ...prev, [`hours_${h.day_of_week}`]: '' }));
+                      }}
+                      placeholder="09:00"
+                      placeholderTextColor="#A0A0A0"
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                    />
+                    <Text style={styles.editHoursTimeSep}>–</Text>
+                    <TextInput
+                      style={[styles.editHoursTimeInput, !!fieldErrors[`hours_${h.day_of_week}`] && styles.editHoursTimeInputError]}
+                      value={h.close_time ?? ''}
+                      onChangeText={(v) => {
+                        updateDraftHour(index, { close_time: v });
+                        if (fieldErrors[`hours_${h.day_of_week}`])
+                          setFieldErrors(prev => ({ ...prev, [`hours_${h.day_of_week}`]: '' }));
+                      }}
+                      placeholder="18:00"
+                      placeholderTextColor="#A0A0A0"
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                    />
+                  </View>
+                ) : (
+                  <Text style={styles.editHoursClosed}>Closed</Text>
+                )}
+              </View>
+              {!!fieldErrors[`hours_${h.day_of_week}`] && (
+                <Text style={[styles.inlineError, { marginLeft: 46, marginTop: -4, marginBottom: 4 }]}>
+                  {fieldErrors[`hours_${h.day_of_week}`]}
+                </Text>
+              )}
+            </View>
+          ))}
         </View>
       </View>
     );
@@ -3544,6 +3734,129 @@ const styles = StyleSheet.create({
   editFooterSave: {
     flex: 1.4,
     borderRadius: 12,
+  },
+  saveErrorBanner: {
+    backgroundColor: '#FCEBEB',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E24B4A',
+  },
+  saveErrorText: {
+    color: '#A32D2D',
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  inlineError: {
+    fontSize: 12,
+    color: '#E24B4A',
+    marginTop: 3,
+    marginBottom: 4,
+    fontWeight: '500' as const,
+  },
+  editCharCount: {
+    fontSize: 11,
+    color: '#A0A0A0',
+    textAlign: 'right' as const,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  editCategorySelector: {
+    borderWidth: 1.5,
+    borderColor: '#E8F5EE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: '#fff',
+    marginTop: 6,
+  },
+  editCategorySelectorError: {
+    borderColor: '#E24B4A',
+  },
+  editCategorySelectorText: {
+    fontSize: 14,
+    color: '#1C1B1F',
+    fontWeight: '400' as const,
+    flex: 1,
+  },
+  editCategoryPlaceholder: {
+    color: '#A0A0A0',
+  },
+  editCategoryList: {
+    borderWidth: 1,
+    borderColor: '#E8F5EE',
+    borderRadius: 8,
+    marginTop: 4,
+    backgroundColor: '#fff',
+    overflow: 'hidden' as const,
+  },
+  editCategoryItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  editCategoryItemSelected: {
+    backgroundColor: '#E8F5EE',
+  },
+  editCategoryItemText: {
+    fontSize: 14,
+    color: '#1C1B1F',
+  },
+  editCategoryItemTextSelected: {
+    fontWeight: '600' as const,
+    color: ACCENT,
+  },
+  editHoursRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    gap: 10,
+  },
+  editHoursDay: {
+    width: 34,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#1C1B1F',
+  },
+  editHoursTimeRow: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+  },
+  editHoursTimeInput: {
+    flex: 1,
+    backgroundColor: '#F6F5FA',
+    borderWidth: 1,
+    borderColor: '#E8F5EE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 13,
+    color: '#1C1B1F',
+    textAlign: 'center' as const,
+  },
+  editHoursTimeInputError: {
+    borderColor: '#E24B4A',
+  },
+  editHoursTimeSep: {
+    fontSize: 14,
+    color: '#A0A0A0',
+  },
+  editHoursClosed: {
+    flex: 1,
+    fontSize: 13,
+    color: '#A0A0A0',
+    fontStyle: 'italic' as const,
   },
   ownerBanner: {
     flexDirection: 'row',

@@ -23,6 +23,7 @@ const savedPostRoutes         = require('./modules/savedPosts/savedPost.routes')
 const feedRoutes              = require('./modules/feed/feed.routes');
 const likesRoutes             = require('./modules/likes/likes.routes');
 const commentsRoutes          = require('./modules/comments/comments.routes');
+const sharesRoutes            = require('./modules/shares/shares.routes');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/saved-posts',       savedPostRoutes);
 app.use('/feed',              feedRoutes);
 app.use('/likes',             likesRoutes);
 app.use('/comments',          commentsRoutes);
+app.use('/shares',            sharesRoutes);
 
 app.use('/api/v1', api);
 

@@ -17,6 +17,7 @@ export interface BusinessProfile {
   name: string;
   description: string | null;
   business_type: 'goodwill' | 'incentivised';
+  category_id: string | null;
   phone: string | null;
   website: string | null;
   address: string | null;

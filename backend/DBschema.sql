@@ -732,3 +732,17 @@ CREATE TABLE comments (
 CREATE INDEX idx_comments_content ON comments (content_type, content_id);
 CREATE INDEX idx_comments_parent  ON comments (parent_comment_id);
 CREATE INDEX idx_comments_profile ON comments (profile_id);
+
+CREATE TABLE shares (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type      TEXT        NOT NULL CHECK (content_type IN ('offer', 'event', 'post', 'broadcast')),
+  content_id        UUID        NOT NULL,
+  sharer_profile_id UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  channel           TEXT        NOT NULL CHECK (channel IN (
+                      'facebook','twitter','instagram','tiktok',
+                      'whatsapp','messenger','sms','email','native','contacts'
+                    )),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_shares_content ON shares(content_type, content_id);
+CREATE INDEX idx_shares_profile ON shares(sharer_profile_id);
