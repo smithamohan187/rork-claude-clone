@@ -26,6 +26,7 @@ import { ReferralChatProvider } from "@/contexts/ReferralChatContext";
 import { PostsProvider } from "@/contexts/PostsContext";
 import { ManageContentProvider } from "@/contexts/ManageContentContext";
 import TestModeSwitcher from "@/components/TestModeSwitcher";
+import ShareDeepLinkHandler from "@/components/ShareDeepLinkHandler";
 import { SnackbarProvider, GlobalSnackbar } from "@/contexts/SnackbarContext";
 import { SideDrawerProvider } from "@/contexts/SideDrawerContext";
 import SideDrawer from "@/components/SideDrawer";
@@ -400,6 +401,7 @@ export default function RootLayout() {
                         <SnackbarProvider>
                           <SideDrawerProvider>
                             <RootLayoutNav />
+                            <ShareDeepLinkHandler />
                             <SideDrawer />
                             <TestModeSwitcher />
                             <GlobalSnackbar />

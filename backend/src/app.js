@@ -25,6 +25,10 @@ const likesRoutes             = require('./modules/likes/likes.routes');
 const commentsRoutes          = require('./modules/comments/comments.routes');
 const sharesRoutes            = require('./modules/shares/shares.routes');
 const rewardConfigRoutes      = require('./modules/rewardConfig/rewardConfig.routes');
+const marketplaceRoutes       = require('./modules/marketplace/marketplace.routes');
+const shareReferralRoutes     = require('./modules/shareReferrals/shareReferrals.routes');
+const pointsRoutes            = require('./modules/points/points.routes');
+const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modules/coupons/coupons.routes');
 
 const app = express();
 
@@ -61,9 +65,14 @@ app.use('/saved-offers',      savedOfferRoutes);
 app.use('/saved-events',      savedEventRoutes);
 app.use('/saved-posts',       savedPostRoutes);
 app.use('/feed',              feedRoutes);
+app.use('/feed',              shareReferralRoutes);
 app.use('/likes',             likesRoutes);
 app.use('/comments',          commentsRoutes);
 app.use('/shares',            sharesRoutes);
+app.use('/marketplace',       marketplaceRoutes);
+app.use('/points',            pointsRoutes);
+app.use('/businesses',        couponsBusinessRouter);
+app.use('/coupons',           couponRouter);
 app.use('/',                  rewardConfigRoutes);
 
 app.use('/api/v1', api);

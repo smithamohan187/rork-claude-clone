@@ -27,6 +27,7 @@ import * as Brightness from 'expo-brightness';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { differenceInSeconds, format } from 'date-fns';
 import { useCoupons, StoredCoupon } from '@/contexts/CouponContext';
+import { checkCouponExpiry } from '@/api/services/rewardsService';
 import QRCodeView from '@/components/coupons/QRCodeView';
 
 const PURPLE = '#1A5C35';
@@ -264,7 +265,7 @@ function Initials({ name, size = 56 }: { name: string; size?: number }) {
 export default function CouponDisplayScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getById } = useCoupons();
+  const { getById, markExpired } = useCoupons();
   const prevUsedRef = useRef<boolean>(false);
 
   const [coupon, setCoupon] = useState<StoredCoupon | undefined>(() =>
@@ -284,6 +285,16 @@ export default function CouponDisplayScreen() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Lazy server-side expiry check — only for backend-issued coupons (UUID format).
+  // If the server confirms expiry, the refund transaction is written and local state is updated.
+  useEffect(() => {
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(id)) return;
+    checkCouponExpiry(id)
+      .then(({ expired }) => { if (expired) markExpired(id); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     const interval = setInterval(() => {

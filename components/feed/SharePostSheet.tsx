@@ -30,9 +30,8 @@ import {
   X,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 import { phoneContacts as fallbackPhoneContacts } from '@/mocks/data';
-import { logShare } from '@/api/services/sharesService';
+import { logShare, createShareRecipients } from '@/api/services/sharesService';
 
 const PURPLE = '#00B246';
 const ORANGE = '#1A5C35';
@@ -44,6 +43,7 @@ interface Props {
   onToast: (msg: string) => void;
   postId: string;
   postType: 'post' | 'offer' | 'event' | 'broadcast';
+  businessId: string;
   authorName: string;
   authorAvatarUrl?: string;
   contentPreview: string;
@@ -65,10 +65,10 @@ const initialsFor = (name: string): string => {
   return (first + last).toUpperCase() || 'U';
 };
 
-function buildReferralCode(userId: string): string {
-  const safe = (userId ?? 'GUEST').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  return `APP_${safe.slice(0, 6).padEnd(6, 'X')}`;
-}
+// Public share domain (see EXPO_PUBLIC_SHARE_BASE_URL / backend SHARE_BASE_URL). A referral code is
+// appended by the backend when a share_recipients row is created; the fallback below (no code) is
+// only used if that call fails so the social buttons still produce a working link.
+const SHARE_BASE = (process.env.EXPO_PUBLIC_SHARE_BASE_URL ?? '').trim().replace(/\/$/, '');
 
 export const SharePostSheet = React.memo(function SharePostSheet({
   visible,
@@ -76,24 +76,47 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   onToast,
   postId,
   postType,
+  businessId,
   authorName,
   authorAvatarUrl,
   contentPreview,
 }: Props) {
   const router = useRouter();
-  const { currentUser } = useAuth();
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? 'https://touchpoint.app';
-  const referralCode = useMemo(() => buildReferralCode(currentUser?.id ?? ''), [currentUser?.id]);
   const pathSegment = ({ post: 'post', offer: 'offer', event: 'event', broadcast: 'business' } as const)[postType] ?? 'post';
- const shareUrl = useMemo(
-  () => `${baseUrl}/${pathSegment}/${postId}?ref=${referralCode}`,
-  [pathSegment, postId, referralCode],
-);
-  const shareMessage = useMemo(
-    () =>
-      `Check out this ${postType} from ${authorName} on TouchPoint — discover local businesses, earn rewards, and get exclusive offers!\n\n${shareUrl}`,
-    [postType, authorName, shareUrl],
+
+  // Real, backend-issued referral link. Populated when the sheet opens (a null-contact
+  // share_recipients row is created for the social/native single-link channels).
+  const [shareUrl, setShareUrl] = useState<string>('');
+  const fallbackUrl = useMemo(
+    () => (SHARE_BASE ? `${SHARE_BASE}/${pathSegment}/${postId}` : ''),
+    [pathSegment, postId],
   );
+  const effectiveUrl = shareUrl || fallbackUrl;
+
+  const buildMessage = useCallback(
+    (url: string) =>
+      `Check out this ${postType} from ${authorName} on TouchPoint — discover local businesses, earn rewards, and get exclusive offers!\n\n${url}`,
+    [postType, authorName],
+  );
+  const shareMessage = useMemo(() => buildMessage(effectiveUrl), [buildMessage, effectiveUrl]);
+
+  // On open, mint a single referral link for the social/native channels. Per-contact links are
+  // minted separately in sendToSelected.
+  useEffect(() => {
+    if (!visible) {
+      setShareUrl('');
+      return;
+    }
+    let cancelled = false;
+    createShareRecipients({ content_type: postType, content_id: postId, business_id: businessId })
+      .then((rows) => {
+        if (!cancelled && rows[0]?.url) setShareUrl(rows[0].url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, postType, postId, businessId]);
 
   const slideAnim = React.useRef(new Animated.Value(0)).current;
   const backdropAnim = React.useRef(new Animated.Value(0)).current;
@@ -236,38 +259,38 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   const handleFacebook = useCallback(() => {
     logShareSilently('facebook');
     return openUrl(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareMessage)}`,
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(effectiveUrl)}&quote=${encodeURIComponent(shareMessage)}`,
       'Could not open Facebook',
     );
-  }, [openUrl, shareUrl, shareMessage, logShareSilently]);
+  }, [openUrl, effectiveUrl, shareMessage, logShareSilently]);
 
   const handleTwitter = useCallback(() => {
     logShareSilently('twitter');
     return openUrl(
-      `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareMessage)}`,
+      `https://twitter.com/intent/tweet?url=${encodeURIComponent(effectiveUrl)}&text=${encodeURIComponent(shareMessage)}`,
       'Could not open X',
     );
-  }, [openUrl, shareUrl, shareMessage, logShareSilently]);
+  }, [openUrl, effectiveUrl, shareMessage, logShareSilently]);
 
   const handleInstagram = useCallback(async () => {
     try {
       logShareSilently('instagram');
-      await Clipboard.setStringAsync(shareUrl);
+      await Clipboard.setStringAsync(effectiveUrl);
       onToast('Link copied — paste in Instagram');
     } catch (e) {
       console.log('[SharePostSheet] instagram failed', e);
     }
-  }, [shareUrl, onToast, logShareSilently]);
+  }, [effectiveUrl, onToast, logShareSilently]);
 
   const handleTikTok = useCallback(async () => {
     try {
       logShareSilently('tiktok');
-      await Clipboard.setStringAsync(shareUrl);
+      await Clipboard.setStringAsync(effectiveUrl);
       onToast('Link copied — paste in TikTok');
     } catch (e) {
       console.log('[SharePostSheet] tiktok failed', e);
     }
-  }, [shareUrl, onToast, logShareSilently]);
+  }, [effectiveUrl, onToast, logShareSilently]);
 
   const handleWhatsApp = useCallback(() => {
     logShareSilently('whatsapp');
@@ -276,18 +299,17 @@ export const SharePostSheet = React.memo(function SharePostSheet({
 
   const handleMessenger = useCallback(() => {
     logShareSilently('messenger');
-    return openUrl(`fb-messenger://share?link=${encodeURIComponent(shareUrl)}`, 'Messenger is not installed');
-  }, [openUrl, shareUrl, logShareSilently]);
+    return openUrl(`fb-messenger://share?link=${encodeURIComponent(effectiveUrl)}`, 'Messenger is not installed');
+  }, [openUrl, effectiveUrl, logShareSilently]);
 
   const navParams = useMemo(
     () => ({
       postId,
       postType,
       authorName,
-      shareUrl,
-      referralCode,
+      shareUrl: effectiveUrl,
     }),
-    [postId, postType, authorName, shareUrl, referralCode],
+    [postId, postType, authorName, effectiveUrl],
   );
 
   const handleOpenSms = useCallback(() => {
@@ -309,18 +331,34 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   const handleNativeShare = useCallback(async () => {
     try {
       logShareSilently('native');
-      await RNShare.share({ message: shareMessage, url: shareUrl });
+      await RNShare.share({ message: shareMessage, url: effectiveUrl });
     } catch (e) {
       console.log('[SharePostSheet] native share failed', e);
     }
-  }, [shareMessage, shareUrl, logShareSilently]);
+  }, [shareMessage, effectiveUrl, logShareSilently]);
 
   const sendToSelected = useCallback(async () => {
     if (selected.size === 0) return;
-    const phones = contacts
-      .filter((c) => selected.has(c.id))
-      .map((c) => c.phone)
-      .filter(Boolean);
+    const selectedContacts = contacts.filter((c) => selected.has(c.id) && !!c.phone);
+    const phones = selectedContacts.map((c) => c.phone);
+
+    // Mint one share_recipients row (unique referral_code) per selected contact so each recipient is
+    // individually trackable. NOTE: the native SMS composer sends a single body to all recipients,
+    // so the shared link carries the first recipient's code (documented trade-off — see feed.md).
+    // Per-contact codes are still persisted for attribution.
+    let outgoingMessage = shareMessage;
+    try {
+      const rows = await createShareRecipients({
+        content_type: postType,
+        content_id: postId,
+        business_id: businessId,
+        recipients: selectedContacts.map((c) => ({ contact: c.phone })),
+      });
+      if (rows[0]?.url) outgoingMessage = buildMessage(rows[0].url);
+    } catch {
+      // Fall back to the general link already in shareMessage.
+    }
+
     try {
       const smsMod: typeof import('expo-sms') | null = await import('expo-sms').catch(
         () => null as unknown as typeof import('expo-sms'),
@@ -329,13 +367,13 @@ export const SharePostSheet = React.memo(function SharePostSheet({
       if (smsMod && Platform.OS !== 'web') {
         const available = await smsMod.isAvailableAsync();
         if (available) {
-          await smsMod.sendSMSAsync(phones, shareMessage);
+          await smsMod.sendSMSAsync(phones, outgoingMessage);
           sent = true;
         }
       }
       if (!sent && Platform.OS !== 'web') {
         const sep = Platform.OS === 'ios' ? '&' : '?';
-        const url = `sms:${phones.join(',')}${sep}body=${encodeURIComponent(shareMessage)}`;
+        const url = `sms:${phones.join(',')}${sep}body=${encodeURIComponent(outgoingMessage)}`;
         const supported = await Linking.canOpenURL(url).catch(() => false);
         if (supported) {
           await Linking.openURL(url);
@@ -343,7 +381,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
         }
       }
       if (!sent) {
-        await Clipboard.setStringAsync(shareMessage);
+        await Clipboard.setStringAsync(outgoingMessage);
         onToast('Message copied to clipboard');
       } else {
         logShareSilently('contacts');
@@ -354,7 +392,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
       console.log('[SharePostSheet] send sms failed', e);
       onToast('Could not send SMS');
     }
-  }, [selected, contacts, shareMessage, onClose, onToast, logShareSilently]);
+  }, [selected, contacts, shareMessage, buildMessage, postType, postId, businessId, onClose, onToast, logShareSilently]);
 
   const renderContact = useCallback(
     ({ item }: { item: DeviceContact }) => {

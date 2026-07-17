@@ -12,3 +12,43 @@ export async function logShare(
 ): Promise<void> {
   await apiClient.post('/shares', { content_type, content_id, channel });
 }
+
+// ── Content-share referral (per-recipient deep links) ─────────────────────────
+
+export interface ShareRecipientResult {
+  recipient_contact: string | null;
+  referral_code: string;
+  url: string;
+}
+
+export interface ResolvedShareReferral {
+  content_type: ShareContentType;
+  content_id: string;
+  business_id: string;
+  route: string;      // e.g. '/view-post'
+  id_param: string;   // e.g. 'postId'
+}
+
+// Creates one share_recipients row per recipient (or a single null-contact row when `recipients`
+// is empty, for social/native single-link shares) and returns the referral_code + url for each.
+export async function createShareRecipients(payload: {
+  content_type: ShareContentType;
+  content_id: string;
+  business_id: string;
+  recipients?: { contact: string | null }[];
+}): Promise<ShareRecipientResult[]> {
+  const result = await apiClient.post<{ recipients: ShareRecipientResult[] }>(
+    '/feed/share-recipients',
+    payload,
+  );
+  return result.data?.recipients ?? [];
+}
+
+// Resolves a referral code (public, no auth) to its content + the detail route to open.
+export async function resolveShareReferral(referral_code: string): Promise<ResolvedShareReferral | null> {
+  const result = await apiClient.post<ResolvedShareReferral>(
+    '/feed/resolve-share-referral',
+    { referral_code },
+  );
+  return result.success && result.data ? result.data : null;
+}

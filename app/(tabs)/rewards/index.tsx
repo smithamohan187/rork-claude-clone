@@ -32,16 +32,18 @@ import {
   Check,
   ArrowUpRight,
 } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCoupons } from '@/contexts/CouponContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { currentMemberFollowedBusinesses } from '@/mocks/data';
-import type { MemberFollowedBusiness } from '@/mocks/data';
+import { usePointsSummary } from '@/hooks/usePointsSummary';
+import type { PointsBreakdownItem, TierInfo } from '@/api/services/pointsService';
 import {
-  redeemableRewards,
   activityEvents,
   tierLadder,
 } from '@/mocks/rewardsData';
-import type { RedeemableReward, ActivityEvent, TierInfo } from '@/mocks/rewardsData';
+import type { ActivityEvent } from '@/mocks/rewardsData';
+import { getRedeemableRewards, redeemReward, type RedeemableRewardItem } from '@/api/services/rewardsService';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -74,7 +76,14 @@ function getActivityIcon(type: ActivityEvent['type'], color: string) {
   }
 }
 
-function getRewardTypeIcon(type: RedeemableReward['type']) {
+const TIER_BADGE_ICONS = ['medal-outline', 'medal', 'trophy-outline', 'trophy', 'crown'] as const;
+type TierBadgeIcon = typeof TIER_BADGE_ICONS[number];
+
+function getTierBadgeIcon(rank: number): TierBadgeIcon {
+  return TIER_BADGE_ICONS[Math.min(rank, TIER_BADGE_ICONS.length - 1)];
+}
+
+function getRewardTypeIcon(type: RedeemableRewardItem['type']) {
   switch (type) {
     case 'discount': return <Tag size={20} color={PURPLE} />;
     case 'free_item': return <Gift size={20} color={PURPLE} />;
@@ -345,11 +354,17 @@ const tierStyles = StyleSheet.create({
 });
 
 function BusinessPointCard({ biz, onRedeem }: {
-  biz: MemberFollowedBusiness;
+  biz: PointsBreakdownItem;
   onRedeem: () => void;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const progress = Math.min(biz.pointsEarned / 1000, 1);
+  const progress = biz.tiers.length > 0 ? biz.progressPercent / 100 : Math.min(biz.points / 1000, 1);
+
+  const currentTierRank = biz.currentTier
+    ? biz.tiers.findIndex(t => t.id === biz.currentTier!.id)
+    : -1;
+  const tierColor = biz.currentTier?.color ?? PURPLE;
+  const hasTiers = biz.tiers.length > 0;
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
@@ -367,21 +382,42 @@ function BusinessPointCard({ biz, onRedeem }: {
         onPressOut={handlePressOut}
         testID={`biz-points-${biz.businessId}`}
       >
-        <Image source={{ uri: biz.businessAvatar }} style={bizStyles.avatar} />
+        {biz.logoUrl ? (
+          <Image source={{ uri: biz.logoUrl }} style={bizStyles.avatar} />
+        ) : (
+          <View style={[bizStyles.avatar, { backgroundColor: '#E8E6EF' }]} />
+        )}
         <View style={bizStyles.info}>
           <View style={bizStyles.nameRow}>
             <Text style={bizStyles.name} numberOfLines={1}>{biz.businessName}</Text>
-            <View style={[bizStyles.tierPill, { backgroundColor: biz.tierColor + '18' }]}>
-              <View style={[bizStyles.tierDot, { backgroundColor: biz.tierColor }]} />
-              <Text style={[bizStyles.tierLabel, { color: biz.tierColor }]}>{biz.currentTier}</Text>
-            </View>
           </View>
           <View style={bizStyles.progressRow}>
             <View style={bizStyles.progressBarBg}>
-              <View style={[bizStyles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: biz.tierColor }]} />
+              <View style={[bizStyles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: tierColor }]} />
             </View>
-            <Text style={bizStyles.ptsText}>{biz.pointsEarned} pts</Text>
+            <Text style={bizStyles.ptsText}>{biz.points} pts</Text>
           </View>
+          {hasTiers && (
+            <View style={bizStyles.tierRow}>
+              {biz.currentTier ? (
+                <View style={[bizStyles.tierChip, { backgroundColor: tierColor + '18' }]}>
+                  <MaterialCommunityIcons
+                    name={getTierBadgeIcon(currentTierRank)}
+                    size={13}
+                    color={tierColor}
+                  />
+                  <Text style={[bizStyles.tierChipText, { color: tierColor }]}>{biz.currentTier.name}</Text>
+                </View>
+              ) : (
+                <Text style={bizStyles.tierToFirstText}>Working toward {biz.tiers[0].name}</Text>
+              )}
+              {biz.nextTier ? (
+                <Text style={bizStyles.tierNextText}>{biz.pointsToNextTier} pts to {biz.nextTier.name}</Text>
+              ) : biz.currentTier ? (
+                <Text style={bizStyles.tierTopText}>Top tier reached</Text>
+              ) : null}
+            </View>
+          )}
         </View>
         <TouchableOpacity style={bizStyles.redeemBtn} activeOpacity={0.75} onPress={onRedeem}>
           <Gift size={13} color="#fff" />
@@ -478,12 +514,47 @@ const bizStyles = StyleSheet.create({
     borderRadius: 12,
     marginLeft: 8,
     gap: 4,
+    alignSelf: 'flex-start' as const,
   },
   redeemText: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: '#fff',
     letterSpacing: 0.2,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    gap: 6,
+  },
+  tierChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  tierChipText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+  },
+  tierToFirstText: {
+    fontSize: 10,
+    fontWeight: '500' as const,
+    color: '#8E8E9A',
+  },
+  tierNextText: {
+    fontSize: 10,
+    fontWeight: '500' as const,
+    color: '#8E8E9A',
+  },
+  tierTopText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#16A34A',
   },
 });
 
@@ -561,21 +632,36 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
   const router = useRouter();
   const { addCoupon, findActiveForReward } = useCoupons();
   const { currentUser } = useAuth();
+  const { showSnackbar } = useSnackbar();
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const [selectedReward, setSelectedReward] = useState<RedeemableReward | null>(null);
+  const [selectedReward, setSelectedReward] = useState<RedeemableRewardItem | null>(null);
   const [showConfirmation, setShowConfirmation] = useState<boolean>(false);
+  const [rewards, setRewards] = useState<RedeemableRewardItem[]>([]);
+  const [rewardsLoading, setRewardsLoading] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
   const confirmSlideAnim = useRef(new Animated.Value(0)).current;
-  const rewards = redeemableRewards[businessId] || [];
 
   useEffect(() => {
     if (visible) {
       setSelectedReward(null);
       setShowConfirmation(false);
+      setRedeeming(false);
       Animated.spring(slideAnim, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 4 }).start();
     } else {
       Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     }
   }, [visible, slideAnim]);
+
+  useEffect(() => {
+    if (!visible || !businessId) return;
+    let active = true;
+    setRewardsLoading(true);
+    getRedeemableRewards(businessId)
+      .then(data => { if (active) setRewards(data); })
+      .catch(() => {})
+      .finally(() => { if (active) setRewardsLoading(false); });
+    return () => { active = false; };
+  }, [visible, businessId]);
 
   useEffect(() => {
     if (showConfirmation) {
@@ -587,49 +673,49 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
 
   const handleGeneratePress = useCallback(() => {
     if (!selectedReward) return;
-    console.log('[Rewards] Showing confirmation for:', selectedReward.title);
     setShowConfirmation(true);
   }, [selectedReward]);
 
-  const handleConfirmRedeem = useCallback(() => {
-    if (!selectedReward) return;
-    console.log('[Rewards] Confirmed redeem for:', selectedReward.title);
+  const handleConfirmRedeem = useCallback(async () => {
+    if (!selectedReward || redeeming) return;
 
     const existing = findActiveForReward(selectedReward.id);
     if (existing) {
-      console.log('[Rewards] Reusing existing active coupon', existing.couponCode);
       onCouponGenerated({ id: existing.id });
       setShowConfirmation(false);
       onClose();
-      setTimeout(() => {
-        router.push(`/coupon/${existing.id}` as never);
-      }, 300);
+      setTimeout(() => router.push(`/coupon/${existing.id}` as never), 300);
       return;
     }
 
-    const segA = Math.random().toString(36).slice(2, 6).toUpperCase();
-    const segB = Math.floor(1000 + Math.random() * 9000).toString();
-    const code = `TP-${segA}-${segB}`;
-    const expiresAt = Date.now() + selectedReward.expiryMinutes * 60 * 1000;
-    const created = addCoupon({
-      businessId,
-      businessName,
-      rewardId: selectedReward.id,
-      rewardTitle: selectedReward.title,
-      rewardDescription: selectedReward.description,
-      rewardType: selectedReward.type,
-      couponCode: code,
-      pointsDeducted: selectedReward.pointsCost,
-      customerName: currentUser?.name,
-      expiresAt,
-    });
-    onCouponGenerated({ id: created.id });
-    setShowConfirmation(false);
-    onClose();
-    setTimeout(() => {
-      router.push(`/coupon/${created.id}` as never);
-    }, 300);
-  }, [selectedReward, businessId, businessName, onCouponGenerated, onClose, router, addCoupon, findActiveForReward, currentUser]);
+    setRedeeming(true);
+    try {
+      const result = await redeemReward(businessId, selectedReward.id);
+      const created = addCoupon({
+        id: result.couponId,
+        businessId: result.businessId,
+        businessName,
+        rewardId: selectedReward.id,
+        rewardTitle: result.rewardName,
+        rewardDescription: result.rewardDescription,
+        rewardType: result.rewardType,
+        couponCode: result.couponCode,
+        pointsDeducted: result.pointsRequired,
+        customerName: currentUser?.name,
+        expiresAt: result.expiresAt,
+      });
+      onCouponGenerated({ id: created.id });
+      setShowConfirmation(false);
+      onClose();
+      setTimeout(() => router.push(`/coupon/${created.id}` as never), 300);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? err?.message ?? 'Failed to redeem reward';
+      showSnackbar(msg);
+      setShowConfirmation(false);
+    } finally {
+      setRedeeming(false);
+    }
+  }, [selectedReward, redeeming, businessId, businessName, onCouponGenerated, onClose, router, addCoupon, findActiveForReward, currentUser, showSnackbar]);
 
   const handleCancelConfirm = useCallback(() => {
     console.log('[Rewards] User cancelled confirmation');
@@ -680,25 +766,35 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={sheetStyles.rewardsList}>
+              {rewardsLoading && rewards.length === 0 && (
+                <View style={sheetStyles.emptyRewards}>
+                  <Text style={sheetStyles.emptyText}>Loading rewards...</Text>
+                </View>
+              )}
               {rewards.map(reward => {
                 const isSelected = selectedReward?.id === reward.id;
+                const isAffordable = reward.affordable;
                 return (
                   <TouchableOpacity
                     key={reward.id}
-                    style={[sheetStyles.rewardCard, isSelected && sheetStyles.rewardCardSelected]}
-                    activeOpacity={0.7}
-                    onPress={() => setSelectedReward(reward)}
+                    style={[
+                      sheetStyles.rewardCard,
+                      isSelected && sheetStyles.rewardCardSelected,
+                      !isAffordable && sheetStyles.rewardCardDisabled,
+                    ]}
+                    activeOpacity={isAffordable ? 0.7 : 1}
+                    onPress={() => { if (isAffordable) setSelectedReward(reward); }}
                     testID={`reward-option-${reward.id}`}
                   >
                     <View style={[sheetStyles.rewardIcon, isSelected && { backgroundColor: PURPLE_LIGHT }]}>
                       {getRewardTypeIcon(reward.type)}
                     </View>
                     <View style={sheetStyles.rewardInfo}>
-                      <Text style={sheetStyles.rewardTitle}>{reward.title}</Text>
+                      <Text style={[sheetStyles.rewardTitle, !isAffordable && sheetStyles.rewardTextMuted]}>{reward.name}</Text>
                       <Text style={sheetStyles.rewardDesc}>{reward.description}</Text>
                     </View>
                     <View style={sheetStyles.rewardCost}>
-                      <Text style={[sheetStyles.rewardCostNum, isSelected && { color: PURPLE }]}>{reward.pointsCost}</Text>
+                      <Text style={[sheetStyles.rewardCostNum, isSelected && { color: PURPLE }, !isAffordable && sheetStyles.rewardTextMuted]}>{reward.pointsRequired}</Text>
                       <Text style={sheetStyles.rewardCostLabel}>pts</Text>
                     </View>
                     {isSelected && (
@@ -706,10 +802,15 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
                         <Check size={12} color="#fff" />
                       </View>
                     )}
+                    {!isAffordable && (
+                      <View style={sheetStyles.insufficientTag}>
+                        <Text style={sheetStyles.insufficientText}>Need {reward.pointsRequired} pts</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                 );
               })}
-              {rewards.length === 0 && (
+              {!rewardsLoading && rewards.length === 0 && (
                 <View style={sheetStyles.emptyRewards}>
                   <Text style={sheetStyles.emptyText}>No rewards available yet</Text>
                 </View>
@@ -724,6 +825,7 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
                 <Ticket size={16} color="#fff" />
                 <Text style={sheetStyles.generateText}>Generate Coupon</Text>
               </TouchableOpacity>
+
             </ScrollView>
           </Animated.View>
         </View>
@@ -753,12 +855,15 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
 
             <View style={confirmStyles.buttonsContainer}>
               <TouchableOpacity
-                style={confirmStyles.primaryBtn}
+                style={[confirmStyles.primaryBtn, redeeming && { opacity: 0.6 }]}
                 activeOpacity={0.8}
                 onPress={handleConfirmRedeem}
+                disabled={redeeming}
                 testID="confirm-redeem-btn"
               >
-                <Text style={confirmStyles.primaryBtnText}>Yes, I'm at the store — Redeem Now</Text>
+                <Text style={confirmStyles.primaryBtnText}>
+                  {redeeming ? 'Redeeming...' : "Yes, I'm at the store — Redeem Now"}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={confirmStyles.secondaryBtn}
@@ -1011,19 +1116,33 @@ const sheetStyles = StyleSheet.create({
     color: '#fff',
     letterSpacing: 0.2,
   },
+  rewardCardDisabled: {
+    opacity: 0.55,
+  },
+  rewardTextMuted: {
+    color: '#B0AEBC',
+  },
+  insufficientTag: {
+    position: 'absolute' as const,
+    bottom: 6,
+    right: 10,
+  },
+  insufficientText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    color: '#B0AEBC',
+  },
 });
 
 export default function RewardsDashboard() {
   const router = useRouter();
   const { coupons } = useCoupons();
+  const { summary } = usePointsSummary();
   const [redeemSheet, setRedeemSheet] = useState<{ visible: boolean; businessId: string; businessName: string }>({
     visible: false, businessId: '', businessName: '',
   });
 
-  const totalPoints = useMemo(
-    () => currentMemberFollowedBusinesses.reduce((sum, b) => sum + b.pointsEarned, 0),
-    []
-  );
+  const totalPoints = summary.total;
 
   const currentTier = useMemo(() => {
     let tier = tierLadder[0];
@@ -1043,8 +1162,7 @@ export default function RewardsDashboard() {
     [nextTier, totalPoints]
   );
 
-  const handleRedeem = useCallback((biz: MemberFollowedBusiness) => {
-    console.log('[Rewards] Opening redeem for:', biz.businessName);
+  const handleRedeem = useCallback((biz: PointsBreakdownItem) => {
     setRedeemSheet({ visible: true, businessId: biz.businessId, businessName: biz.businessName });
   }, []);
 
@@ -1106,10 +1224,10 @@ export default function RewardsDashboard() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Per Business</Text>
             <View style={styles.bizCount}>
-              <Text style={styles.bizCountText}>{currentMemberFollowedBusinesses.length} businesses</Text>
+              <Text style={styles.bizCountText}>{summary.breakdown.length} businesses</Text>
             </View>
           </View>
-          {currentMemberFollowedBusinesses.map(biz => (
+          {summary.breakdown.map(biz => (
             <BusinessPointCard key={biz.businessId} biz={biz} onRedeem={() => handleRedeem(biz)} />
           ))}
         </View>

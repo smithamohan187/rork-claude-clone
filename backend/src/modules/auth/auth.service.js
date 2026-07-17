@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { getClient } = require('../../config/database');
 const { AppError } = require('../../middleware/errorHandler');
+const shareReferralsModel = require('../shareReferrals/shareReferrals.model');
 const {
   findUserByEmail: findUserByEmailNew,
   findUserByPhone: findUserByPhoneNew,
@@ -45,6 +46,7 @@ async function registerUser(data) {
     location_label,
     interests,
     referral_code,
+    share_referral_code,
   } = data.body;
   
   const existingByEmail = await findUserByEmailNew(email);
@@ -96,6 +98,23 @@ async function registerUser(data) {
           referrerUserId: referralCodeRow.owner_user_id,
           referredUserId: user.id,
           type: referralCodeRow.type,
+        });
+      }
+    }
+
+    // Content-share referral: if this signup came from a shared link, transition the recipient row
+    // to 'registered' and log pending 'join' points for the new user. Never blocks registration —
+    // a missing/invalid/already-used code is silently ignored.
+    if (share_referral_code) {
+      const recipient = await shareReferralsModel.markRegistered(client, share_referral_code, profile.id);
+      if (recipient) {
+        await shareReferralsModel.insertPointsLog(client, {
+          profile_id: profile.id,
+          points_type: 'join',
+          source_type: 'content_share',
+          source_id: recipient.id,
+          points_amount: null,
+          status: 'pending_credit',
         });
       }
     }

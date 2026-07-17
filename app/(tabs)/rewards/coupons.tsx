@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   ArrowLeft,
   Ticket,
@@ -24,6 +24,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useCoupons, StoredCoupon } from '@/contexts/CouponContext';
+import { checkCouponExpiry } from '@/api/services/rewardsService';
 
 const PURPLE = '#1A5C35';
 const PURPLE_DARK = '#1A5C35';
@@ -416,7 +417,7 @@ const cardStyles = StyleSheet.create({
 
 export default function MyCouponsScreen() {
   const router = useRouter();
-  const { getSortedCoupons, loaded } = useCoupons();
+  const { getSortedCoupons, loaded, markExpired } = useCoupons();
   const [coupons, setCoupons] = useState<StoredCoupon[]>([]);
 
   useEffect(() => {
@@ -431,6 +432,22 @@ export default function MyCouponsScreen() {
     }, 10000);
     return () => clearInterval(interval);
   }, [getSortedCoupons]);
+
+  // On screen focus, trigger lazy expiry check for all backend-issued active coupons.
+  // Server writes the refund transaction; we update local state if expired.
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      const active = getSortedCoupons().filter(
+        c => c.status === 'active' && c.expiresAt > now && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(c.id)
+      );
+      Promise.allSettled(
+        active.map(c =>
+          checkCouponExpiry(c.id).then(({ expired }) => { if (expired) markExpired(c.id); })
+        )
+      ).then(() => setCoupons(getSortedCoupons()));
+    }, [getSortedCoupons, markExpired])
+  );
 
   const activeCount = coupons.filter(
     (c) => c.status !== 'used' && c.expiresAt > Date.now()

@@ -761,4 +761,89 @@ ALTER TABLE reward_tiers
 ALTER TABLE rewards_catalog
   ADD COLUMN IF NOT EXISTS type VARCHAR(20)
     CHECK (type IN ('discount', 'free_item', 'perk')) DEFAULT 'perk';
-    
+
+CREATE TYPE invite_contact_method AS ENUM ('sms', 'email', 'whatsapp', 'link');
+CREATE TYPE invite_status         AS ENUM ('pending', 'sent', 'converted', 'expired');
+
+CREATE TABLE business_invites (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inviter_profile_id    UUID    NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  business_name         TEXT    NOT NULL,
+  contact_name          TEXT,
+  contact_method        invite_contact_method NOT NULL,
+  contact_value         TEXT,           -- phone or email; nullable for link/copy methods
+  status                invite_status   NOT NULL DEFAULT 'pending',
+  is_lead               BOOLEAN         NOT NULL DEFAULT true,
+  invite_code           VARCHAR(30)     NOT NULL UNIQUE,
+  created_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  converted_at          TIMESTAMPTZ,
+  converted_business_id UUID REFERENCES businesses(id) ON DELETE SET NULL
+);
+
+-- Partial unique index: one invite per (inviter, contact_value), NULLs are exempt
+CREATE UNIQUE INDEX uq_business_invites_inviter_contact
+  ON business_invites (inviter_profile_id, contact_value)
+  WHERE contact_value IS NOT NULL;
+
+CREATE INDEX idx_business_invites_inviter ON business_invites (inviter_profile_id);
+
+CREATE TYPE share_recipient_status AS ENUM ('sent','registered','friend_linked');
+
+CREATE TABLE share_recipients (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  referral_code         VARCHAR(30) NOT NULL UNIQUE,
+  content_type          TEXT NOT NULL CHECK (content_type IN ('post','offer','event','broadcast')),
+  content_id            UUID NOT NULL,
+  business_id           UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  sharer_profile_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  recipient_contact     TEXT,                       -- phone/email; NULL for social/native single-link
+  status                share_recipient_status NOT NULL DEFAULT 'sent',
+  registered_profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  registered_at         TIMESTAMPTZ,
+  friend_linked_at      TIMESTAMPTZ
+);
+CREATE INDEX idx_share_recipients_business ON share_recipients(business_id);
+CREATE INDEX idx_share_recipients_registered ON share_recipients(registered_profile_id);
+
+CREATE TABLE trusted_friends (       -- general-purpose; reusable by future chat feature
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id_one UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  profile_id_two UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  source_type    TEXT NOT NULL DEFAULT 'content_share',
+  source_id      UUID,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (profile_id_one < profile_id_two),
+  UNIQUE (profile_id_one, profile_id_two)          -- single row satisfies both directions
+);
+
+CREATE TABLE referral_points_log ( -- insert-only; no crediting logic this session
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  points_type   TEXT NOT NULL CHECK (points_type IN ('join','share')),
+  source_type   TEXT NOT NULL,
+  source_id     UUID,
+  points_amount INT,                                -- nullable
+  status        TEXT NOT NULL DEFAULT 'pending_credit',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ 1. Snapshot cost at redemption time (prevents stale-price refund bugs)
+ALTER TABLE coupons
+  ADD COLUMN IF NOT EXISTS points_cost INT;
+
+-- 2. Add redemption_refund to the type CHECK constraint
+DO $$
+DECLARE
+  v_constraint_name TEXT;
+BEGIN
+  SELECT constraint_name INTO v_constraint_name
+  FROM information_schema.table_constraints
+  WHERE table_name = 'points_transactions'
+    AND constraint_type = 'CHECK'
+    AND constraint_name LIKE '%type%'
+  LIMIT 1;
+  IF v_constraint_name IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE points_transactions DROP CONSTRAINT ' || quote_ident(v_constraint_name);
+  END IF;
+END $$;

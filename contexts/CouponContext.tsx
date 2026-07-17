@@ -95,7 +95,7 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
       input: Omit<
         StoredCoupon,
         'id' | 'createdAt' | 'status' | 'qrPayload'
-      > & { qrPayload?: string }
+      > & { id?: string; qrPayload?: string }
     ): StoredCoupon => {
       const now = Date.now();
       const qrPayload =
@@ -108,7 +108,7 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
         pointsDeducted: 0,
         ...input,
         qrPayload,
-        id: `cpn_${now}_${Math.random().toString(36).substring(2, 8)}`,
+        id: input.id ?? `cpn_${now}_${Math.random().toString(36).substring(2, 8)}`,
         createdAt: now,
         status: 'active',
       };
@@ -131,6 +131,19 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
           c.id === couponId
             ? { ...c, status: 'used' as const, usedAt: now, scannedByBusinessId }
             : c
+        );
+        persistCoupons(updated);
+        return updated;
+      });
+    },
+    [persistCoupons]
+  );
+
+  const markExpired = useCallback(
+    (couponId: string) => {
+      setCoupons((prev) => {
+        const updated = prev.map((c) =>
+          c.id === couponId ? { ...c, status: 'expired' as const } : c
         );
         persistCoupons(updated);
         return updated;
@@ -298,6 +311,7 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
     scanAttempts,
     addCoupon,
     markUsed,
+    markExpired,
     getById,
     findActiveForReward,
     redeemByPayload,

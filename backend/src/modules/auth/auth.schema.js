@@ -22,6 +22,8 @@ const registerSchema = Joi.object({
   location_label: Joi.string().max(255).optional(),
   interests: Joi.array().items(uuid).max(10).allow(null, '').optional(),
   referral_code: Joi.string().max(30).allow('').optional(),
+  // Content-share referral (SharePostSheet) — distinct from the user-referral `referral_code` above.
+  share_referral_code: Joi.string().max(30).allow('', null).optional(),
 });
 
 const loginSchema = Joi.object({

@@ -61,6 +61,7 @@ export default function SignUpScreen() {
     strength,
     nameError, emailError, passwordError, confirmError,
     loading, authError, registrationSucceeded,
+    postSignupRedirect,
     handleRegister,
     toggleInterest,
     inputFocus,
@@ -103,7 +104,13 @@ export default function SignUpScreen() {
 
   const handleSnackbarDismiss = () => {
     setSnackbarVisible(false);
-    router.replace('/(tabs)/feed' as never);
+    // If the user arrived via a content-share deep link, land them on the shared detail screen;
+    // otherwise fall back to the default feed landing.
+    if (postSignupRedirect) {
+      router.replace({ pathname: postSignupRedirect.pathname as never, params: postSignupRedirect.params as never });
+    } else {
+      router.replace('/(tabs)/feed' as never);
+    }
   };
 
   // ── Local submit wrapper — runs extra validation before calling hook ───────

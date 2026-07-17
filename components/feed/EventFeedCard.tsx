@@ -217,6 +217,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
         onToast={onShowToast}
         postId={event.id}
         postType="event"
+        businessId={event.businessId}
         authorName={event.businessName}
         contentPreview={`${event.title}${event.venue ? ` · ${event.venue}` : ''}`}
       />

@@ -10,7 +10,10 @@ import {
   Modal,
   Platform,
   Dimensions,
+  Linking,
+  Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,7 +34,7 @@ import {
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBusinessInvitations } from '@/contexts/BusinessInvitationContext';
+import { useBusinessInvite } from '@/hooks/useBusinessInvite';
 import * as Haptics from 'expo-haptics';
 
 const _SCREEN_WIDTH = Dimensions.get('window').width;
@@ -50,7 +53,7 @@ interface SendMethod {
 export default function InviteBusinessScreen() {
   const router = useRouter();
   const { currentUser } = useAuth();
-  const { createBusinessInvitation, invitations } = useBusinessInvitations();
+  const { submitInvite, invites } = useBusinessInvite();
 
   const [step, setStep] = useState<InviteStep>('details');
   const [businessName, setBusinessName] = useState<string>('');
@@ -135,22 +138,54 @@ export default function InviteBusinessScreen() {
     else router.back();
   }, [step, router]);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (!selectedMethod) return;
 
-    const invitation = createBusinessInvitation({
-      inviterId: currentUser.id,
-      inviterName: currentUser.name,
-      inviterAvatar: currentUser.avatar,
-      businessName: businessName.trim(),
-      businessEmail: businessEmail.trim(),
-      businessPhone: businessPhone.trim(),
-      contactName: contactName.trim(),
-      method: selectedMethod,
-      message: finalMessage,
+    // Map UI send method to backend contact_method enum + contact_value
+    const contactMethodMap: Record<typeof selectedMethod, 'sms' | 'email' | 'whatsapp' | 'link'> = {
+      sms: 'sms', email: 'email', whatsapp: 'whatsapp', share_link: 'link', copy_link: 'link',
+    };
+    const contactValueMap: Record<typeof selectedMethod, string | undefined> = {
+      sms: businessPhone || undefined,
+      email: businessEmail || undefined,
+      whatsapp: businessPhone || undefined,
+      share_link: undefined,
+      copy_link: undefined,
+    };
+
+    const invite = await submitInvite({
+      business_name: businessName.trim(),
+      contact_name: contactName.trim() || undefined,
+      contact_method: contactMethodMap[selectedMethod],
+      contact_value: contactValueMap[selectedMethod],
     });
 
-    setLastInvitation({ code: invitation.inviteLinkCode, businessName: invitation.businessName });
+    const code = invite?.invite_code ?? 'N/A';
+    const inviteLink = `https://touchpoint.app/join/business?ref=${code}`;
+    const msgEncoded = encodeURIComponent(finalMessage + '\n\n' + inviteLink);
+
+    // Channel dispatch — reusing Linking/Share/Clipboard pattern from SharePostSheet
+    try {
+      if (selectedMethod === 'sms') {
+        await Linking.openURL(`sms:${businessPhone}?body=${msgEncoded}`);
+      } else if (selectedMethod === 'email') {
+        await Linking.openURL(`mailto:${businessEmail}?subject=${encodeURIComponent('Join TouchPoint')}&body=${msgEncoded}`);
+      } else if (selectedMethod === 'whatsapp') {
+        try {
+          await Linking.openURL(`whatsapp://send?phone=${businessPhone}&text=${msgEncoded}`);
+        } catch {
+          await Share.share({ message: finalMessage + '\n\n' + inviteLink });
+        }
+      } else if (selectedMethod === 'share_link') {
+        await Share.share({ message: finalMessage + '\n\n' + inviteLink });
+      } else if (selectedMethod === 'copy_link') {
+        await Clipboard.setStringAsync(inviteLink);
+      }
+    } catch (e) {
+      if (__DEV__) console.log('[InviteBusiness] channel dispatch error:', e);
+    }
+
+    setLastInvitation({ code, businessName: businessName.trim() });
 
     if (Platform.OS !== 'web') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -165,8 +200,8 @@ export default function InviteBusinessScreen() {
       Animated.spring(checkAnim, { toValue: 1, useNativeDriver: true, speed: 6, bounciness: 10 }),
     ]).start();
 
-    console.log('[InviteBusiness] Invitation sent:', invitation.inviteLinkCode);
-  }, [selectedMethod, createBusinessInvitation, currentUser, businessName, businessEmail, businessPhone, contactName, finalMessage, successAnim, checkAnim]);
+    if (__DEV__) console.log('[InviteBusiness] Invitation sent, code:', code);
+  }, [selectedMethod, submitInvite, businessName, businessEmail, businessPhone, contactName, finalMessage, successAnim, checkAnim]);
 
   const handleDismissSuccess = useCallback(() => {
     setShowSuccessModal(false);
@@ -190,7 +225,7 @@ export default function InviteBusinessScreen() {
     setStep('details');
   }, []);
 
-  const recentInvites = useMemo(() => invitations.slice(0, 3), [invitations]);
+  const recentInvites = useMemo(() => invites.slice(0, 3), [invites]);
 
   return (
     <View style={styles.container}>
@@ -380,20 +415,20 @@ export default function InviteBusinessScreen() {
                 <Text style={styles.recentTitle}>Recent Invitations</Text>
                 {recentInvites.map((inv) => (
                   <View key={inv.id} style={styles.recentRow}>
-                    <View style={[styles.recentIcon, { backgroundColor: inv.status === 'linked' ? '#ECFDF5' : '#FEF3C7' }]}>
-                      {inv.status === 'linked' ? (
+                    <View style={[styles.recentIcon, { backgroundColor: inv.status === 'converted' ? '#ECFDF5' : '#FEF3C7' }]}>
+                      {inv.status === 'converted' ? (
                         <CheckCircle2 size={16} color="#10B981" />
                       ) : (
                         <Send size={16} color="#F59E0B" />
                       )}
                     </View>
                     <View style={styles.recentInfo}>
-                      <Text style={styles.recentName} numberOfLines={1}>{inv.businessName}</Text>
+                      <Text style={styles.recentName} numberOfLines={1}>{inv.business_name}</Text>
                       <Text style={styles.recentStatus}>
-                        {inv.status === 'linked' ? 'Joined & Linked' : inv.status === 'clicked' ? 'Link clicked' : 'Invitation sent'}
+                        {inv.status === 'converted' ? 'Joined & Linked' : inv.status === 'sent' ? 'Link clicked' : 'Invitation sent'}
                       </Text>
                     </View>
-                    <Text style={styles.recentCode}>{inv.inviteLinkCode}</Text>
+                    <Text style={styles.recentCode}>{inv.invite_code}</Text>
                   </View>
                 ))}
               </View>
@@ -567,7 +602,7 @@ export default function InviteBusinessScreen() {
         {step === 'preview' && (
           <TouchableOpacity
             style={styles.sendBtn}
-            onPress={handleSend}
+            onPress={() => void handleSend()}
             activeOpacity={0.8}
           >
             <Send size={18} color="#fff" />

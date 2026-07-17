@@ -413,6 +413,7 @@ function PostPage({
         onToast={onShowToast}
         postId={post.id}
         postType="post"
+        businessId={post.business_id}
         authorName={post.business_name}
         authorAvatarUrl={post.business_logo}
         contentPreview={post.text ?? ''}
@@ -616,6 +617,7 @@ function FeedPage({
         onToast={onShowToast}
         postId={item.id}
         postType={item.feedType}
+        businessId={item.businessId}
         authorName={item.businessName}
         authorAvatarUrl={item.businessLogo}
         contentPreview={`${item.title}${description ? ` — ${description}` : ''}`}

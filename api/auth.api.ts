@@ -16,6 +16,8 @@ export type SignupPayload = {
   location?:     string;
   interests?:    string[];
   referral_code?: string;
+  // Content-share referral (SharePostSheet) — distinct from the user-referral `referral_code`.
+  share_referral_code?: string;
 };
 
 /*export type LoginPayload = {

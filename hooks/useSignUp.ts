@@ -1,6 +1,14 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { signUp, SignupPayload } from '@/api/services/authService';
+import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
+
+// Where to land the user after signup: the shared detail screen when they arrived via a share
+// deep link, otherwise null (screen falls back to its default landing).
+export interface PostSignupRedirect {
+  pathname: string;
+  params: Record<string, string>;
+}
 
 type StrengthLevel = 0 | 1 | 2 | 3 | 4;
 
@@ -45,6 +53,7 @@ export function useSignUp() {
   const [loading, setLoading]                 = useState(false);
   const [authError, setAuthError]             = useState('');
   const [registrationSucceeded, setRegistrationSucceeded] = useState(false);
+  const [postSignupRedirect, setPostSignupRedirect] = useState<PostSignupRedirect | null>(null);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const strength = useMemo(() => computeStrength(password), [password]);
@@ -102,6 +111,10 @@ export function useSignUp() {
     setLoading(true);
 
     try {
+      // If the user arrived from a content-share deep link, submit the stashed code so the backend
+      // links them to the sharer, and remember where to redirect them after signup.
+      const pending = await getPendingShareReferral();
+
       const payload: SignupPayload = {
         email:         email.trim().toLowerCase(),
         password,
@@ -110,10 +123,19 @@ export function useSignUp() {
         location:      location.trim()   || undefined,
         interests:     interests.length  ? interests : undefined,
         referral_code: referralCode.trim().toUpperCase() || undefined,
+        share_referral_code: pending?.referral_code,
       };
 
       const data = await signUp(payload);
       await loginWithTokens(data, email.trim().toLowerCase());
+
+      if (pending) {
+        setPostSignupRedirect({
+          pathname: pending.route,
+          params: { [pending.id_param]: pending.content_id, businessId: pending.business_id },
+        });
+        await clearPendingShareReferral();
+      }
       setRegistrationSucceeded(true);
 
     } catch (err) {
@@ -151,6 +173,7 @@ export function useSignUp() {
 
     // Submission state
     loading, authError, registrationSucceeded,
+    postSignupRedirect,
 
     // Handlers
     handleRegister,

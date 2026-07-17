@@ -255,6 +255,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
         onToast={onShowToast}
         postId={offer.id}
         postType="offer"
+        businessId={offer.businessId}
         authorName={offer.businessName}
         authorAvatarUrl={offer.businessLogo}
         contentPreview={`${offer.title}${offer.description ? ` — ${offer.description}` : ''}`}

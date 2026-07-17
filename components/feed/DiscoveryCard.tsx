@@ -149,6 +149,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({
         onToast={onShowToast}
         postId={business.id}
         postType="broadcast"
+        businessId={business.id}
         authorName={business.name}
         authorAvatarUrl={business.logoUrl}
         contentPreview={business.bio ?? ''}

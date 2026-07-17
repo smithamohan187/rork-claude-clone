@@ -28,6 +28,18 @@ async function subscribe(profileId, businessId) {
   return rows[0];
 }
 
+async function subscribeWithClient(client, profileId, businessId) {
+  const { rows } = await client.query(
+    `INSERT INTO subscriptions (profile_id, business_id)
+     VALUES ($1, $2)
+     ON CONFLICT (profile_id, business_id)
+       DO UPDATE SET is_active = true, subscribed_at = NOW(), unsubscribed_at = NULL
+     RETURNING *`,
+    [profileId, businessId]
+  );
+  return rows[0];
+}
+
 async function unsubscribe(profileId, businessId) {
   const { rows } = await query(
     `UPDATE subscriptions
@@ -133,6 +145,7 @@ module.exports = {
   getSubscription,
   getSubscriptionByUserId,
   subscribe,
+  subscribeWithClient,
   unsubscribe,
   getSubscriberCount,
   getSubscribedBusinesses,

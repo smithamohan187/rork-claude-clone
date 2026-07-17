@@ -3,7 +3,7 @@ const authModel = require('./auth.model');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
 const { ok, fail } = require('../../utils/apiResponse');
-
+ 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
