@@ -105,11 +105,14 @@ function getTokens(data: AuthTokens | AuthRefreshResponse | null | undefined) {
 // Returns null if the object has no id (safety guard).
 // ─────────────────────────────────────────────────────────────────────────────
 function toAuthUser(user: SessionResponse | AuthUser | null | undefined): AuthUser | null {
-  if (!user?.id) return null;
+  if (!user) return null;
   const u = user as Record<string, unknown>;
+  const id = (u.id ?? u.user_id) as string | undefined;
+  if (!id) return null;
   return {
     ...user,
-    name:   (u.name ?? u.full_name ?? u.display_name ?? u.email) as string | undefined,
+    id,
+    name:   (u.name ?? u.full_name ?? u.display_name ?? u.displayName ?? u.email) as string | undefined,
     avatar: resolveUrl((u.avatar ?? u.avatar_url) as string | null | undefined),
   };
 }
@@ -280,6 +283,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (!user) {
         await clearTokens();
         throw new Error('Login response did not include user details');
+      }
+
+      // The backend's login/signup `user` object rarely carries a display
+      // name or avatar — they live on the sibling `profile` object instead
+      // (camelCase on login, snake_case on signup). Prefer those over
+      // falling back to email / no avatar.
+      const profileData = (data as unknown as {
+        profile?: { displayName?: string; display_name?: string; avatarUrl?: string; avatar_url?: string };
+      }).profile;
+      if (!user.name || user.name === user.email) {
+        user.name = profileData?.displayName ?? profileData?.display_name ?? user.name;
+      }
+      if (!user.avatar) {
+        user.avatar = resolveUrl(profileData?.avatarUrl ?? profileData?.avatar_url) ?? user.avatar;
       }
 
       setAuthUser(user);

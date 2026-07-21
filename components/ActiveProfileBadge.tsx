@@ -19,6 +19,7 @@ interface Props {
 export default function ActiveProfileBadge({ testID }: Props) {
   const { authUser, profiles } = useAuth();
   const [open, setOpen] = useState<boolean>(false);
+  console.log(authUser, profiles);
 
   const hasMultiple = profiles.length > 1;
   const displayName = authUser?.name ?? authUser?.email ?? '';

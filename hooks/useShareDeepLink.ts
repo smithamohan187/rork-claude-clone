@@ -41,6 +41,7 @@ export function useShareDeepLink(): void {
     } else {
       await setPendingShareReferral({
         referral_code: code,
+        content_type: resolved.content_type,
         route: resolved.route,
         id_param: resolved.id_param,
         content_id: resolved.content_id,

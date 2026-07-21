@@ -1,5 +1,6 @@
 const { query } = require('../../config/database');
 const shareReferralsModel = require('./shareReferrals.model');
+const customerInviteModel = require('../customerInvites/customerInvite.model');
 
 const SHARE_BASE_URL = (process.env.SHARE_BASE_URL || 'https://touchpoints.app').replace(/\/$/, '');
 
@@ -59,15 +60,31 @@ async function createShareRecipients(userId, { content_type, content_id, busines
 // code does not exist.
 async function resolveReferral(referral_code) {
   const row = await shareReferralsModel.findByReferralCode(referral_code);
-  if (!row) throw Object.assign(new Error('Referral code not found'), { status: 404 });
-  const mapping = ROUTE_BY_CONTENT[row.content_type] ?? ROUTE_BY_CONTENT.post;
-  return {
-    content_type: row.content_type,
-    content_id: row.content_id,
-    business_id: row.business_id,
-    route: mapping.route,
-    id_param: mapping.idParam,
-  };
+  if (row) {
+    const mapping = ROUTE_BY_CONTENT[row.content_type] ?? ROUTE_BY_CONTENT.post;
+    return {
+      content_type: row.content_type,
+      content_id: row.content_id,
+      business_id: row.business_id,
+      route: mapping.route,
+      id_param: mapping.idParam,
+    };
+  }
+
+  // Not a content-share code — check the customer-invites namespace, which reuses the same
+  // SHARE_BASE_URL/s/<code> link shape (read-only lookup; does not touch customer_invites state).
+  const invite = await customerInviteModel.findInviteByReferralCode(referral_code);
+  if (invite) {
+    return {
+      content_type: 'business',
+      content_id: invite.business_id,
+      business_id: invite.business_id,
+      route: '/business-profile/[id]',
+      id_param: 'id',
+    };
+  }
+
+  throw Object.assign(new Error('Referral code not found'), { status: 404 });
 }
 
 module.exports = { createShareRecipients, resolveReferral };

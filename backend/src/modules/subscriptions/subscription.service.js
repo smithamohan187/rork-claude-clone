@@ -2,6 +2,7 @@ const subscriptionModel = require('./subscription.model');
 const { query, getClient } = require('../../config/database');
 const shareReferralsModel = require('../shareReferrals/shareReferrals.model');
 const pointsModel = require('../points/points.model');
+const customerInviteService = require('../customerInvites/customerInvite.service');
 
 async function subscribeToBusiness(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
@@ -35,6 +36,10 @@ async function subscribeToBusiness(userId, businessId) {
   // business, link them and the sharer as trusted friends and log pending 'share' points for the
   // sharer. No matching row => organic subscribe, zero behavior change. Idempotent via constraints.
   await maybeLinkTrustedFriend(profileId, businessId);
+
+  // Customer-invite stage 2: if this subscriber matches a pending invite for this business,
+  // mark it subscribed and notify the business owner. No match => organic subscribe, no-op.
+  await customerInviteService.resolveCustomerInviteOnSubscribe(profileId, businessId);
 
   return { subscribed: true, subscription };
 }

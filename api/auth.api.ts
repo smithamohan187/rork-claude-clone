@@ -18,6 +18,8 @@ export type SignupPayload = {
   referral_code?: string;
   // Content-share referral (SharePostSheet) — distinct from the user-referral `referral_code`.
   share_referral_code?: string;
+  // Customer-invite referral (Invite Customers) — distinct from share_referral_code.
+  customer_invite_code?: string;
 };
 
 /*export type LoginPayload = {

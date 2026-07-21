@@ -24,6 +24,9 @@ const registerSchema = Joi.object({
   referral_code: Joi.string().max(30).allow('').optional(),
   // Content-share referral (SharePostSheet) — distinct from the user-referral `referral_code` above.
   share_referral_code: Joi.string().max(30).allow('', null).optional(),
+  // Customer-invite referral (Invite Customers) — distinct from share_referral_code; identifies a
+  // customer_invites row rather than a share_recipients row.
+  customer_invite_code: Joi.string().max(30).allow('', null).optional(),
 });
 
 const loginSchema = Joi.object({

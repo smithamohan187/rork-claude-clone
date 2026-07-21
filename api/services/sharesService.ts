@@ -22,11 +22,13 @@ export interface ShareRecipientResult {
 }
 
 export interface ResolvedShareReferral {
-  content_type: ShareContentType;
+  // 'business' is returned when the code belongs to a customer invite (Invite Customers),
+  // not a content-share — resolved via the same /s/<code> link shape.
+  content_type: ShareContentType | 'business';
   content_id: string;
   business_id: string;
-  route: string;      // e.g. '/view-post'
-  id_param: string;   // e.g. 'postId'
+  route: string;      // e.g. '/view-post' or '/business-profile/[id]'
+  id_param: string;   // e.g. 'postId' or 'id'
 }
 
 // Creates one share_recipients row per recipient (or a single null-contact row when `recipients`
@@ -47,7 +49,7 @@ export async function createShareRecipients(payload: {
 // Resolves a referral code (public, no auth) to its content + the detail route to open.
 export async function resolveShareReferral(referral_code: string): Promise<ResolvedShareReferral | null> {
   const result = await apiClient.post<ResolvedShareReferral>(
-    '/feed/resolve-share-referral',
+    '/feed/share/resolve-share-referral',
     { referral_code },
   );
   return result.success && result.data ? result.data : null;

@@ -847,3 +847,30 @@ BEGIN
     EXECUTE 'ALTER TABLE points_transactions DROP CONSTRAINT ' || quote_ident(v_constraint_name);
   END IF;
 END $$;
+
+
+CREATE TYPE customer_invite_channel AS ENUM ('contact','email','manual','csv');
+CREATE TYPE customer_invite_status  AS ENUM ('sent','registered','subscribed');
+
+CREATE TABLE customer_invites (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inviter_profile_id  UUID NOT NULL REFERENCES profiles(id)   ON DELETE CASCADE,
+  business_id         UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  channel             customer_invite_channel NOT NULL,
+  invitee_identifier  TEXT NOT NULL,          -- normalized phone if present, else email
+  invitee_email       TEXT,                   -- populated when row carries BOTH phone+email
+  invitee_name        TEXT,
+  referral_code       VARCHAR(30) NOT NULL UNIQUE,
+  status              customer_invite_status NOT NULL DEFAULT 'sent',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  registered_at       TIMESTAMPTZ,
+  subscribed_at       TIMESTAMPTZ
+);
+CREATE INDEX idx_customer_invites_referral_code ON customer_invites(referral_code);
+CREATE UNIQUE INDEX uq_customer_invites_biz_identifier
+  ON customer_invites(business_id, invitee_identifier);  -- dedup + ON CONFLICT support
+
+
+ALTER TABLE customer_invites
+  ADD COLUMN registered_profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+CREATE INDEX idx_customer_invites_registered_profile ON customer_invites(registered_profile_id);

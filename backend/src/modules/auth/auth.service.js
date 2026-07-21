@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { getClient } = require('../../config/database');
 const { AppError } = require('../../middleware/errorHandler');
 const shareReferralsModel = require('../shareReferrals/shareReferrals.model');
+const customerInviteModel = require('../customerInvites/customerInvite.model');
 const {
   findUserByEmail: findUserByEmailNew,
   findUserByPhone: findUserByPhoneNew,
@@ -47,6 +48,7 @@ async function registerUser(data) {
     interests,
     referral_code,
     share_referral_code,
+    customer_invite_code,
   } = data.body;
   
   const existingByEmail = await findUserByEmailNew(email);
@@ -119,6 +121,14 @@ async function registerUser(data) {
       }
     }
 
+    // Customer-invite referral (Invite Customers): if this signup came from an invite link,
+    // link this exact profile to the invite row so subscribe-time matching doesn't have to guess
+    // by phone/email. Never blocks registration — a missing/invalid/already-used code is
+    // silently ignored.
+    if (customer_invite_code) {
+      await customerInviteModel.markRegistered(client, customer_invite_code, profile.id);
+    }
+
     rawRefreshToken = `${crypto.randomUUID()}-${Date.now()}`;
 
     accessToken = jwt.sign(
@@ -147,7 +157,7 @@ async function registerUser(data) {
     },
     profile: {
       id: profile.id,
-      display_name: profile.full_name,
+      display_name: profile.display_name,
       location: profile.location,
       state: profile.state,
       country: profile.country,
@@ -222,7 +232,7 @@ async function loginUser(data) {
   const safeProfile = {
     id: user.profile_id,
     profileType: user.profile_type,
-    displayName: user.full_name,
+    displayName: user.display_name,
     avatarUrl: user.avatar_url,
     bio: user.bio,
     location: user.location,

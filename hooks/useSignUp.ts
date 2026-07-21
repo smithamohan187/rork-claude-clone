@@ -111,9 +111,11 @@ export function useSignUp() {
     setLoading(true);
 
     try {
-      // If the user arrived from a content-share deep link, submit the stashed code so the backend
-      // links them to the sharer, and remember where to redirect them after signup.
+      // If the user arrived from a deep link, submit the stashed code under the field the backend
+      // expects for that code's kind — customer invites link a business, content shares link a
+      // post/offer/event — and remember where to redirect them after signup.
       const pending = await getPendingShareReferral();
+      const isCustomerInvite = pending?.content_type === 'business';
 
       const payload: SignupPayload = {
         email:         email.trim().toLowerCase(),
@@ -123,7 +125,8 @@ export function useSignUp() {
         location:      location.trim()   || undefined,
         interests:     interests.length  ? interests : undefined,
         referral_code: referralCode.trim().toUpperCase() || undefined,
-        share_referral_code: pending?.referral_code,
+        share_referral_code: isCustomerInvite ? undefined : pending?.referral_code,
+        customer_invite_code: isCustomerInvite ? pending?.referral_code : undefined,
       };
 
       const data = await signUp(payload);
