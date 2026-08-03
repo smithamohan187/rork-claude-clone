@@ -1,8 +1,11 @@
 const { query } = require('../../config/database');
 const shareReferralsModel = require('./shareReferrals.model');
 const customerInviteModel = require('../customerInvites/customerInvite.model');
-
-const SHARE_BASE_URL = (process.env.SHARE_BASE_URL || 'https://touchpoints.app').replace(/\/$/, '');
+const referralModel = require('../referrals/referral.model');
+const marketplaceModel = require('../marketplace/marketplace.model');
+const offersModel = require('../offers/offers.model');
+const chatService = require('../chat/chat.service');
+const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 // Maps a content type to its in-app detail route + the id param name that route expects.
 const ROUTE_BY_CONTENT = {
@@ -84,7 +87,89 @@ async function resolveReferral(referral_code) {
     };
   }
 
+  // Not a customer-invite code either — check the business-invite namespace (read-only lookup;
+  // actual linking only happens later, at business-registration time, not here).
+  const businessInvite = await marketplaceModel.getInviteByCode(referral_code);
+  if (businessInvite) {
+    return {
+      content_type: 'business_invite',
+      content_id: '',
+      business_id: '',
+      route: '/create-business-profile',
+      id_param: 'ref',
+    };
+  }
+
+  // Not a named business-invite code either — check the permanent per-profile business-referral
+  // code namespace (reusable across any number of businesses; read-only lookup, same as above).
+  const personalBizCode = await marketplaceModel.findPersonalReferralCodeByCode(referral_code);
+  if (personalBizCode) {
+    return {
+      content_type: 'business_invite',
+      content_id: '',
+      business_id: '',
+      route: '/create-business-profile',
+      id_param: 'ref',
+    };
+  }
+
+  // Not a business-invite code either — check the app-level (Invite Friends) referral namespace,
+  // which also reuses the same SHARE_BASE_URL/s/<code> shape (read-only; does not touch referral state).
+  const appReferral = await referralModel.findAppReferralCodeByCode(null, referral_code);
+  if (appReferral) {
+    return {
+      content_type: 'app_referral',
+      content_id: '',
+      business_id: '',
+      route: '/(tabs)/feed',
+      id_param: 'referral',
+    };
+  }
+
   throw Object.assign(new Error('Referral code not found'), { status: 404 });
 }
 
-module.exports = { createShareRecipients, resolveReferral };
+// Shares an offer to one or more of the sender's trusted friends via the existing chat infra.
+// Per-recipient, best-effort: a failure for one target (e.g. not a trusted friend, so
+// getOrCreateConversation 403s) never blocks the others. No separate friendship check is
+// performed here — getOrCreateConversation already enforces trusted_friends for type='friend'.
+async function shareOfferToFriends(userId, offerId, targetProfileIds) {
+  const senderProfileId = await resolveProfileId(userId);
+
+  const offer = await offersModel.getOfferById(offerId);
+  if (!offer) throw Object.assign(new Error('Offer not found'), { status: 404 });
+  const businessName = await offersModel.getBusinessNameById(null, offer.business_id);
+
+  const results = [];
+  for (const targetProfileId of targetProfileIds) {
+    try {
+      const { conversation } = await chatService.getOrCreateConversation(userId, targetProfileId, 'friend');
+
+      const existing = await shareReferralsModel.findRecipientForShare({
+        sharer_profile_id: senderProfileId,
+        business_id: offer.business_id,
+        content_type: 'offer',
+        content_id: offerId,
+        registered_profile_id: targetProfileId,
+      });
+      const recipient = existing ?? await shareReferralsModel.insertRegisteredRecipient({
+        referral_code: generateReferralCode(),
+        content_type: 'offer',
+        content_id: offerId,
+        business_id: offer.business_id,
+        sharer_profile_id: senderProfileId,
+        registered_profile_id: targetProfileId,
+      });
+
+      const body = `Check out this offer from ${businessName ?? 'a business'}: ${offer.title}\n${buildShareUrl(recipient.referral_code)}`;
+      const message = await chatService.sendMessage(userId, conversation.id, body);
+
+      results.push({ targetProfileId, conversationId: conversation.id, messageId: message.id, ok: true });
+    } catch (err) {
+      results.push({ targetProfileId, ok: false, error: err.message });
+    }
+  }
+  return results;
+}
+
+module.exports = { createShareRecipients, resolveReferral, shareOfferToFriends };

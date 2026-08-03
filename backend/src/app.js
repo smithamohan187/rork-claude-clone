@@ -28,7 +28,12 @@ const rewardConfigRoutes      = require('./modules/rewardConfig/rewardConfig.rou
 const marketplaceRoutes       = require('./modules/marketplace/marketplace.routes');
 const shareReferralRoutes     = require('./modules/shareReferrals/shareReferrals.routes');
 const pointsRoutes            = require('./modules/points/points.routes');
+const globalRewardTierRoutes  = require('./modules/globalRewardTiers/globalRewardTiers.routes');
 const customerInviteRoutes    = require('./modules/customerInvites/customerInvite.routes');
+const referralRoutes          = require('./modules/referrals/referral.routes');
+const notificationRoutes      = require('./modules/notifications/notifications.routes');
+const chatRoutes              = require('./modules/chat/chat.routes');
+const dashboardFeedRoutes     = require('./modules/dashboardFeed/dashboardFeed.routes');
 const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modules/coupons/coupons.routes');
 
 const app = express();
@@ -72,7 +77,12 @@ app.use('/comments',          commentsRoutes);
 app.use('/shares',            sharesRoutes);
 app.use('/marketplace',       marketplaceRoutes);
 app.use('/points',            pointsRoutes);
+app.use('/rewards',           globalRewardTierRoutes);
 app.use('/invites',           customerInviteRoutes);
+app.use('/referrals',         referralRoutes);
+app.use('/notifications',     notificationRoutes);
+app.use('/conversations',     chatRoutes);
+app.use('/dashboard/feed',    dashboardFeedRoutes);
 app.use('/businesses',        couponsBusinessRouter);
 app.use('/coupons',           couponRouter);
 app.use('/',                  rewardConfigRoutes);

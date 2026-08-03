@@ -34,6 +34,21 @@ export function useShareDeepLink(): void {
     if (!resolved) return; // invalid/expired code — silently ignore.
 
     if (isAuthenticated) {
+      if (resolved.content_type === 'business_invite') {
+        // No content to view yet — the point is to land on business registration with the code
+        // ready to apply. Stash it the same way the unauthenticated path does so
+        // useCreateBusiness can pick it up on mount.
+        await setPendingShareReferral({
+          referral_code: code,
+          content_type: resolved.content_type,
+          route: resolved.route,
+          id_param: resolved.id_param,
+          content_id: resolved.content_id,
+          business_id: resolved.business_id,
+        });
+        router.push(resolved.route as never);
+        return;
+      }
       router.push({
         pathname: resolved.route as never,
         params: { [resolved.id_param]: resolved.content_id, businessId: resolved.business_id } as never,

@@ -17,6 +17,28 @@ async function insertJoinBonusWithClient(client, profileId, businessId, points) 
   );
 }
 
+// Credits a real referral bonus (type='earn_referral') to the sharer when a friend they referred
+// (via an offer-share) subscribes. Mirrors insertJoinBonusWithClient's shape exactly, but keyed by
+// reference_type/reference_id so referralBonusAlreadyCredited can guard against double-crediting
+// on a resubscribe cycle (points_transactions has no unique constraint to ON CONFLICT against).
+async function insertReferralBonusWithClient(client, profileId, businessId, points, { referenceType, referenceId }) {
+  await client.query(
+    `INSERT INTO points_transactions (profile_id, business_id, type, points, reference_type, reference_id)
+     VALUES ($1, $2, 'earn_referral', $3, $4, $5)`,
+    [profileId, businessId, points, referenceType, referenceId]
+  );
+}
+
+async function referralBonusAlreadyCredited(referenceId) {
+  const { rows } = await query(
+    `SELECT 1 FROM points_transactions
+      WHERE type = 'earn_referral' AND reference_type = 'share_recipient' AND reference_id = $1
+      LIMIT 1`,
+    [referenceId]
+  );
+  return rows.length > 0;
+}
+
 async function getTotalPointsByProfile(profileId) {
   const { rows } = await query(
     `SELECT COALESCE(SUM(points), 0)::int AS total
@@ -47,6 +69,8 @@ async function getPointsSplitByProfile(profileId) {
 module.exports = {
   getWelcomeBonusWithClient,
   insertJoinBonusWithClient,
+  insertReferralBonusWithClient,
+  referralBonusAlreadyCredited,
   getTotalPointsByProfile,
   getPointsSplitByProfile,
 };

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,212 +6,152 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
   ArrowLeft,
   Users,
-  Star,
   Search,
   MapPin,
   Store,
   CheckCircle2,
-  Clock,
-  XCircle,
   UserPlus,
   Smartphone,
   MessageCircle,
-  Hourglass,
 } from 'lucide-react-native';
-import { useReferralChat } from '@/contexts/ReferralChatContext';
+import { useMyReferrals } from '@/hooks/useMyReferrals';
+import { getMyReferrals, CombinedReferral, ReferralDirection } from '@/api/services/referralService';
 
 type ReferralType = 'app' | 'business';
-type ReferralStatus = 'completed' | 'pending' | 'expired';
+// Only 'completed' is reachable today: the backend only returns rows that have actually joined
+// (referrals are always type='app'/status='completed'; customer_invites are filtered to
+// registered/subscribed). No points crediting exists yet for either referral type.
+type ReferralStatus = 'completed';
 
 interface TrustedFriend {
   id: string;
   type: ReferralType;
   name: string;
-  handle: string;
   avatarColor: string;
   joinedAt: string;
-  joinedDate: Date;
-  isPending: boolean;
   destination: string;
   status: ReferralStatus;
   pointsEarned: number;
-  avatarUri?: string;
+  direction: 'joined_via_me' | 'i_joined_via';
+  joinedContext: 'touchpoints' | 'business';
+  businessName: string | null;
+  referralCodeUsed: string;
 }
 
 const PURPLE = '#00B246';
 const PURPLE_DARK = '#1A5C35';
 const ORANGE = '#1A5C35';
 const GREEN = '#16A34A';
-const AMBER = '#D97706';
-const PENDING_BG = '#E5E7EB';
-const PENDING_TEXT = '#6B7280';
 
 const initials = (name: string): string => {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
 };
 
-const MOCK_FRIENDS: TrustedFriend[] = [
-  {
-    id: 'tf-1',
-    type: 'app',
-    name: 'Emily Carter',
-    handle: '@emilycarter',
-    avatarColor: '#00B246',
-    joinedAt: '02 May 2026',
-    joinedDate: new Date('2026-05-02'),
-    isPending: false,
-    destination: 'TouchPoint',
-    status: 'completed',
-    pointsEarned: 100,
-  },
-  {
-    id: 'tf-2',
-    type: 'business',
-    name: 'Michael Johnson',
-    handle: '@mikejohn',
-    avatarColor: '#0F766E',
-    joinedAt: '28 Apr 2026',
-    joinedDate: new Date('2026-04-28'),
-    isPending: false,
-    destination: 'Brooklyn Coffee Roasters',
-    status: 'completed',
-    pointsEarned: 75,
-  },
-  {
-    id: 'tf-3',
-    type: 'app',
-    name: 'Olivia Martinez',
-    handle: '@oliviam',
-    avatarColor: '#DB2777',
-    joinedAt: '24 Apr 2026',
-    joinedDate: new Date('2026-04-24'),
-    isPending: false,
-    destination: 'TouchPoint',
-    status: 'completed',
-    pointsEarned: 100,
-  },
-  {
-    id: 'tf-4',
-    type: 'business',
-    name: 'Daniel Rodriguez',
-    handle: '+1 (415) 555-0142',
-    avatarColor: '#1E40AF',
-    joinedAt: '18 Apr 2026',
-    joinedDate: new Date('2026-04-18'),
-    isPending: true,
-    destination: 'Sunset Yoga Studio',
-    status: 'pending',
-    pointsEarned: 0,
-  },
-  {
-    id: 'tf-5',
-    type: 'app',
-    name: 'Sophia Williams',
-    handle: '@sophiaw',
-    avatarColor: '#B45309',
-    joinedAt: '12 Apr 2026',
-    joinedDate: new Date('2026-04-12'),
-    isPending: false,
-    destination: 'TouchPoint',
-    status: 'completed',
-    pointsEarned: 100,
-  },
-  {
-    id: 'tf-6',
-    type: 'business',
-    name: 'James Anderson',
-    handle: '@jamesa',
-    avatarColor: '#065F46',
-    joinedAt: '05 Apr 2026',
-    joinedDate: new Date('2026-04-05'),
-    isPending: false,
-    destination: 'Austin BBQ Co.',
-    status: 'completed',
-    pointsEarned: 75,
-  },
-  {
-    id: 'tf-7',
-    type: 'business',
-    name: 'Ava Thompson',
-    handle: '+1 (212) 555-0118',
-    avatarColor: '#00B246',
-    joinedAt: '28 Mar 2026',
-    joinedDate: new Date('2026-03-28'),
-    isPending: true,
-    destination: 'Lakeside Bookstore',
-    status: 'pending',
-    pointsEarned: 0,
-  },
-  {
-    id: 'tf-8',
-    type: 'app',
-    name: 'Benjamin Davis',
-    handle: '@bendavis',
-    avatarColor: '#0EA5E9',
-    joinedAt: '15 Mar 2026',
-    joinedDate: new Date('2026-03-15'),
-    isPending: false,
-    destination: 'TouchPoint',
-    status: 'expired',
-    pointsEarned: 0,
-  },
-];
+const formatJoinedAt = (iso: string): string => {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+};
 
-export function getTrustedFriendsSummary(): { count: number; pointsEarned: number } {
-  const count = MOCK_FRIENDS.length;
-  const pointsEarned = MOCK_FRIENDS.reduce((s, f) => s + f.pointsEarned, 0);
-  return { count, pointsEarned };
+function toTrustedFriend(row: CombinedReferral): TrustedFriend {
+  const isApp = row.joined_context === 'touchpoints';
+  return {
+    id: row.profile_id,
+    type: isApp ? 'app' : 'business',
+    name: row.display_name,
+    avatarColor: isApp ? PURPLE : ORANGE,
+    joinedAt: formatJoinedAt(row.joined_at),
+    destination: isApp ? 'TouchPoint' : (row.business_name ?? 'a business'),
+    status: 'completed',
+    pointsEarned: 0,
+    direction: row.direction,
+    joinedContext: row.joined_context,
+    businessName: row.business_name,
+    referralCodeUsed: row.referral_code_used,
+  };
 }
+
+// Real friend count for the TrustedFriendsBanner — no crediting exists yet, so pointsEarned is
+// always 0 (kept in the return shape so the banner's copy doesn't need to change).
+export function useTrustedFriendsSummary(): { count: number; pointsEarned: number; loading: boolean } {
+  const [count, setCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getMyReferrals('joined_via_me' as ReferralDirection);
+        if (!cancelled) setCount(rows.length);
+      } catch (err) {
+        if (__DEV__) console.log('[useTrustedFriendsSummary] failed', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { count, pointsEarned: 0, loading };
+}
+
+const DIRECTION_FILTERS: { key: ReferralDirection; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'joined_via_me', label: 'Joined via me' },
+  { key: 'i_joined_via', label: 'I joined via' },
+];
 
 export default function TrustedFriendsScreen() {
   const router = useRouter();
-  const [query, setQuery] = useState<string>('');
-  const { ensureChat } = useReferralChat();
+  const { direction, setDirection, search, setSearch, referrals, loading, error } = useMyReferrals();
+
+  const friends = useMemo(() => referrals.map(toTrustedFriend), [referrals]);
+  const isSearching = search.trim().length > 0;
 
   const handleOpenChat = useCallback(
     (friend: TrustedFriend) => {
-      const chatId = ensureChat({
-        friend: {
-          profileId: `tf-${friend.id}`,
+      router.push({
+        pathname: '/chat-detail/[id]' as never,
+        params: {
+          id: friend.id,
+          targetProfileId: friend.id,
+          type: 'friend',
           name: friend.name,
-          initials: initials(friend.name),
           avatarColor: friend.avatarColor,
         },
-        contextType: friend.type,
-        businessName: friend.type === 'business' ? friend.destination : undefined,
-      });
-      console.log('[TrustedFriends] open chat', chatId, friend.name);
-      router.push({
-        pathname: '/referral-chat/[id]' as never,
-        params: { id: chatId, source: 'trusted_friends' },
       } as never);
     },
-    [ensureChat, router]
+    [router]
   );
 
-  const sorted = useMemo(
-    () => [...MOCK_FRIENDS].sort((a, b) => b.joinedDate.getTime() - a.joinedDate.getTime()),
-    []
-  );
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sorted;
-    return sorted.filter(
-      (f) => f.name.toLowerCase().includes(q) || f.handle.toLowerCase().includes(q)
-    );
-  }, [query, sorted]);
-
-  const totalPoints = useMemo(
-    () => sorted.reduce((s, f) => s + f.pointsEarned, 0),
-    [sorted]
+  const handleOpenProfile = useCallback(
+    (friend: TrustedFriend) => {
+      router.push({
+        pathname: '/public-profile',
+        params: {
+          profileId: friend.id,
+          name: friend.name,
+          joinedContext: friend.joinedContext,
+          direction: friend.direction,
+          businessName: friend.businessName ?? undefined,
+          joinedAt: friend.joinedAt,
+          referralCodeUsed: friend.referralCodeUsed,
+        },
+      } as never);
+    },
+    [router]
   );
 
   const handleInvite = useCallback(() => {
@@ -231,7 +171,7 @@ export default function TrustedFriendsScreen() {
             <ArrowLeft size={22} color="#1A5C35" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Trusted Friends</Text>
+            <Text style={styles.headerTitle}>My Referrals</Text>
             <Text style={styles.headerSubtitle}>
               Friends you&apos;ve brought into TouchPoint
             </Text>
@@ -249,13 +189,7 @@ export default function TrustedFriendsScreen() {
           <View style={[styles.statChip, styles.statChipPurple]}>
             <Users size={14} color={PURPLE_DARK} />
             <Text style={[styles.statChipText, { color: PURPLE_DARK }]}>
-              {sorted.length} Friends
-            </Text>
-          </View>
-          <View style={[styles.statChip, styles.statChipOrange]}>
-            <Star size={14} color="#9A3412" />
-            <Text style={[styles.statChipText, { color: '#9A3412' }]}>
-              {totalPoints} Points Earned
+              {friends.length} Friends
             </Text>
           </View>
         </View>
@@ -263,29 +197,53 @@ export default function TrustedFriendsScreen() {
         <View style={styles.searchWrap}>
           <Search size={16} color="#9CA3AF" />
           <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search trusted friends..."
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by name or business..."
             placeholderTextColor="#9CA3AF"
             style={styles.searchInput}
             testID="trusted-friends-search"
           />
         </View>
 
-        {filtered.length === 0 ? (
-          sorted.length === 0 ? (
-            <EmptyState onInvite={handleInvite} />
-          ) : (
+        <View style={styles.filterRow}>
+          {DIRECTION_FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              onPress={() => setDirection(f.key)}
+              style={[styles.filterChip, direction === f.key && styles.filterChipActive]}
+              testID={`trusted-friends-filter-${f.key}`}
+            >
+              <Text style={[styles.filterChipText, direction === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {loading ? (
+          <View style={styles.noMatch}>
+            <ActivityIndicator color={PURPLE_DARK} />
+          </View>
+        ) : error ? (
+          <View style={styles.noMatch}>
+            <Text style={styles.noMatchTitle}>Something went wrong</Text>
+            <Text style={styles.noMatchSub}>{error}</Text>
+          </View>
+        ) : friends.length === 0 ? (
+          isSearching ? (
             <View style={styles.noMatch}>
               <Text style={styles.noMatchTitle}>No matches</Text>
               <Text style={styles.noMatchSub}>
-                No trusted friends match &quot;{query.trim()}&quot;
+                No referrals match &quot;{search.trim()}&quot;
               </Text>
             </View>
+          ) : (
+            <EmptyState onInvite={handleInvite} />
           )
         ) : (
-          filtered.map((f) => (
-            <FriendCard key={f.id} friend={f} onChat={handleOpenChat} />
+          friends.map((f) => (
+            <FriendCard key={f.id} friend={f} onChat={handleOpenChat} onOpenProfile={handleOpenProfile} />
           ))
         )}
       </ScrollView>
@@ -296,9 +254,11 @@ export default function TrustedFriendsScreen() {
 function FriendCard({
   friend,
   onChat,
+  onOpenProfile,
 }: {
   friend: TrustedFriend;
   onChat: (friend: TrustedFriend) => void;
+  onOpenProfile: (friend: TrustedFriend) => void;
 }) {
   const isApp = friend.type === 'app';
   const accent = isApp ? PURPLE : ORANGE;
@@ -308,7 +268,14 @@ function FriendCard({
       <View style={[styles.cardStrip, { backgroundColor: accent }]} />
 
       <View style={styles.cardInner}>
-        <View style={styles.cardTopRow}>
+        <TouchableOpacity
+          style={styles.cardTopRow}
+          onPress={() => onOpenProfile(friend)}
+          activeOpacity={0.7}
+          testID={`view-profile-${friend.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${friend.name}'s profile`}
+        >
           <View
             style={[styles.avatar, { backgroundColor: friend.avatarColor }]}
           >
@@ -319,16 +286,13 @@ function FriendCard({
             <Text style={styles.friendName} numberOfLines={1}>
               {friend.name}
             </Text>
-            <Text style={styles.friendHandle} numberOfLines={1}>
-              {friend.handle}
-            </Text>
             <Text style={styles.friendMeta}>
-              {friend.isPending ? 'Invited' : 'Joined'}: {friend.joinedAt}
+              Joined: {friend.joinedAt}
             </Text>
           </View>
 
           <TypeBadge type={friend.type} />
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -348,24 +312,17 @@ function FriendCard({
         </View>
 
         <View style={styles.cardActionRow}>
-          {friend.isPending ? (
-            <View style={styles.pendingPill} testID={`pending-${friend.id}`}>
-              <Hourglass size={12} color={PENDING_TEXT} />
-              <Text style={styles.pendingPillText}>Invite Pending</Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.chatBtn}
-              onPress={() => onChat(friend)}
-              activeOpacity={0.85}
-              testID={`chat-now-${friend.id}`}
-              accessibilityRole="button"
-              accessibilityLabel={`Chat with ${friend.name}`}
-            >
-              <MessageCircle size={13} color="#FFFFFF" />
-              <Text style={styles.chatBtnText}>Chat Now</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.chatBtn}
+            onPress={() => onChat(friend)}
+            activeOpacity={0.85}
+            testID={`chat-now-${friend.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={`Chat with ${friend.name}`}
+          >
+            <MessageCircle size={13} color="#FFFFFF" />
+            <Text style={styles.chatBtnText}>Chat Now</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -390,26 +347,10 @@ function TypeBadge({ type }: { type: ReferralType }) {
 }
 
 function StatusChip({ status }: { status: ReferralStatus }) {
-  if (status === 'completed') {
-    return (
-      <View style={[styles.statusChip, { backgroundColor: '#DCFCE7' }]}>
-        <CheckCircle2 size={11} color={GREEN} />
-        <Text style={[styles.statusChipText, { color: '#166534' }]}>Points Earned</Text>
-      </View>
-    );
-  }
-  if (status === 'pending') {
-    return (
-      <View style={[styles.statusChip, { backgroundColor: '#FEF3C7' }]}>
-        <Clock size={11} color={AMBER} />
-        <Text style={[styles.statusChipText, { color: '#92400E' }]}>Pending</Text>
-      </View>
-    );
-  }
   return (
-    <View style={[styles.statusChip, { backgroundColor: '#E5E7EB' }]}>
-      <XCircle size={11} color="#6B7280" />
-      <Text style={[styles.statusChipText, { color: '#4B5563' }]}>Expired</Text>
+    <View style={[styles.statusChip, { backgroundColor: '#DCFCE7' }]}>
+      <CheckCircle2 size={11} color={GREEN} />
+      <Text style={[styles.statusChipText, { color: '#166534' }]}>Joined</Text>
     </View>
   );
 }
@@ -425,9 +366,9 @@ function EmptyState({ onInvite }: { onInvite: () => void }) {
           <UserPlus size={14} color="#FFFFFF" />
         </View>
       </View>
-      <Text style={styles.emptyTitle}>No trusted friends yet</Text>
+      <Text style={styles.emptyTitle}>No referrals yet</Text>
       <Text style={styles.emptySub}>
-        Invite friends and businesses to join TouchPoint and earn points!
+        Share your referral link to get started.
       </Text>
       <TouchableOpacity
         style={styles.emptyBtn}
@@ -571,11 +512,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1A5C35',
   },
-  friendHandle: {
-    fontSize: 11,
-    color: '#1A5C35',
-    marginTop: 1,
-  },
   friendMeta: {
     fontSize: 10,
     color: '#9CA3AF',
@@ -661,20 +597,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  pendingPill: {
+  filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: PENDING_BG,
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    height: 32,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
   },
-  pendingPillText: {
-    color: PENDING_TEXT,
+  filterChipActive: {
+    backgroundColor: '#1A5C35',
+    borderColor: '#1A5C35',
+  },
+  filterChipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#1A5C35',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
   },
   empty: {
     alignItems: 'center',

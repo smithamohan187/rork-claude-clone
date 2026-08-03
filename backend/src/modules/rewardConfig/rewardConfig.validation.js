@@ -8,20 +8,6 @@ const upsertConfigSchema = Joi.object({
   points_per_rupee:      Joi.number().min(0),
 });
 
-const createTierSchema = Joi.object({
-  name:       Joi.string().max(100).required(),
-  min_points: Joi.number().integer().min(0).required(),
-  color:      Joi.string().max(20),
-  perks:      Joi.array().items(Joi.string()),
-});
-
-const updateTierSchema = Joi.object({
-  name:       Joi.string().max(100),
-  min_points: Joi.number().integer().min(0),
-  color:      Joi.string().max(20),
-  perks:      Joi.array().items(Joi.string()),
-});
-
 const createRewardSchema = Joi.object({
   name:               Joi.string().max(200).required(),
   description:        Joi.string().allow('', null),
@@ -40,8 +26,6 @@ const updateRewardSchema = Joi.object({
 
 module.exports = {
   upsertConfigSchema,
-  createTierSchema,
-  updateTierSchema,
   createRewardSchema,
   updateRewardSchema,
 };

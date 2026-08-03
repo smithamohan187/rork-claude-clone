@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMyBusinessReferralCode, MyBusinessReferral } from '@/api/services/businessInviteService';
 
 const PURPLE = '#00B246';
 const PURPLE_DEEP = '#1A5C35';
@@ -38,15 +38,18 @@ export interface BusinessInviteBannerProps {
 
 /**
  * Build the business-invite referral code from the current user id.
- * Mirrors the spec: BIZ_<first6 of userId, uppercased>.
+ * Format: TP-BIZ-<first6 of userId, uppercased>.
  */
 export function buildBusinessReferralCode(userId: string | undefined): string {
   const slug = (userId ?? 'guest').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() || 'GUEST';
-  return `BIZ_${slug}`;
+  return `TP-BIZ-${slug}`;
 }
 
+// Use the real share base (env) rather than a hardcoded host, so the link can't drift again.
+const SHARE_BASE_URL = (process.env.EXPO_PUBLIC_SHARE_BASE_URL || 'https://touchpoints.app').replace(/\/$/, '');
+
 export function buildBusinessReferralLink(userId: string | undefined): string {
-  return `https://touchpoint.app/business/join?ref=${buildBusinessReferralCode(userId)}`;
+  return `${SHARE_BASE_URL}/s/${buildBusinessReferralCode(userId)}`;
 }
 
 const WhatsAppGlyph = ({ size = 22 }: { size?: number }) => (
@@ -66,11 +69,30 @@ const WhatsAppGlyph = ({ size = 22 }: { size?: number }) => (
 
 export default function BusinessInviteBanner({ style }: BusinessInviteBannerProps) {
   const router = useRouter();
-  const { currentUser } = useAuth();
   const [sheetOpen, setSheetOpen] = useState<boolean>(false);
 
-  const referralCode = useMemo(() => buildBusinessReferralCode(currentUser?.id), [currentUser?.id]);
-  const referralLink = useMemo(() => buildBusinessReferralLink(currentUser?.id), [currentUser?.id]);
+  // Real, backend-issued, per-inviter referral code — get-or-create, fetched once on mount (same
+  // pattern as useInviteFriends.ts's referral fetch). Works for either a personal or business
+  // active profile. openSheet no-ops until this resolves, same guard style as useInviteFriends.
+  const [referral, setReferral] = useState<MyBusinessReferral | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getMyBusinessReferralCode();
+        if (!cancelled) setReferral(data);
+      } catch (err) {
+        if (__DEV__) console.log('[BusinessInviteBanner] getMyBusinessReferralCode failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const referralCode = referral?.code ?? '';
+  const referralLink = referral?.url ?? '';
 
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
@@ -105,12 +127,13 @@ export default function BusinessInviteBanner({ style }: BusinessInviteBannerProp
   );
 
   const openSheet = useCallback(() => {
+    if (!referral) return; // still loading the real referral code — nothing to send yet
     if (Platform.OS !== 'web') {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSheetOpen(true);
     requestAnimationFrame(() => animateIn());
-  }, [animateIn]);
+  }, [referral, animateIn]);
 
   const closeSheet = useCallback(() => {
     animateOut(() => setSheetOpen(false));

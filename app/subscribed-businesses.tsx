@@ -30,15 +30,7 @@ import {
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useSubscribedBusinesses, SubscribedBusinessItem } from '@/hooks/useSubscribedBusinesses';
-
-type Tier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
-
-const TIER_COLORS: Record<Tier, { dot: string; text: string; bg: string }> = {
-  Bronze: { dot: '#cd7f32', text: '#b5651d', bg: 'rgba(255,255,255,0.92)' },
-  Silver: { dot: '#9ca3af', text: '#6b7280', bg: 'rgba(255,255,255,0.92)' },
-  Gold: { dot: '#eab308', text: '#a16207', bg: 'rgba(255,255,255,0.92)' },
-  Platinum: { dot: '#38bdf8', text: '#0369a1', bg: 'rgba(255,255,255,0.92)' },
-};
+import TierBadge from '@/components/TierBadge';
 
 
 interface ChatMessage {
@@ -208,7 +200,6 @@ function BusinessCard({
   onUnsubscribe: () => void;
 }) {
   const router = useRouter();
-  const tier = TIER_COLORS[item.tier];
   const openProfile = useCallback(() => {
     router.push({
       pathname: '/business-profile/[id]',
@@ -224,9 +215,8 @@ function BusinessCard({
         testID={`open-business-${item.id}`}
       >
         <Image source={{ uri: item.cover }} style={styles.cover} contentFit="cover" />
-        <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-          <View style={[styles.tierDot, { backgroundColor: tier.dot }]} />
-          <Text style={[styles.tierText, { color: tier.text }]}>{item.tier}</Text>
+        <View style={styles.tierBadgeWrap}>
+          <TierBadge tierName={item.tier} size="small" showLabel testID={`tier-badge-${item.id}`} />
         </View>
       </TouchableOpacity>
 
@@ -587,19 +577,11 @@ const styles = StyleSheet.create({
   },
   coverWrap: { width: '100%', height: 150, position: 'relative' },
   cover: { width: '100%', height: '100%' },
-  tierBadge: {
+  tierBadgeWrap: {
     position: 'absolute',
     top: 12,
     right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    gap: 6,
   },
-  tierDot: { width: 8, height: 8, borderRadius: 4 },
-  tierText: { fontSize: 12, fontWeight: '700' as const },
   cardBody: { padding: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   titleLeft: { flex: 1, paddingRight: 8 },

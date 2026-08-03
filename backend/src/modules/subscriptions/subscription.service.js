@@ -3,13 +3,16 @@ const { query, getClient } = require('../../config/database');
 const shareReferralsModel = require('../shareReferrals/shareReferrals.model');
 const pointsModel = require('../points/points.model');
 const customerInviteService = require('../customerInvites/customerInvite.service');
+const notificationsService = require('../notifications/notifications.service');
+const rewardConfigModel = require('../rewardConfig/rewardConfig.model');
 
 async function subscribeToBusiness(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
   if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
 
-  const { rows } = await query('SELECT id FROM businesses WHERE id = $1', [businessId]);
+  const { rows } = await query('SELECT id, name FROM businesses WHERE id = $1', [businessId]);
   if (!rows[0]) throw Object.assign(new Error('Business not found'), { status: 404 });
+  const business = rows[0];
 
   // Wrap subscription upsert + welcome-bonus award in a single transaction so
   // both succeed or both roll back. ON CONFLICT DO NOTHING on the unique partial
@@ -23,6 +26,13 @@ async function subscribeToBusiness(userId, businessId) {
     const welcomePoints = await pointsModel.getWelcomeBonusWithClient(client, businessId);
     if (welcomePoints > 0) {
       await pointsModel.insertJoinBonusWithClient(client, profileId, businessId, welcomePoints);
+      await notificationsService.createNotification(client, {
+        profileId,
+        type: 'points_earned',
+        title: 'Points earned!',
+        body: `You earned ${welcomePoints} points from subscribing to ${business.name}.`,
+        data: { business_id: businessId, points: welcomePoints },
+      });
     }
     await client.query('COMMIT');
   } catch (err) {
@@ -35,7 +45,7 @@ async function subscribeToBusiness(userId, businessId) {
   // Stage 2 of the content-share trigger: if this subscriber joined via a shared link for THIS
   // business, link them and the sharer as trusted friends and log pending 'share' points for the
   // sharer. No matching row => organic subscribe, zero behavior change. Idempotent via constraints.
-  await maybeLinkTrustedFriend(profileId, businessId);
+  await maybeLinkTrustedFriend(profileId, businessId, business.name);
 
   // Customer-invite stage 2: if this subscriber matches a pending invite for this business,
   // mark it subscribed and notify the business owner. No match => organic subscribe, no-op.
@@ -44,7 +54,7 @@ async function subscribeToBusiness(userId, businessId) {
   return { subscribed: true, subscription };
 }
 
-async function maybeLinkTrustedFriend(subscriberProfileId, businessId) {
+async function maybeLinkTrustedFriend(subscriberProfileId, businessId, businessName) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -68,6 +78,29 @@ async function maybeLinkTrustedFriend(subscriberProfileId, businessId) {
         points_amount: null,
         status: 'pending_credit',
       });
+
+      // Offer-share only: credit a real referral bonus + notify the sharer. Other content types
+      // (post/event/broadcast shares) are unaffected — this branch never fires for them.
+      if (recipient.content_type === 'offer') {
+        const alreadyCredited = await pointsModel.referralBonusAlreadyCredited(recipient.id);
+        if (!alreadyCredited) {
+          const rewardConfig = await rewardConfigModel.getRewardConfig(businessId);
+          const bonus = rewardConfig?.referral_bonus_points ?? 0;
+          if (bonus > 0) {
+            await pointsModel.insertReferralBonusWithClient(client, recipient.sharer_profile_id, businessId, bonus, {
+              referenceType: 'share_recipient',
+              referenceId: recipient.id,
+            });
+          }
+          await notificationsService.createNotification(client, {
+            profileId: recipient.sharer_profile_id,
+            type: 'offer_referral_subscribed',
+            title: 'Your friend joined via your shared offer',
+            body: `Someone subscribed to ${businessName ?? 'the business'} after you shared an offer with them.`,
+            data: { business_id: businessId, offer_id: recipient.content_id, subscriber_profile_id: subscriberProfileId },
+          });
+        }
+      }
     }
     await client.query('COMMIT');
   } catch (err) {

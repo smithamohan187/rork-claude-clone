@@ -56,61 +56,6 @@ async function upsertRewardConfig(businessId, data) {
   return rows[0];
 }
 
-async function getActiveTiers(businessId) {
-  const { rows } = await query(
-    `SELECT * FROM reward_tiers
-     WHERE business_id = $1 AND is_deleted = FALSE
-     ORDER BY min_points ASC`,
-    [businessId]
-  );
-  return rows;
-}
-
-async function getTierById(id) {
-  const { rows } = await query(
-    `SELECT * FROM reward_tiers WHERE id = $1`,
-    [id]
-  );
-  return rows[0] ?? null;
-}
-
-async function insertTier(data) {
-  const { business_id, name, min_points, color, perks } = data;
-  const { rows } = await query(
-    `INSERT INTO reward_tiers (business_id, name, min_points, color, perks)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [business_id, name, min_points, color ?? null, perks ?? null]
-  );
-  return rows[0];
-}
-
-async function updateTier(id, data) {
-  const { name, min_points, color, perks } = data;
-  const { rows } = await query(
-    `UPDATE reward_tiers
-     SET name       = COALESCE($2, name),
-         min_points = COALESCE($3, min_points),
-         color      = COALESCE($4, color),
-         perks      = COALESCE($5, perks)
-     WHERE id = $1
-     RETURNING *`,
-    [id, name ?? null, min_points ?? null, color ?? null, perks ?? null]
-  );
-  return rows[0] ?? null;
-}
-
-async function softDeleteTier(id) {
-  const { rows } = await query(
-    `UPDATE reward_tiers
-     SET is_deleted = TRUE
-     WHERE id = $1
-     RETURNING *`,
-    [id]
-  );
-  return rows[0] ?? null;
-}
-
 async function getActiveRewards(businessId) {
   const { rows } = await query(
     `SELECT * FROM rewards_catalog
@@ -180,11 +125,6 @@ module.exports = {
   getBusinessIdByUserId,
   getRewardConfig,
   upsertRewardConfig,
-  getActiveTiers,
-  getTierById,
-  insertTier,
-  updateTier,
-  softDeleteTier,
   getActiveRewards,
   getRewardById,
   insertReward,

@@ -1,8 +1,7 @@
 const { query, getClient } = require('../../config/database');
 const customerInviteModel = require('./customerInvite.model');
 const subscriptionModel = require('../subscriptions/subscription.model');
-
-const SHARE_BASE_URL = (process.env.SHARE_BASE_URL || process.env.EXPO_PUBLIC_API_BASE_URL).replace(/\/$/, '');
+const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 function generateReferralCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

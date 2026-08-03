@@ -1,6 +1,16 @@
 // events.model.js — raw SQL queries for the events module. No business logic.
 const { query } = require('../../config/database');
 
+// Mutating helpers accept an optional `client` so callers can run them inside an
+// existing transaction (fanout notification hook). Falls back to the pool otherwise.
+const runner = (client) => (client ? (text, params) => client.query(text, params) : query);
+
+async function getBusinessNameById(client, businessId) {
+  const q = runner(client);
+  const { rows } = await q('SELECT name FROM businesses WHERE id = $1', [businessId]);
+  return rows[0]?.name ?? null;
+}
+
 async function getBusinessIdByUserId(userId) {
   const { rows } = await query(
     `SELECT b.id AS business_id
@@ -24,9 +34,10 @@ const EFFECTIVE_STATUS_CASE = `
   END AS effective_status
 `;
 
-async function insertEvent(data) {
+async function insertEvent(client, data) {
   const { business_id, title, description, location, starts_at, ends_at, image_url, event_type } = data;
-  const { rows } = await query(
+  const q = runner(client);
+  const { rows } = await q(
     `INSERT INTO events
        (business_id, title, description, location, starts_at, ends_at, image_url, event_type)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -143,6 +154,7 @@ async function updateEventImageUrl(eventId, imageUrl) {
 
 module.exports = {
   getBusinessIdByUserId,
+  getBusinessNameById,
   insertEvent,
   getEventsByBusiness,
   getEventById,

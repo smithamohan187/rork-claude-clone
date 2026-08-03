@@ -13,6 +13,7 @@ import {
   type RegisterBusinessPayload,
 } from '@/api/services/businessService';
 import { fetchBusinessCategories, type Category } from '@/api/services/categoriesService';
+import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
 
 export type { BusinessHour };
 
@@ -73,6 +74,10 @@ export function useCreateBusiness() {
   // Existing business id — set on mount if user already has one
   const [businessId, setBusinessId] = useState<string | null>(null);
 
+  // Auto-carried from a business-invite deep link (see useShareDeepLink/useSignUp) — read on mount,
+  // submitted with registration, cleared only once registration actually succeeds.
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
+
   // Step 1 — Business Basics
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState<BusinessType>('');
@@ -107,6 +112,16 @@ export function useCreateBusiness() {
   useEffect(() => {
     fetchBusinessCategories()
       .then(setBusinessCategories)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getPendingShareReferral()
+      .then((pending) => {
+        if (pending?.content_type === 'business_invite') {
+          setPendingInviteCode(pending.referral_code);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -288,12 +303,18 @@ export function useCreateBusiness() {
         inhouse_referral: inhouseReferral,
         inhouse_referral_url: inhouseReferral ? inhouseReferralUrl.trim() : undefined,
         hours,
+        invite_code: pendingInviteCode ?? undefined,
       };
 
       // registerBusiness is always called — backend does upsert if business already exists
       const business = await registerBusiness(payload);
       const id = business.id;
       setBusinessId(id);
+
+      if (pendingInviteCode) {
+        await clearPendingShareReferral();
+        setPendingInviteCode(null);
+      }
 
       if (__DEV__) console.log('[upload] logoUri:', logoUri);
       if (logoUri) await uploadBusinessLogo(id, logoUri);

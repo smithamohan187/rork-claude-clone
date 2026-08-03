@@ -1,4 +1,4 @@
-const { fetchProfile, fetchInterestCategories, updateProfile, updateAvatar } = require('./profile.service');
+const { fetchProfile, fetchInterestCategories, updateProfile, updateAvatar, getPublicProfile } = require('./profile.service');
 const { ok } = require('../../utils/apiResponse');
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -39,4 +39,13 @@ const uploadMyAvatarFile = asyncHandler(async (req, res) => {
   res.status(200).json(ok({ url }));
 });
 
-module.exports = { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile };
+const getPublicProfileHandler = asyncHandler(async (req, res) => {
+  const { profileId } = req.params;
+  const profile = await getPublicProfile(req.user.userId, profileId);
+  if (!profile) {
+    return res.status(404).json({ success: false, data: null, error: 'Profile not found' });
+  }
+  res.status(200).json(ok(profile));
+});
+
+module.exports = { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile, getPublicProfileHandler };

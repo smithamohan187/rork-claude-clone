@@ -4,7 +4,7 @@ const multer = require('multer');
 const { Router } = require('express');
 const { authenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
-const { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile } = require('./profile.controller');
+const { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile, getPublicProfileHandler } = require('./profile.controller');
 const { updateProfileSchema } = require('./profile.validation');
 
 const avatarUploadDir = path.join(__dirname, '../../../../uploads/avatars');
@@ -23,5 +23,6 @@ router.put('/me',                authenticate, validateRequest(updateProfileSche
 router.patch('/me/avatar',       authenticate, updateMyAvatar);
 router.post('/me/avatar-upload', authenticate, avatarUpload.single('avatar'), uploadMyAvatarFile);
 router.get('/interests',                       getInterests);
+router.get('/:profileId/public',  authenticate, getPublicProfileHandler);
 
 module.exports = router;

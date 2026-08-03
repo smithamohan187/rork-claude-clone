@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Portal, Dialog, Button, Paragraph } from 'react-native-paper';
 import { ArrowLeft, Users, MessageCircle, Trash2 } from 'lucide-react-native';
 import { useMyBusinessMembers } from '@/hooks/useMyBusinessMembers';
+import { useConversations } from '@/hooks/useConversations';
 import type { BusinessMember } from '@/api/services/subscriptionService';
 
 const GREEN = '#1A5C35';
@@ -22,16 +22,6 @@ const DANGER = '#C0392B';
 const TEXT_MUTED = '#6B7280';
 const PAGE_BG = '#F0F7F4';
 const CARD_BG = '#FFFFFF';
-
-const TIER_ORDER = ['Platinum', 'Gold', 'Silver', 'Bronze'];
-
-const TIER_DEFAULTS: Record<string, { bg: string; text: string }> = {
-  Platinum: { bg: '#E8E8E8', text: '#374151' },
-  Gold:     { bg: '#FEF3C7', text: '#92400E' },
-  Silver:   { bg: '#E2E8F0', text: '#334155' },
-  Bronze:   { bg: '#FEF0E7', text: '#7C2D12' },
-};
-const FALLBACK_TIER = { bg: '#E6F7EC', text: GREEN };
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_GAP = 12;
@@ -51,50 +41,72 @@ function formatJoined(iso: string): string {
   return 'Joined ' + new Date(iso).toLocaleString('en-US', { month: 'short', year: 'numeric' });
 }
 
-function getTierColors(tierName: string | null, tierColor: string | null): { bg: string; text: string } {
-  if (tierColor) return { bg: tierColor, text: '#fff' };
-  if (tierName && TIER_DEFAULTS[tierName]) return TIER_DEFAULTS[tierName];
-  return FALLBACK_TIER;
-}
-
 interface MemberCardProps {
   member: BusinessMember;
+  preview: string | null;
+  unread: number;
   onRemove: (member: BusinessMember) => void;
+  onOpenChat: (member: BusinessMember) => void;
+  onOpenProfile: (member: BusinessMember) => void;
 }
 
-const MemberCard = React.memo(function MemberCard({ member, onRemove }: MemberCardProps) {
-  const tierColors = getTierColors(member.tier_name, member.tier_color);
-  const tierLabel = member.tier_name ?? 'Member';
+const MemberCard = React.memo(function MemberCard({
+  member,
+  preview,
+  unread,
+  onRemove,
+  onOpenChat,
+  onOpenProfile,
+}: MemberCardProps) {
   const points = (member.current_balance ?? 0).toLocaleString();
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardAvatarRow}>
-        <View style={styles.avatar}>
-          {member.avatar_url ? (
-            <Image source={{ uri: member.avatar_url }} style={styles.avatarImage} contentFit="cover" />
-          ) : (
-            <Text style={styles.avatarInitials}>{getInitials(member.display_name)}</Text>
-          )}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => onOpenProfile(member)}
+        style={styles.cardTapTop}
+        testID={`member-profile-${member.profile_id}`}
+      >
+        <View style={styles.cardAvatarRow}>
+          <View style={styles.avatar}>
+            {member.avatar_url ? (
+              <Image source={{ uri: member.avatar_url }} style={styles.avatarImage} contentFit="cover" />
+            ) : (
+              <Text style={styles.avatarInitials}>{getInitials(member.display_name)}</Text>
+            )}
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.cardName} numberOfLines={1}>{member.display_name}</Text>
-      {member.city ? (
-        <Text style={styles.cardCity} numberOfLines={1}>{member.city}</Text>
-      ) : null}
+        <Text style={styles.cardName} numberOfLines={1}>{member.display_name}</Text>
+        {member.city ? (
+          <Text style={styles.cardCity} numberOfLines={1}>{member.city}</Text>
+        ) : null}
 
-      <View style={[styles.tierBadge, { backgroundColor: tierColors.bg }]}>
-        <Text style={[styles.tierText, { color: tierColors.text }]}>{tierLabel}</Text>
-      </View>
+        <Text style={styles.cardPoints}>{points} pts</Text>
+        <Text style={styles.cardJoined}>{formatJoined(member.subscribed_at)}</Text>
+      </TouchableOpacity>
 
-      <Text style={styles.cardPoints}>{points} pts</Text>
-      <Text style={styles.cardJoined}>{formatJoined(member.subscribed_at)}</Text>
+      <Text style={styles.cardPreview} numberOfLines={1}>
+        {preview ?? 'Tap to message'}
+      </Text>
 
       <View style={styles.cardActions}>
-        <View style={[styles.actionBtn, { opacity: 0.35 }]}>
-          <MessageCircle size={18} color={TEXT_MUTED} />
-        </View>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          hitSlop={8}
+          onPress={() => onOpenChat(member)}
+          testID={`member-chat-${member.profile_id}`}
+        >
+          <View>
+            <MessageCircle size={18} color={GREEN} />
+            {unread > 0 ? (
+              <View style={styles.unreadDot}>
+                <Text style={styles.unreadDotText}>{unread > 9 ? '9+' : unread}</Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
           hitSlop={8}
@@ -110,25 +122,16 @@ const MemberCard = React.memo(function MemberCard({ member, onRemove }: MemberCa
 export default function BusinessMembersScreen() {
   const router = useRouter();
   const { members, isLoading, removeMember } = useMyBusinessMembers();
-  const [activeFilter, setActiveFilter] = useState<string>('All');
+  const { conversations } = useConversations('business');
   const [pendingRemove, setPendingRemove] = useState<BusinessMember | null>(null);
 
-  const filterPills = useMemo(() => {
-    const tierNames = members
-      .map((m) => m.tier_name)
-      .filter((t): t is string => !!t);
-    const unique = Array.from(new Set(tierNames));
-    const sorted = [
-      ...TIER_ORDER.filter((t) => unique.includes(t)),
-      ...unique.filter((t) => !TIER_ORDER.includes(t)),
-    ];
-    return ['All', ...sorted];
-  }, [members]);
-
-  const filtered = useMemo(() => {
-    if (activeFilter === 'All') return members;
-    return members.filter((m) => m.tier_name === activeFilter);
-  }, [members, activeFilter]);
+  // Index the business's member-conversations by the member (other participant)
+  // profile id, so each card can show its own preview + unread count.
+  const convoByProfile = useMemo(() => {
+    const m = new Map<string, (typeof conversations)[number]>();
+    conversations.forEach((c) => m.set(c.other_profile_id, c));
+    return m;
+  }, [conversations]);
 
   const handleRemovePress = useCallback((member: BusinessMember) => {
     setPendingRemove(member);
@@ -143,23 +146,46 @@ export default function BusinessMembersScreen() {
 
   const handleDismiss = useCallback(() => setPendingRemove(null), []);
 
-  const renderCard = useCallback(({ item }: { item: BusinessMember }) => (
-    <MemberCard member={item} onRemove={handleRemovePress} />
-  ), [handleRemovePress]);
+  const handleOpenProfile = useCallback((member: BusinessMember) => {
+    router.push({
+      pathname: '/public-profile',
+      params: { profileId: member.profile_id, name: member.display_name },
+    } as never);
+  }, [router]);
+
+  const handleOpenChat = useCallback((member: BusinessMember) => {
+    router.push({
+      pathname: '/chat-detail/[id]',
+      params: {
+        id: member.profile_id,
+        targetProfileId: member.profile_id,
+        type: 'business',
+        name: member.display_name,
+      },
+    } as never);
+  }, [router]);
+
+  const renderCard = useCallback(({ item }: { item: BusinessMember }) => {
+    const convo = convoByProfile.get(item.profile_id);
+    return (
+      <MemberCard
+        member={item}
+        preview={convo?.last_message_body ?? null}
+        unread={convo?.unread_count ?? 0}
+        onRemove={handleRemovePress}
+        onOpenChat={handleOpenChat}
+        onOpenProfile={handleOpenProfile}
+      />
+    );
+  }, [convoByProfile, handleRemovePress, handleOpenChat, handleOpenProfile]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyWrap}>
       <Users size={48} color={GREEN} strokeWidth={1.5} />
-      <Text style={styles.emptyTitle}>
-        {activeFilter === 'All' ? 'No members yet' : `No ${activeFilter} members`}
-      </Text>
-      <Text style={styles.emptySub}>
-        {activeFilter === 'All'
-          ? 'Subscribers will appear here once they join'
-          : 'No members at this tier yet'}
-      </Text>
+      <Text style={styles.emptyTitle}>No members yet</Text>
+      <Text style={styles.emptySub}>Subscribers will appear here once they join</Text>
     </View>
-  ), [activeFilter]);
+  ), []);
 
   return (
     <View style={styles.root}>
@@ -175,37 +201,18 @@ export default function BusinessMembersScreen() {
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pillsRow}
-      >
-        {filterPills.map((pill) => (
-          <TouchableOpacity
-            key={pill}
-            style={[styles.pill, activeFilter === pill && styles.pillActive]}
-            onPress={() => setActiveFilter(pill)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.pillText, activeFilter === pill && styles.pillTextActive]}>
-              {pill}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {isLoading && members.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={GREEN} size="large" />
         </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={members}
           keyExtractor={(m) => m.profile_id}
           renderItem={renderCard}
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.listContent}
+          contentContainerStyle={members.length === 0 ? styles.emptyContainer : styles.listContent}
           ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
         />
@@ -270,33 +277,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-  pillsRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    backgroundColor: CARD_BG,
-  },
-  pillActive: {
-    backgroundColor: GREEN,
-    borderColor: GREEN,
-  },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-  },
-  pillTextActive: {
-    color: '#fff',
-  },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
@@ -325,6 +305,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
+  },
+  cardTapTop: {
+    alignItems: 'center',
+    width: '100%',
   },
   cardAvatarRow: {
     marginBottom: 10,
@@ -360,16 +344,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  tierBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  tierText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
   cardPoints: {
     fontSize: 13,
     fontWeight: '700',
@@ -379,7 +353,31 @@ const styles = StyleSheet.create({
   cardJoined: {
     fontSize: 10,
     color: TEXT_MUTED,
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  cardPreview: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    marginBottom: 10,
+    width: '100%',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: DANGER,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDotText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   cardActions: {
     flexDirection: 'row',

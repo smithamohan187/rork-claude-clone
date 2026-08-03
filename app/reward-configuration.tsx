@@ -14,7 +14,6 @@ import {
   Text,
   TextInput,
   Switch,
-  Chip,
   IconButton,
   Portal,
   Modal as PaperModal,
@@ -25,14 +24,12 @@ import {
   ArrowLeft,
   Gift,
   Plus,
-  Trophy,
   Sparkles,
   Coins,
   Users,
   Share2,
   ShoppingBag,
   X,
-  Tag,
   Percent,
   Package,
   Star,
@@ -42,13 +39,9 @@ import {
 import {
   fetchRewardConfig,
   upsertRewardConfig,
-  createTier,
-  updateTier,
-  deleteTier,
   createReward,
   updateReward,
   deleteReward,
-  type RewardTier,
   type RewardItem,
 } from '@/api/services/rewardConfigService';
 import { fetchMyBusinessId } from '@/api/services/businessDashboardService';
@@ -62,10 +55,7 @@ const MUTED = '#6B7280';
 const BORDER = '#E5E7EB';
 const BG = '#F7F6FB';
 
-type BadgeColor = '#CD7F32' | '#A8A9AD' | '#FFC107' | '#1A5C35';
 type PrizeType = 'discount' | 'free_item' | 'perk';
-
-const BADGE_COLORS: BadgeColor[] = ['#CD7F32', '#A8A9AD', '#FFC107', '#1A5C35'];
 
 const PRIZE_TYPE_META: Record<PrizeType, { label: string; color: string; icon: React.ElementType }> = {
   discount: { label: 'Discount', color: PURPLE, icon: Percent },
@@ -88,17 +78,7 @@ export default function RewardConfigurationScreen() {
   const [pointsPerUnit,  setPointsPerUnit]  = useState<string>('');
 
   // Collections
-  const [tiers,  setTiers]  = useState<RewardTier[]>([]);
   const [prizes, setPrizes] = useState<RewardItem[]>([]);
-
-  // Tier modal
-  const [showTierModal,     setShowTierModal]     = useState<boolean>(false);
-  const [tierName,          setTierName]          = useState<string>('');
-  const [tierMin,           setTierMin]           = useState<string>('');
-  const [tierBenefits,      setTierBenefits]      = useState<string[]>([]);
-  const [tierBenefitDraft,  setTierBenefitDraft]  = useState<string>('');
-  const [tierColor,         setTierColor]         = useState<BadgeColor>(BADGE_COLORS[3]);
-  const [savingTier,        setSavingTier]        = useState<boolean>(false);
 
   // Prize modal
   const [showPrizeModal, setShowPrizeModal] = useState<boolean>(false);
@@ -110,16 +90,7 @@ export default function RewardConfigurationScreen() {
   const [savingPrize,    setSavingPrize]    = useState<boolean>(false);
 
   // Edit mode tracking
-  const [editingTier,  setEditingTier]  = useState<RewardTier | null>(null);
   const [editingPrize, setEditingPrize] = useState<RewardItem | null>(null);
-
-  const resetTierForm = useCallback(() => {
-    setTierName('');
-    setTierMin('');
-    setTierBenefits([]);
-    setTierBenefitDraft('');
-    setTierColor(BADGE_COLORS[3]);
-  }, []);
 
   const resetPrizeForm = useCallback(() => {
     setPrizeName('');
@@ -127,21 +98,6 @@ export default function RewardConfigurationScreen() {
     setPrizeType('discount');
     setPrizePoints('');
     setPrizeStock('');
-  }, []);
-
-  const handleOpenAddTier = useCallback(() => {
-    setEditingTier(null);
-    resetTierForm();
-    setShowTierModal(true);
-  }, [resetTierForm]);
-
-  const handleOpenEditTier = useCallback((tier: RewardTier) => {
-    setEditingTier(tier);
-    setTierName(tier.name);
-    setTierMin(String(tier.min_points));
-    setTierBenefits(tier.perks);
-    setTierColor((tier.color as BadgeColor) ?? BADGE_COLORS[3]);
-    setShowTierModal(true);
   }, []);
 
   const handleOpenAddPrize = useCallback(() => {
@@ -177,7 +133,6 @@ export default function RewardConfigurationScreen() {
         setPurchaseEnabled(data.config.purchase_enabled ?? true);
         setPointsPerUnit(String(data.config.points_per_rupee ?? ''));
       }
-      setTiers(data.tiers);
       setPrizes(data.rewards);
     } catch (err) {
       if (__DEV__) console.log('[RewardConfig] load error', err);
@@ -189,17 +144,6 @@ export default function RewardConfigurationScreen() {
   useFocusEffect(useCallback(() => {
     loadConfig();
   }, [loadConfig]));
-
-  const handleAddBenefit = useCallback(() => {
-    const v = tierBenefitDraft.trim();
-    if (!v) return;
-    setTierBenefits(prev => [...prev, v]);
-    setTierBenefitDraft('');
-  }, [tierBenefitDraft]);
-
-  const handleRemoveBenefit = useCallback((idx: number) => {
-    setTierBenefits(prev => prev.filter((_, i) => i !== idx));
-  }, []);
 
   const handleSaveConfig = useCallback(async () => {
     if (!businessId) return;
@@ -219,59 +163,6 @@ export default function RewardConfigurationScreen() {
       setSaving(false);
     }
   }, [businessId, welcomePoints, referralPoints, sharingPoints, purchaseEnabled, pointsPerUnit]);
-
-  const handleSaveTier = useCallback(async () => {
-    if (!tierName.trim()) {
-      Alert.alert('Missing name', 'Please enter a tier name.');
-      return;
-    }
-    setSavingTier(true);
-    try {
-      const payload = {
-        name:       tierName.trim(),
-        min_points: parseInt(tierMin || '0', 10),
-        color:      tierColor,
-        perks:      tierBenefits,
-      };
-      if (editingTier) {
-        const updated = await updateTier(editingTier.id, payload);
-        setTiers(prev => prev.map(t => t.id === updated.id ? updated : t)
-                             .sort((a, b) => a.min_points - b.min_points));
-      } else {
-        const tier = await createTier(payload);
-        setTiers(prev => [...prev, tier].sort((a, b) => a.min_points - b.min_points));
-      }
-      resetTierForm();
-      setEditingTier(null);
-      setShowTierModal(false);
-    } catch (err) {
-      Alert.alert('Error', editingTier ? 'Failed to update tier. Please try again.' : 'Failed to add tier. Please try again.');
-    } finally {
-      setSavingTier(false);
-    }
-  }, [editingTier, tierName, tierMin, tierBenefits, tierColor, resetTierForm]);
-
-  const handleRemoveTier = useCallback((id: string) => {
-    Alert.alert(
-      'Delete Tier',
-      'Are you sure you want to delete this tier? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTier(id);
-              setTiers(prev => prev.filter(t => t.id !== id));
-            } catch (err) {
-              Alert.alert('Error', 'Failed to delete tier. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  }, []);
 
   const handleSavePrize = useCallback(async () => {
     if (!prizeName.trim()) {
@@ -347,7 +238,7 @@ export default function RewardConfigurationScreen() {
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerTitle}>Reward Configuration</Text>
-          <Text style={styles.headerSubtitle}>Points, tiers & prizes</Text>
+          <Text style={styles.headerSubtitle}>Points & prizes</Text>
         </View>
         <View style={styles.headerIconWrap}>
           <Sparkles size={18} color="#fff" />
@@ -474,74 +365,6 @@ export default function RewardConfigurationScreen() {
             )}
           </Surface>
 
-          {/* ── Reward Tiers ─────────────────────────────────────── */}
-          <Surface style={styles.section} elevation={1}>
-            <View style={styles.sectionHeader}>
-              <View style={[styles.sectionIcon, { backgroundColor: PURPLE_SOFT }]}>
-                <Trophy size={18} color={PURPLE} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>Reward Tiers</Text>
-                <Text style={styles.sectionDesc}>{tiers.length} tiers configured</Text>
-              </View>
-              <Button
-                mode="contained-tonal"
-                icon={() => <Plus size={16} color={PURPLE} />}
-                onPress={handleOpenAddTier}
-                buttonColor={PURPLE_SOFT}
-                textColor={PURPLE}
-                compact
-                testID="add-tier"
-              >
-                Add Tier
-              </Button>
-            </View>
-
-            <View style={styles.tiersList}>
-              {tiers.map((tier) => (
-                <Surface key={tier.id} style={styles.tierCard} elevation={0}>
-                  <View style={[styles.tierBadge, { backgroundColor: tier.color ?? PURPLE }]}>
-                    <Text style={styles.tierBadgeText}>{tier.name.charAt(0)}</Text>
-                  </View>
-                  <View style={styles.tierInfo}>
-                    <View style={styles.tierTopRow}>
-                      <Text style={styles.tierName}>{tier.name}</Text>
-                      <View style={styles.tierPointsPill}>
-                        <Text style={styles.tierPointsText}>{tier.min_points.toLocaleString()}+ pts</Text>
-                      </View>
-                    </View>
-                    {tier.perks.length > 0 && (
-                      <View style={styles.chipRow}>
-                        {tier.perks.map((b, i) => (
-                          <Chip
-                            key={`${tier.id}-b-${i}`}
-                            compact
-                            style={styles.benefitChip}
-                            textStyle={styles.benefitChipText}
-                          >
-                            {b}
-                          </Chip>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                  <IconButton
-                    icon={() => <Pencil size={16} color={PURPLE} />}
-                    onPress={() => handleOpenEditTier(tier)}
-                    size={18}
-                    testID={`edit-tier-${tier.id}`}
-                  />
-                  <IconButton
-                    icon={() => <Trash2 size={16} color="#EF4444" />}
-                    onPress={() => handleRemoveTier(tier.id)}
-                    size={18}
-                    testID={`remove-tier-${tier.id}`}
-                  />
-                </Surface>
-              ))}
-            </View>
-          </Surface>
-
           {/* ── Rewards Catalog ───────────────────────────────────── */}
           <Surface style={styles.section} elevation={1}>
             <View style={styles.sectionHeader}>
@@ -635,123 +458,6 @@ export default function RewardConfigurationScreen() {
       )}
 
       <Portal>
-        {/* ── Add / Edit Tier Modal ───────────────────────────── */}
-        <PaperModal
-          visible={showTierModal}
-          onDismiss={() => { setShowTierModal(false); setEditingTier(null); resetTierForm(); }}
-          contentContainerStyle={styles.modalContainer}
-        >
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{editingTier ? 'Edit Tier' : 'Add New Tier'}</Text>
-            <IconButton icon={() => <X size={20} color={TEXT} />} onPress={() => { setShowTierModal(false); setEditingTier(null); resetTierForm(); }} />
-          </View>
-          <Divider />
-          <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 16 }}>
-            <Text style={styles.modalLabel}>Tier name</Text>
-            <TextInput
-              mode="outlined"
-              value={tierName}
-              onChangeText={setTierName}
-              placeholder="e.g. Platinum"
-              outlineColor={BORDER}
-              activeOutlineColor={PURPLE}
-              theme={paperTheme}
-              style={styles.input}
-              testID="tier-name-input"
-            />
-
-            <Text style={styles.modalLabel}>Minimum points</Text>
-            <TextInput
-              mode="outlined"
-              value={tierMin}
-              onChangeText={(t) => setTierMin(t.replace(/[^0-9]/g, ''))}
-              placeholder="0"
-              keyboardType="number-pad"
-              right={<TextInput.Affix text="pts" />}
-              outlineColor={BORDER}
-              activeOutlineColor={PURPLE}
-              theme={paperTheme}
-              style={styles.input}
-              testID="tier-min-input"
-            />
-
-            <Text style={styles.modalLabel}>Benefits</Text>
-            <View style={styles.benefitInputRow}>
-              <TextInput
-                mode="outlined"
-                value={tierBenefitDraft}
-                onChangeText={setTierBenefitDraft}
-                placeholder="e.g. 20% off"
-                outlineColor={BORDER}
-                activeOutlineColor={PURPLE}
-                theme={paperTheme}
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                onSubmitEditing={handleAddBenefit}
-                returnKeyType="done"
-                left={<TextInput.Icon icon={() => <Tag size={16} color={MUTED} />} />}
-                testID="benefit-input"
-              />
-              <Button
-                mode="contained"
-                onPress={handleAddBenefit}
-                buttonColor={PURPLE}
-                textColor="#fff"
-                compact
-                style={styles.benefitAddBtn}
-              >
-                Add
-              </Button>
-            </View>
-            {tierBenefits.length > 0 && (
-              <View style={[styles.chipRow, { marginTop: 10 }]}>
-                {tierBenefits.map((b, i) => (
-                  <Chip
-                    key={`draft-b-${i}`}
-                    compact
-                    onClose={() => handleRemoveBenefit(i)}
-                    style={styles.benefitChip}
-                    textStyle={styles.benefitChipText}
-                  >
-                    {b}
-                  </Chip>
-                ))}
-              </View>
-            )}
-
-            <Text style={[styles.modalLabel, { marginTop: 16 }]}>Badge colour</Text>
-            <View style={styles.colorRow}>
-              {BADGE_COLORS.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  onPress={() => setTierColor(c)}
-                  style={[
-                    styles.colorSwatch,
-                    { backgroundColor: c },
-                    tierColor === c && styles.colorSwatchActive,
-                  ]}
-                  activeOpacity={0.8}
-                  testID={`color-${c}`}
-                />
-              ))}
-            </View>
-
-            <Button
-              mode="contained"
-              onPress={handleSaveTier}
-              buttonColor={PURPLE}
-              textColor="#fff"
-              style={[styles.saveBtn, { marginTop: 20 }]}
-              contentStyle={styles.saveBtnContent}
-              labelStyle={styles.saveBtnLabel}
-              loading={savingTier}
-              disabled={savingTier}
-              testID="save-tier"
-            >
-              {editingTier ? 'Save Changes' : 'Add Tier'}
-            </Button>
-          </ScrollView>
-        </PaperModal>
-
         {/* ── Add / Edit Prize Modal ───────────────────────────── */}
         <PaperModal
           visible={showPrizeModal}
@@ -1012,70 +718,6 @@ const styles = StyleSheet.create({
     color: MUTED,
     marginTop: 2,
   },
-  tiersList: {
-    gap: 10,
-  },
-  tierCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: BG,
-    borderRadius: 14,
-    padding: 12,
-    gap: 12,
-  },
-  tierBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tierBadgeText: {
-    fontSize: 18,
-    fontWeight: '800' as const,
-    color: '#fff',
-  },
-  tierInfo: {
-    flex: 1,
-  },
-  tierTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  tierName: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: TEXT,
-  },
-  tierPointsPill: {
-    backgroundColor: PURPLE_SOFT,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  tierPointsText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: PURPLE,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  benefitChip: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: BORDER,
-    height: 26,
-  },
-  benefitChipText: {
-    fontSize: 11,
-    color: TEXT,
-    marginVertical: 0,
-  },
   prizesList: {
     gap: 10,
   },
@@ -1181,31 +823,6 @@ const styles = StyleSheet.create({
     color: TEXT,
     marginBottom: 6,
     marginTop: 6,
-  },
-  benefitInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  benefitAddBtn: {
-    borderRadius: 10,
-    height: 48,
-    justifyContent: 'center',
-  },
-  colorRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-  },
-  colorSwatch: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  colorSwatchActive: {
-    borderColor: TEXT,
   },
   typeRow: {
     flexDirection: 'row',

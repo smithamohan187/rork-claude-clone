@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Users, ArrowRight } from 'lucide-react-native';
-import { getTrustedFriendsSummary } from '@/app/my-referrals';
+import { useTrustedFriendsSummary } from '@/app/my-referrals';
 
 const TrustedFriendsBanner = React.memo(function TrustedFriendsBanner() {
   const router = useRouter();
-  const { count, pointsEarned } = getTrustedFriendsSummary();
+  const { count, pointsEarned } = useTrustedFriendsSummary();
 
   const handlePress = useCallback(() => {
     console.log('[TrustedFriendsBanner] tap -> /my-referrals');

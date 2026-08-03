@@ -51,6 +51,7 @@ export interface RegisterBusinessPayload {
   inhouse_referral: boolean
   inhouse_referral_url?: string
   hours?: BusinessHour[]
+  invite_code?: string
 }
 
 export interface BusinessData {

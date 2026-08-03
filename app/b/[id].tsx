@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles, Smartphone, Download } from 'lucide-react-native';
-import { MOCK_BUSINESS, getBusinessById } from '@/mocks/businessProfile';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
 
 const INDIGO = '#00B246';
 const PURPLE = '#00B246';
@@ -14,23 +14,24 @@ const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=app.touchp
 export default function BusinessQRRedirectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const business = getBusinessById(id ?? '') ?? MOCK_BUSINESS;
+  // Public endpoint — no auth needed, works for a logged-out visitor landing from a scanned QR.
+  const { business, loading, error } = useBusinessProfile(id ?? '');
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const t = setTimeout(() => {
       router.replace({
         pathname: '/business-profile/[id]',
-        params: { id: id ?? business.id, subscribe: '1' },
+        params: { id: id ?? '', subscribe: '1' },
       } as never);
     }, 250);
     return () => clearTimeout(t);
-  }, [id, business.id, router]);
+  }, [id, router]);
 
   const openInApp = () => {
     router.replace({
       pathname: '/business-profile/[id]',
-      params: { id: id ?? business.id, subscribe: '1' },
+      params: { id: id ?? '', subscribe: '1' },
     } as never);
   };
 
@@ -48,6 +49,25 @@ export default function BusinessQRRedirectScreen() {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.loaderRoot}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color={INDIGO} />
+      </View>
+    );
+  }
+
+  if (error || !business) {
+    return (
+      <View style={styles.loaderRoot}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Text style={styles.notFoundTitle}>Business not found</Text>
+        <Text style={styles.notFoundSub}>This link may be out of date.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -58,15 +78,15 @@ export default function BusinessQRRedirectScreen() {
         style={styles.hero}
       >
         <View style={styles.heroLogoWrap}>
-          <Image source={{ uri: business.logo }} style={styles.heroLogo} contentFit="cover" />
+          <Image source={{ uri: business.logo_url ?? undefined }} style={styles.heroLogo} contentFit="cover" />
         </View>
         <Text style={styles.heroEyebrow}>SUBSCRIBE ON TOUCHPOINT</Text>
         <Text style={styles.heroName} numberOfLines={2}>{business.name}</Text>
-        <Text style={styles.heroCategory}>{business.category}</Text>
+        <Text style={styles.heroCategory}>{business.category_name}</Text>
         <View style={styles.welcomePill}>
           <Sparkles size={13} color="#fff" />
           <Text style={styles.welcomePillText}>
-            Earn {business.welcomePoints} welcome points
+            Earn {business.welcome_bonus_points} welcome points
           </Text>
         </View>
       </LinearGradient>
@@ -96,7 +116,9 @@ export default function BusinessQRRedirectScreen() {
 }
 
 const styles = StyleSheet.create({
-  loaderRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F5FB' },
+  loaderRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F5FB', paddingHorizontal: 24 },
+  notFoundTitle: { fontSize: 18, fontWeight: '800', color: '#1A1D2E', marginTop: 12 },
+  notFoundSub: { fontSize: 14, color: '#5C5F72', marginTop: 6, textAlign: 'center' },
   root: { flex: 1, backgroundColor: '#F4F5FB' },
   hero: {
     paddingTop: 56,

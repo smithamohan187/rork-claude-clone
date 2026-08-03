@@ -32,4 +32,16 @@ const resolveReferralHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
-module.exports = { createRecipientsHandler, resolveReferralHandler };
+const shareOfferToFriendsHandler = asyncHandler(async (req, res, next) => {
+  const userId = req.user.userId;
+  const { offerId, targetProfileIds } = req.body;
+  try {
+    const results = await shareReferralsService.shareOfferToFriends(userId, offerId, targetProfileIds);
+    return res.status(201).json(ok({ results }));
+  } catch (err) {
+    if (err.status === 400 || err.status === 404) return res.status(err.status).json(fail(err.message));
+    next(err);
+  }
+});
+
+module.exports = { createRecipientsHandler, resolveReferralHandler, shareOfferToFriendsHandler };

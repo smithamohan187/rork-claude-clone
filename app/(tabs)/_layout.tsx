@@ -6,9 +6,7 @@ import { Home, Compass, MessageCircle, User, Gift, LayoutDashboard, Users, BarCh
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { THEME } from '@/theme/tokens';
 import { useAuth } from '@/contexts/AuthContext';
-import { useReferralChat } from '@/contexts/ReferralChatContext';
-
-const BUSINESS_CHAT_UNREAD = 2;
+import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
 
 const TAB_BAR_BASE_STYLE = {
   backgroundColor: THEME.colors.surface,
@@ -91,8 +89,7 @@ export default function TabLayout() {
     tabBarShowLabel: true,
     tabBarLabelStyle: TAB_BAR_LABEL_STYLE,
   }), [insets.bottom]);
-  const { totalUnread: friendUnread } = useReferralChat();
-  const combinedUnread = BUSINESS_CHAT_UNREAD + friendUnread;
+  const combinedUnread = useUnreadMessagesCount();
 
   const feedOptions = useMemo(() => ({
     title: isBusiness ? 'Dashboard' : 'Home',

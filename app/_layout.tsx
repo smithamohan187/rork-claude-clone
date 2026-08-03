@@ -68,10 +68,6 @@ function RootLayoutNav() {
         options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <Stack.Screen
-        name="invite-friends/review"
-        options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
         name="create-ad"
         options={{ headerShown: false, presentation: 'modal' }}
       />
@@ -170,10 +166,6 @@ function RootLayoutNav() {
       <Stack.Screen
         name="business-admin-transfer"
         options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
-        name="invite-business"
-        options={{ headerShown: false, presentation: 'modal' }}
       />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen

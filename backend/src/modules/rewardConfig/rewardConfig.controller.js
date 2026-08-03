@@ -22,46 +22,6 @@ const upsertConfigHandler = asyncHandler(async (req, res) => {
   }
 });
 
-const createTierHandler = asyncHandler(async (req, res) => {
-  try {
-    const tier = await rewardConfigService.createTier(req.user.userId, req.body);
-    res.status(201).json(ok({ tier }));
-  } catch (err) {
-    if (err.message === 'No business found for this user') {
-      return res.status(403).json(fail(err.message));
-    }
-    throw err;
-  }
-});
-
-const updateTierHandler = asyncHandler(async (req, res) => {
-  try {
-    const tier = await rewardConfigService.editTier(req.user.userId, req.params.id, req.body);
-    res.json(ok({ tier }));
-  } catch (err) {
-    if (err.message === 'Tier not found') return res.status(404).json(fail(err.message));
-    if (err.message === 'No business found for this user' ||
-        err.message === 'Not authorised to modify this tier') {
-      return res.status(403).json(fail(err.message));
-    }
-    throw err;
-  }
-});
-
-const deleteTierHandler = asyncHandler(async (req, res) => {
-  try {
-    await rewardConfigService.deleteTier(req.user.userId, req.params.id);
-    res.json(ok({ id: req.params.id }));
-  } catch (err) {
-    if (err.message === 'Tier not found') return res.status(404).json(fail(err.message));
-    if (err.message === 'No business found for this user' ||
-        err.message === 'Not authorised to modify this tier') {
-      return res.status(403).json(fail(err.message));
-    }
-    throw err;
-  }
-});
-
 const createRewardHandler = asyncHandler(async (req, res) => {
   try {
     const reward = await rewardConfigService.createReward(req.user.userId, req.body);
@@ -105,9 +65,6 @@ const updateRewardHandler = asyncHandler(async (req, res) => {
 module.exports = {
   getConfigHandler,
   upsertConfigHandler,
-  createTierHandler,
-  updateTierHandler,
-  deleteTierHandler,
   createRewardHandler,
   deleteRewardHandler,
   updateRewardHandler,

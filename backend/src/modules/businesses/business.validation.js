@@ -25,6 +25,7 @@ const registerBusinessSchema = Joi.object({
       is_closed: Joi.boolean().default(false),
     })
   ).optional(),
+  invite_code: Joi.string().trim().max(30).optional().allow('', null),
 });
 
 module.exports = { registerBusinessSchema };

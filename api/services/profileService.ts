@@ -98,3 +98,25 @@ export async function fetchInterestCategories(): Promise<InterestCategory[]> {
   if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to load interests');
   return result.data;
 }
+
+export interface MutualBusiness {
+  id: string;
+  name: string;
+  logo_url: string | null;
+}
+
+export interface PublicProfileData {
+  profile_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  member_since: string;
+  businesses_count: number;
+  rewards_redeemed: number;
+  mutual_businesses: MutualBusiness[];
+}
+
+export async function fetchPublicProfile(profileId: string): Promise<PublicProfileData> {
+  const result = await apiClient.get<PublicProfileData>(`/profile/${profileId}/public`);
+  if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to load profile');
+  return result.data;
+}

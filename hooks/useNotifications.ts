@@ -1,6 +1,15 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
+import {
+  fetchMyNotifications,
+  fetchUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type AppNotification,
+  type NotificationType,
+} from '@/api/services/notificationService';
 
-export type NotificationType = 'general' | 'offer' | 'reward' | 'event';
+export type { NotificationType, AppNotification };
 
 export interface NotificationDisplay {
   id: string;
@@ -10,19 +19,12 @@ export interface NotificationDisplay {
   timeAgo: string;
   isRead: boolean;
   group: 'today' | 'earlier';
+  data: Record<string, unknown> | null;
 }
 
-interface MockNotification {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: Date;
-  is_read: boolean;
-}
-
-function relativeTime(date: Date): string {
+function relativeTime(dateStr: string): string {
   const now = Date.now();
-  const then = date.getTime();
+  const then = new Date(dateStr).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
@@ -39,7 +41,8 @@ function relativeTime(date: Date): string {
   return `${months} month${months > 1 ? 's' : ''} ago`;
 }
 
-function isToday(date: Date): boolean {
+function isToday(dateStr: string): boolean {
+  const date = new Date(dateStr);
   const now = new Date();
   return (
     date.getFullYear() === now.getFullYear() &&
@@ -48,131 +51,86 @@ function isToday(date: Date): boolean {
   );
 }
 
-function toDisplay(notif: MockNotification): NotificationDisplay {
+function toDisplay(notif: AppNotification): NotificationDisplay {
   return {
     id: notif.id,
-    type: 'general' as NotificationType,
-    title: notif.title,
-    description: notif.message,
-    timeAgo: relativeTime(notif.timestamp),
+    type: notif.type,
+    title: notif.title ?? '',
+    description: notif.body ?? '',
+    timeAgo: relativeTime(notif.created_at),
     isRead: notif.is_read,
-    group: isToday(notif.timestamp) ? 'today' : 'earlier',
+    group: isToday(notif.created_at) ? 'today' : 'earlier',
+    data: notif.data,
   };
 }
 
-const MOCK_NOTIFICATIONS: MockNotification[] = [
-  {
-    id: '1',
-    title: '🎉 New Offer from Müller Bakery',
-    message: "Get 20% off on all sourdough breads this weekend. Limited stock!",
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    is_read: false,
-  },
-  {
-    id: '2',
-    title: '📅 Event Reminder – Schmidt Brewery',
-    message: "The Oktoberfest tasting evening starts tomorrow at 7 PM. Don't miss it!",
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    is_read: false,
-  },
-  {
-    id: '3',
-    title: '🏆 Points Earned!',
-    message: 'You earned 150 points from your visit to Dupont Patisserie. Keep it up!',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    is_read: false,
-  },
-  {
-    id: '4',
-    title: '👥 Referral Accepted',
-    message: 'Your friend Elena Kovač joined TouchPoint using your referral code. You earned 200 bonus points!',
-    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    is_read: true,
-  },
-  {
-    id: '5',
-    title: '🎁 Reward Ready to Redeem',
-    message: 'You have a free coffee reward available at Bernardi Café. Visit the store to redeem.',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    is_read: true,
-  },
-  {
-    id: '6',
-    title: '🔔 New Subscriber Milestone',
-    message: 'Hoffmann Deli has reached 500 subscribers. Check out their exclusive loyalty offer!',
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    is_read: true,
-  },
-  {
-    id: '7',
-    title: '⚠️ Offer Expiring Soon',
-    message: "The Buy 1 Get 1 offer at Lefevre Fromagerie expires in 3 hours. Redeem before it's gone!",
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    is_read: true,
-  },
-  {
-    id: '8',
-    title: '💬 New Message from Andersson Florist',
-    message: 'Hi! We have a special arrangement prepared for you as a loyal subscriber. Visit us this week.',
-    timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    is_read: true,
-  },
-];
-
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<MockNotification[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
-    [notifications],
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setIsError(false);
+    try {
+      const [list, count] = await Promise.all([fetchMyNotifications(), fetchUnreadCount()]);
+      setNotifications(list);
+      setUnreadCount(count);
+    } catch {
+      setIsError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
   );
 
   const displayNotifications: NotificationDisplay[] = useMemo(
-    () => {
-      const unread = notifications
-        .filter((n) => !n.is_read)
-        .map(toDisplay);
-      const read = notifications
-        .filter((n) => n.is_read)
-        .map(toDisplay);
-      return [...unread, ...read];
-    },
+    () => notifications.map(toDisplay),
     [notifications],
   );
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
-    );
+    setNotifications((prev) => {
+      const target = prev.find((n) => n.id === id);
+      if (target && !target.is_read) {
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
+      return prev.map((n) => (n.id === id ? { ...n, is_read: true } : n));
+    });
+    markNotificationRead(id).catch(() => {});
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, is_read: true })),
-    );
-  }, []);
-
-  const deleteNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
-
-  const refetch = useCallback(() => {
-    // No-op for mock data
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+    markAllNotificationsRead().catch(() => {});
   }, []);
 
   return {
     notifications: displayNotifications,
     unreadCount,
-    isLoading: false,
-    isError: false,
+    isLoading,
+    isError,
     markAsRead,
     markAllAsRead,
-    deleteNotification,
-    refetch,
+    refetch: load,
   };
 }
 
 export function useUnreadNotificationCount(): number {
-  const { unreadCount } = useNotifications();
-  return unreadCount;
+  const [count, setCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnreadCount().then(setCount).catch(() => {});
+    }, []),
+  );
+
+  return count;
 }

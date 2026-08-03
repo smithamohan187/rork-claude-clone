@@ -1,5 +1,15 @@
 const { query } = require('../../config/database');
 
+// Mutating helpers accept an optional `client` so callers can run them inside an
+// existing transaction (fanout notification hook). Falls back to the pool otherwise.
+const runner = (client) => (client ? (text, params) => client.query(text, params) : query);
+
+async function getBusinessNameById(client, businessId) {
+  const q = runner(client);
+  const { rows } = await q('SELECT name FROM businesses WHERE id = $1', [businessId]);
+  return rows[0]?.name ?? null;
+}
+
 async function getBusinessIdByUserId(userId) {
   const { rows } = await query(
     `SELECT b.id AS business_id
@@ -14,14 +24,15 @@ async function getBusinessIdByUserId(userId) {
   return rows[0]?.business_id ?? null;
 }
 
-async function insertOffer(data) {
+async function insertOffer(client, data) {
   const {
     business_id, title, description, image_url,
     discount_type, discount_value, original_price,
     terms, max_redemptions, starts_at, expires_at, status,
   } = data;
 
-  const { rows } = await query(
+  const q = runner(client);
+  const { rows } = await q(
     `INSERT INTO offers
        (business_id, title, description, image_url,
         discount_type, discount_value, original_price,
@@ -183,6 +194,7 @@ async function updateOfferImageUrl(offerId, imageUrl) {
 
 module.exports = {
   getBusinessIdByUserId,
+  getBusinessNameById,
   insertOffer,
   updateOffer,
   updateOfferImageUrl,

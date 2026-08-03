@@ -18,6 +18,8 @@ const {
   getDashboardSummary,
 } = require('./business.model');
 const { getClient } = require('../../config/database');
+const marketplaceService = require('../marketplace/marketplace.service');
+const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 function slugify(name) {
   const base = name
@@ -32,7 +34,7 @@ async function registerBusiness(userId, payload) {
   const {
     business_name, category_id, business_type, description,
     phone, website, address, city, state, country,
-    inhouse_referral, inhouse_referral_url, hours,
+    inhouse_referral, inhouse_referral_url, hours, invite_code,
   } = payload;
 
   // Copy avatar and location defaults from personal profile when creating business profile
@@ -140,6 +142,15 @@ async function registerBusiness(userId, payload) {
         await insertBusinessHours(client, business.id, hours);
       }
       await insertBusinessSubscription(client, business.id, freePlanId);
+
+      // Resolve a business-invite referral code, if this business was created via one — subscribes
+      // the inviter as a member, notifies them, and logs a pending points entry. No-op for
+      // missing/invalid codes.
+      if (invite_code) {
+        await marketplaceService.resolveBusinessInviteOnRegister(client, invite_code, {
+          newBusinessId: business.id,
+        });
+      }
     }
 
     // Always switch the user into business mode after create/edit
@@ -193,6 +204,21 @@ async function getPublicBusinessProfile(businessId) {
   return { ...business, hours };
 }
 
+/**
+ * Owner-only: return the QR deep-link URL for a business.
+ * The scan target is the business's public /b/:id landing page (identity-only, no per-invite code).
+ * Enforces ownership server-side — throws 404 if the business is missing, 403 if the requester
+ * isn't the owner. Reuses the existing getBusinessById (which returns owner_user_id).
+ */
+async function getBusinessScanCode(businessId, requestingUserId) {
+  const business = await getBusinessById(businessId);
+  if (!business) throw Object.assign(new Error('Business not found'), { status: 404 });
+  if (business.owner_user_id !== requestingUserId) {
+    throw Object.assign(new Error('Not authorised to view this scan code'), { status: 403 });
+  }
+  return { businessId, url: `${SHARE_BASE_URL}/b/${businessId}` };
+}
+
 async function fetchDashboardSummary(userId) {
   const businessProfile = await getBusinessProfileByUserId(userId);
   if (!businessProfile) return null;
@@ -208,5 +234,6 @@ module.exports = {
   completeOnboarding,
   fetchMyBusiness,
   getPublicBusinessProfile,
+  getBusinessScanCode,
   fetchDashboardSummary,
 };

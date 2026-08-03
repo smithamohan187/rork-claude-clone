@@ -6,7 +6,7 @@ import * as Linking from 'expo-linking';
 // originally shared detail screen instead of the default post-signup landing.
 export interface PendingShareReferral {
   referral_code: string;
-  content_type: string; // 'post' | 'offer' | 'event' | 'broadcast' | 'business'
+  content_type: string; // 'post' | 'offer' | 'event' | 'broadcast' | 'business' | 'app_referral' | 'business_invite'
   route: string;        // resolved detail route, e.g. '/view-post'
   id_param: string;     // param name the route expects, e.g. 'postId'
   content_id: string;

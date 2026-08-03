@@ -22,6 +22,46 @@ async function insertRecipient({
   return rows[0];
 }
 
+// Like insertRecipient, but for a recipient whose profile is already known upfront (e.g. an
+// existing trusted friend selected from the chat "refer" flow) — inserts directly as 'registered'
+// so the existing subscribe-time lookup (findRegisteredRecipient) finds it exactly like any other
+// content-share, without ever passing through the 'sent' stage.
+async function insertRegisteredRecipient({
+  referral_code,
+  content_type,
+  content_id,
+  business_id,
+  sharer_profile_id,
+  registered_profile_id,
+}) {
+  const { rows } = await query(
+    `INSERT INTO share_recipients
+       (referral_code, content_type, content_id, business_id, sharer_profile_id,
+        status, registered_profile_id, registered_at)
+     VALUES ($1, $2, $3, $4, $5, 'registered', $6, NOW())
+     RETURNING *`,
+    [referral_code, content_type, content_id, business_id, sharer_profile_id, registered_profile_id],
+  );
+  return rows[0];
+}
+
+// Existence check for de-duplicating repeat shares of the same content to the same friend — no
+// unique constraint exists on this table to lean on, so this mirrors the check-then-insert idiom
+// already used elsewhere (e.g. notificationExistsForInvite).
+async function findRecipientForShare({ sharer_profile_id, business_id, content_type, content_id, registered_profile_id }) {
+  const { rows } = await query(
+    `SELECT * FROM share_recipients
+      WHERE sharer_profile_id = $1
+        AND business_id = $2
+        AND content_type = $3
+        AND content_id = $4
+        AND registered_profile_id = $5
+      LIMIT 1`,
+    [sharer_profile_id, business_id, content_type, content_id, registered_profile_id],
+  );
+  return rows[0] ?? null;
+}
+
 async function findByReferralCode(referral_code) {
   const { rows } = await query(
     `SELECT * FROM share_recipients WHERE referral_code = $1`,
@@ -102,6 +142,8 @@ async function insertPointsLog(client, { profile_id, points_type, source_type, s
 
 module.exports = {
   insertRecipient,
+  insertRegisteredRecipient,
+  findRecipientForShare,
   findByReferralCode,
   markRegistered,
   findRegisteredRecipient,

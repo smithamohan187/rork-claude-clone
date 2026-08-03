@@ -37,8 +37,6 @@ export interface BusinessMember {
   city: string | null;
   subscribed_at: string;
   current_balance: number | null;
-  tier_name: string | null;
-  tier_color: string | null;
 }
 
 export async function getBusinessMembers(businessId: string): Promise<BusinessMember[]> {

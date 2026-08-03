@@ -1,100 +1,166 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { Snackbar, Divider, Button } from 'react-native-paper';
-import { ArrowLeft, CheckCircle2, UserPlus, X } from 'lucide-react-native';
+import { Divider, ActivityIndicator } from 'react-native-paper';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react-native';
+import { getMyReferrals } from '@/api/services/referralService';
+import {
+  fetchPublicProfile,
+  resolveAvatarUrl,
+  PublicProfileData,
+  MutualBusiness,
+} from '@/api/services/profileService';
 
-interface MutualBusiness {
-  id: string;
-  name: string;
-  initials: string;
-  color: string;
-  tier: string;
-  tierColor: string;
+interface Connection {
+  joinedContext: 'touchpoints' | 'business';
+  direction: 'joined_via_me' | 'i_joined_via';
+  businessName: string | null;
+  joinedAt: string; // display-ready
 }
 
-interface PublicProfile {
-  name: string;
-  initials: string;
-  avatarColor: string;
-  memberSince: string;
-  totalBusinesses: number;
-  totalRewards: number;
-  referralCode: string;
-  isReferredByMe: boolean;
-  referralRelationship: string;
-  mutualBusinesses: MutualBusiness[];
+const AVATAR_PALETTE = ['#1A5C35', '#0F6E56', '#0F766E', '#1E40AF', '#B45309', '#065F46'];
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return iso;
+  }
 }
 
-const publicProfile: PublicProfile = {
-  name: 'Priya Nair',
-  initials: 'PN',
-  avatarColor: '#0F6E56',
-  memberSince: 'April 2025',
-  totalBusinesses: 4,
-  totalRewards: 6,
-  referralCode: 'PRIYA-A3M9',
-  isReferredByMe: true,
-  referralRelationship: 'You referred Priya to TouchPoint',
-  mutualBusinesses: [
-    {
-      id: '1',
-      name: "Richard's Pastry",
-      initials: 'RP',
-      color: '#1A5C35',
-      tier: 'Silver',
-      tierColor: '#9A9A9A',
-    },
-    {
-      id: '2',
-      name: 'Kochi Fitness Hub',
-      initials: 'KF',
-      color: '#0F6E56',
-      tier: 'Bronze',
-      tierColor: '#CD7F32',
-    },
-  ],
-};
+function formatMonthYear(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
 
-const mySubscribedBusinesses: { id: string; name: string; initials: string; color: string }[] = [
-  { id: '1', name: "Richard's Pastry", initials: 'RP', color: '#1A5C35' },
-  { id: '2', name: 'Kochi Fitness Hub', initials: 'KF', color: '#0F6E56' },
-];
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
 
-function hexWithAlpha(hex: string, alpha: number): string {
-  const a = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${a}`;
+function colorForId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
 }
 
 export default function PublicProfileScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ profileId?: string; name?: string }>();
-  const displayName = (params.name as string) || publicProfile.name;
+  const params = useLocalSearchParams<{
+    profileId?: string;
+    name?: string;
+    joinedContext?: 'touchpoints' | 'business';
+    direction?: 'joined_via_me' | 'i_joined_via';
+    businessName?: string;
+    joinedAt?: string;
+    referralCodeUsed?: string;
+  }>();
+  const [profile, setProfile] = useState<PublicProfileData | null>(null);
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!params.profileId) {
+      setProfileLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+      try {
+        const data = await fetchPublicProfile(params.profileId as string);
+        if (!cancelled) setProfile(data);
+      } catch (err) {
+        if (!cancelled) setProfileError(err instanceof Error ? err.message : 'Failed to load profile');
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.profileId]);
+
+  const displayName = (params.name as string) || profile?.display_name || '';
   const firstName = displayName.split(' ')[0];
 
-  const [snackVisible, setSnackVisible] = useState<boolean>(false);
-  const [snackMsg, setSnackMsg] = useState<string>('');
-  const [sheetVisible, setSheetVisible] = useState<boolean>(false);
+  // Fast path: referral context arrived via nav params (e.g. tapped from my-referrals) — no fetch.
+  const connectionFromParams: Connection | null = params.joinedContext
+    ? {
+        joinedContext: params.joinedContext,
+        direction: params.direction ?? 'joined_via_me',
+        businessName: params.businessName ?? null,
+        joinedAt: params.joinedAt ?? '',
+      }
+    : null;
 
-  const handleReferToBusiness = (businessName: string) => {
-    setSheetVisible(false);
-    setSnackMsg(`Referral link sent to ${firstName} for ${businessName}!`);
-    setSnackVisible(true);
-  };
+  // Fallback path: no context was passed (members area, chat, etc.) — check if a real referral
+  // connection exists between the viewer and this profile by reusing the existing combined-list
+  // query. No new backend endpoint; this is the same call my-referrals itself makes.
+  const [connectionFromFetch, setConnectionFromFetch] = useState<Connection | null>(null);
+
+  useEffect(() => {
+    if (connectionFromParams || !params.profileId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getMyReferrals('all');
+        const match = rows.find((r) => r.profile_id === params.profileId);
+        if (!cancelled && match) {
+          setConnectionFromFetch({
+            joinedContext: match.joined_context,
+            direction: match.direction,
+            businessName: match.business_name,
+            joinedAt: formatDate(match.joined_at),
+          });
+        }
+      } catch (err) {
+        if (__DEV__) console.log('[public-profile] connection fallback lookup failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.profileId]);
+
+  const connection = useMemo<Connection | null>(
+    () => connectionFromParams ?? connectionFromFetch,
+    [connectionFromParams, connectionFromFetch]
+  );
+
+  const connectionCopy = useMemo(() => {
+    if (!connection) return null;
+    const { joinedContext, direction, businessName } = connection;
+    if (joinedContext === 'touchpoints') {
+      return direction === 'joined_via_me'
+        ? 'Joined TouchPoints through your invite'
+        : 'You joined through their invite';
+    }
+    const biz = businessName ?? 'a business';
+    return direction === 'joined_via_me'
+      ? `Joined ${biz} through your invite`
+      : `You joined ${biz} through their invite`;
+  }, [connection]);
 
   const navToBusiness = (businessId: string) => {
     router.push({ pathname: '/business-profile/[id]', params: { id: businessId } } as never);
   };
+
+  const avatarUrl = resolveAvatarUrl(profile?.avatar_url);
+  const mutualBusinesses: MutualBusiness[] = profile?.mutual_businesses ?? [];
 
   return (
     <View style={styles.root} testID="public-profile-screen">
@@ -115,185 +181,111 @@ export default function PublicProfileScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View
-              style={[styles.avatar, { backgroundColor: publicProfile.avatarColor }]}
-            >
-              <Text style={styles.avatarText}>{publicProfile.initials}</Text>
-            </View>
-            <View style={styles.heroInfo}>
-              <Text style={styles.heroName}>{displayName}</Text>
-              <Text style={styles.heroMeta}>
-                Member since {publicProfile.memberSince}
-              </Text>
-              {publicProfile.isReferredByMe && (
-                <View style={styles.relChip}>
-                  <Text style={styles.relChipText}>You referred this person</Text>
+      {profileLoading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator color="#1A5C35" />
+        </View>
+      ) : profileError || !profile ? (
+        <View style={styles.centerState}>
+          <Text style={styles.errorText}>{profileError ?? 'Profile not found'}</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.heroCard}>
+            <View style={styles.heroTop}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: colorForId(profile.profile_id) }]}>
+                  <Text style={styles.avatarText}>{initials(displayName)}</Text>
                 </View>
               )}
+              <View style={styles.heroInfo}>
+                <Text style={styles.heroName}>{displayName}</Text>
+                <Text style={styles.heroMeta}>
+                  Member since {formatMonthYear(profile.member_since)}
+                </Text>
+                {connection && (
+                  <View style={styles.relChip}>
+                    <Text style={styles.relChipText}>
+                      {connection.direction === 'joined_via_me' ? 'You referred this person' : 'They referred you'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <Divider style={styles.heroDivider} />
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>businesses</Text>
+                <Text style={styles.statValue}>{profile.businesses_count}</Text>
+              </View>
+              <View style={styles.statDividerV} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>rewards redeemed</Text>
+                <Text style={styles.statValue}>{profile.rewards_redeemed}</Text>
+              </View>
             </View>
           </View>
 
-          <Divider style={styles.heroDivider} />
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>businesses</Text>
-              <Text style={styles.statValue}>{publicProfile.totalBusinesses}</Text>
+          {connection && connectionCopy && (
+            <View style={styles.refStrip} testID="how-youre-connected-card">
+              <CheckCircle2 size={18} color="#0F6E56" />
+              <View style={styles.refStripText}>
+                <Text style={styles.refStripTitle}>{connectionCopy}</Text>
+                {!!connection.joinedAt && (
+                  <Text style={styles.refStripSub}>Joined {connection.joinedAt}</Text>
+                )}
+              </View>
             </View>
-            <View style={styles.statDividerV} />
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>rewards redeemed</Text>
-              <Text style={styles.statValue}>{publicProfile.totalRewards}</Text>
-            </View>
-          </View>
-        </View>
+          )}
 
-        {publicProfile.isReferredByMe && (
-          <View style={styles.refStrip}>
-            <CheckCircle2 size={18} color="#0F6E56" />
-            <View style={styles.refStripText}>
-              <Text style={styles.refStripTitle}>
-                {publicProfile.referralRelationship}
-              </Text>
-              <Text style={styles.refStripSub}>
-                Joined using your code {publicProfile.referralCode}
-              </Text>
-            </View>
-          </View>
-        )}
+          <Text style={styles.sectionLabel}>BUSINESSES IN COMMON</Text>
 
-        <Text style={styles.sectionLabel}>BUSINESSES IN COMMON</Text>
-
-        {publicProfile.mutualBusinesses.length === 0 ? (
-          <Text style={styles.emptyMutual}>No businesses in common yet</Text>
-        ) : (
-          <>
+          {mutualBusinesses.length === 0 ? (
+            <Text style={styles.emptyMutual}>No businesses in common yet</Text>
+          ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.mutualScroll}
             >
-              {publicProfile.mutualBusinesses.map((biz) => (
-                <TouchableOpacity
-                  key={biz.id}
-                  style={styles.mutualChip}
-                  onPress={() => navToBusiness(biz.id)}
-                  testID={`mutual-${biz.id}`}
-                >
-                  <View style={[styles.mutualLogo, { backgroundColor: biz.color }]}>
-                    <Text style={styles.mutualLogoText}>{biz.initials}</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.mutualName}>{biz.name}</Text>
-                    <View
-                      style={[
-                        styles.tierPill,
-                        { backgroundColor: hexWithAlpha(biz.tierColor, 0.15) },
-                      ]}
-                    >
-                      <Text style={[styles.tierText, { color: biz.tierColor }]}>
-                        {biz.tier}
-                      </Text>
+              {mutualBusinesses.map((biz) => {
+                const logoUrl = resolveAvatarUrl(biz.logo_url);
+                return (
+                  <TouchableOpacity
+                    key={biz.id}
+                    style={styles.mutualChip}
+                    onPress={() => navToBusiness(biz.id)}
+                    testID={`mutual-${biz.id}`}
+                  >
+                    {logoUrl ? (
+                      <Image source={{ uri: logoUrl }} style={styles.mutualLogo} />
+                    ) : (
+                      <View style={[styles.mutualLogo, { backgroundColor: colorForId(biz.id) }]}>
+                        <Text style={styles.mutualLogoText}>{initials(biz.name)}</Text>
+                      </View>
+                    )}
+                    <View>
+                      <Text style={styles.mutualName}>{biz.name}</Text>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
+          )}
 
-            <View style={styles.mutualLinks}>
-              {publicProfile.mutualBusinesses.map((biz) => (
-                <TouchableOpacity
-                  key={`link-${biz.id}`}
-                  onPress={() => navToBusiness(biz.id)}
-                >
-                  <Text style={styles.mutualLinkText}>
-                    View {firstName}&apos;s profile on {biz.name} →
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
-
-        {publicProfile.isReferredByMe && (
-          <Button
-            mode="outlined"
-            icon={() => <UserPlus size={16} color="#1A5C35" />}
-            style={styles.referBtn}
-            contentStyle={styles.referBtnContent}
-            labelStyle={styles.referBtnLabel}
-            textColor="#1A5C35"
-            onPress={() => setSheetVisible(true)}
-            testID="refer-to-business-btn"
-          >
-            {`Refer ${firstName} to a Business`}
-          </Button>
-        )}
-
-        <Text style={styles.privacyNote}>
-          Only mutual connections can view each other&apos;s profile on TouchPoint
-        </Text>
-      </ScrollView>
-
-      <Modal
-        visible={sheetVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSheetVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.sheetBackdrop}
-          activeOpacity={1}
-          onPress={() => setSheetVisible(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>
-                Refer {firstName} to which business?
-              </Text>
-              <TouchableOpacity
-                onPress={() => setSheetVisible(false)}
-                style={styles.sheetClose}
-                testID="sheet-close"
-              >
-                <X size={18} color="#1A5C35" />
-              </TouchableOpacity>
-            </View>
-
-            {mySubscribedBusinesses.map((biz) => (
-              <TouchableOpacity
-                key={biz.id}
-                style={styles.sheetRow}
-                onPress={() => handleReferToBusiness(biz.name)}
-                testID={`sheet-biz-${biz.id}`}
-              >
-                <View style={[styles.sheetLogo, { backgroundColor: biz.color }]}>
-                  <Text style={styles.sheetLogoText}>{biz.initials}</Text>
-                </View>
-                <Text style={styles.sheetRowName}>{biz.name}</Text>
-                <Text style={styles.sheetArrow}>→</Text>
-              </TouchableOpacity>
-            ))}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Snackbar
-        visible={snackVisible}
-        onDismiss={() => setSnackVisible(false)}
-        duration={2500}
-        style={styles.snackbar}
-      >
-        {snackMsg}
-      </Snackbar>
+          <Text style={styles.privacyNote}>
+            Only mutual connections can view each other&apos;s profile on TouchPoint
+          </Text>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -324,6 +316,8 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 30 },
+  centerState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { fontSize: 13, color: '#1A5C35', textAlign: 'center', paddingHorizontal: 32 },
 
   heroCard: {
     margin: 16,
@@ -411,36 +405,12 @@ const styles = StyleSheet.create({
   },
   mutualLogoText: { color: '#fff', fontWeight: '700', fontSize: 11 },
   mutualName: { fontSize: 11, fontWeight: '700', color: '#1A5C35' },
-  tierPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    paddingVertical: 1,
-    paddingHorizontal: 6,
-    marginTop: 2,
-  },
-  tierText: { fontSize: 8, fontWeight: '700' },
   emptyMutual: {
     textAlign: 'center',
     fontSize: 12,
     color: '#1A5C35',
     marginHorizontal: 16,
   },
-  mutualLinks: { marginTop: 8 },
-  mutualLinkText: {
-    fontSize: 11,
-    color: '#1A5C35',
-    marginHorizontal: 16,
-    marginVertical: 4,
-  },
-
-  referBtn: {
-    margin: 16,
-    borderRadius: 12,
-    borderColor: '#1A5C35',
-    borderWidth: 1.5,
-  },
-  referBtnContent: { height: 48 },
-  referBtnLabel: { fontSize: 13, fontWeight: '700' },
 
   privacyNote: {
     textAlign: 'center',
@@ -449,63 +419,4 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
   },
-
-  sheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 28,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E8F5EE',
-    marginBottom: 10,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  sheetTitle: { fontSize: 15, fontWeight: '700', color: '#1A5C35', flex: 1 },
-  sheetClose: {
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: 0.5,
-    borderColor: '#E8F5EE',
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  sheetLogo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetLogoText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  sheetRowName: { flex: 1, fontSize: 13, fontWeight: '700', color: '#1A5C35' },
-  sheetArrow: { fontSize: 16, color: '#1A5C35', fontWeight: '700' },
-
-  snackbar: { backgroundColor: '#1A5C35', marginBottom: 20 },
 });

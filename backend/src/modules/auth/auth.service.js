@@ -5,6 +5,7 @@ const { getClient } = require('../../config/database');
 const { AppError } = require('../../middleware/errorHandler');
 const shareReferralsModel = require('../shareReferrals/shareReferrals.model');
 const customerInviteModel = require('../customerInvites/customerInvite.model');
+const referralService = require('../referrals/referral.service');
 const {
   findUserByEmail: findUserByEmailNew,
   findUserByPhone: findUserByPhoneNew,
@@ -12,8 +13,6 @@ const {
   createProfile,
   setActiveProfile,
   insertProfileInterests,
-  findReferralCode,
-  createReferral,
   saveRefreshToken,
   findUserForLogin,
   insertRefreshToken,
@@ -92,16 +91,11 @@ async function registerUser(data) {
       await insertProfileInterests(client, profile.id, interests);
     }
 
+    // App-level referral (Invite Friends): if this signup came with a referral code, link the
+    // referrer to this new profile and notify the referrer. Never blocks registration — a
+    // missing/invalid/self/already-used code is silently ignored.
     if (referral_code) {
-      const referralCodeRow = await findReferralCode(client, referral_code);
-      if (referralCodeRow) {
-        await createReferral(client, {
-          referralCodeId: referralCodeRow.id,
-          referrerUserId: referralCodeRow.owner_user_id,
-          referredUserId: user.id,
-          type: referralCodeRow.type,
-        });
-      }
+      await referralService.resolveReferralOnRegister(client, referral_code, profile.id);
     }
 
     // Content-share referral: if this signup came from a shared link, transition the recipient row

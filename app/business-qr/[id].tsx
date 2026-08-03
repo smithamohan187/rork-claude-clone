@@ -7,6 +7,7 @@ import {
   Platform,
   Share,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,8 +17,11 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Copy, Share2, Check } from 'lucide-react-native';
-import BusinessQRCard, { buildBusinessQRUrl } from '@/components/business/BusinessQRCard';
-import { MOCK_BUSINESS, getBusinessById } from '@/mocks/businessProfile';
+import BusinessQRCard from '@/components/business/BusinessQRCard';
+import { useBusinessProfile } from '@/hooks/useBusinessProfile';
+import { useBusinessScanCode } from '@/hooks/useBusinessScanCode';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchRewardConfig } from '@/api/services/rewardConfigService';
 
 const INDIGO = '#00B246';
 const TEXT_PRIMARY = '#1A1D2E';
@@ -26,13 +30,36 @@ const TEXT_SECONDARY = '#5C5F72';
 export default function BusinessQRScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { authUser } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
 
-  const business = useMemo(
-    () => getBusinessById(id ?? '') ?? MOCK_BUSINESS,
-    [id],
+  const { business, loading: profileLoading } = useBusinessProfile(id ?? '');
+
+  // Owner-only: the viewer must own this business. The backend scan-code endpoint enforces this too.
+  const isOwner = useMemo(
+    () => !!authUser && !!business && authUser.id === business.owner_user_id,
+    [authUser, business],
   );
-  const qrUrl = useMemo(() => buildBusinessQRUrl(id ?? business.id), [id, business.id]);
+
+  const { url: scanCodeUrl } = useBusinessScanCode(id ?? '', isOwner);
+
+  // Welcome-points value from reward_config — never hardcoded.
+  const [welcomePoints, setWelcomePoints] = useState<number>(0);
+  useEffect(() => {
+    if (!id || !isOwner) return;
+    let cancelled = false;
+    fetchRewardConfig(id)
+      .then((data) => { if (!cancelled) setWelcomePoints(data.config?.welcome_bonus_points ?? 0); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, isOwner]);
+
+  // Non-owners are bounced — they must never see the large QR view.
+  useEffect(() => {
+    if (!profileLoading && business && !isOwner) {
+      router.replace({ pathname: '/business-profile/[id]', params: { id: id ?? business.id } } as never);
+    }
+  }, [profileLoading, business, isOwner, id, router]);
 
   useEffect(() => {
     let prev: number | null = null;
@@ -75,8 +102,9 @@ export default function BusinessQRScreen() {
   }, []);
 
   const handleCopy = useCallback(async () => {
+    if (!scanCodeUrl) return;
     try {
-      await Clipboard.setStringAsync(qrUrl);
+      await Clipboard.setStringAsync(scanCodeUrl);
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
@@ -85,18 +113,29 @@ export default function BusinessQRScreen() {
     } catch (e) {
       console.log('[BusinessQR] copy failed', e);
     }
-  }, [qrUrl]);
+  }, [scanCodeUrl]);
 
   const handleShare = useCallback(async () => {
+    if (!scanCodeUrl) return;
     try {
       await Share.share({
-        message: `Subscribe to ${business.name} on TouchPoint and start earning rewards: ${qrUrl}`,
-        url: Platform.OS === 'ios' ? qrUrl : undefined,
+        message: `Subscribe to ${business?.name ?? 'us'} on TouchPoint and start earning rewards: ${scanCodeUrl}`,
+        url: Platform.OS === 'ios' ? scanCodeUrl : undefined,
       });
     } catch (e) {
       console.log('[BusinessQR] share failed', e);
     }
-  }, [business.name, qrUrl]);
+  }, [business?.name, scanCodeUrl]);
+
+  // While resolving profile/ownership, or bouncing a non-owner, show a spinner rather than any QR.
+  if (profileLoading || !business || !isOwner) {
+    return (
+      <View style={styles.loaderRoot} testID="business-qr-loading">
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color={INDIGO} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root} testID="business-qr-screen">
@@ -123,16 +162,17 @@ export default function BusinessQRScreen() {
       >
         <Text style={styles.eyebrow}>SHOW THIS AT YOUR COUNTER</Text>
         <Text style={styles.lead}>
-          Customers scan to subscribe and start earning {business.welcomePoints} welcome points.
+          Customers scan to subscribe and start earning {welcomePoints} welcome points.
         </Text>
 
         <View style={styles.cardWrap}>
           <BusinessQRCard
             businessId={id ?? business.id}
             businessName={business.name}
-            businessLogo={business.logo}
-            category={business.category}
+            businessLogo={business.logo_url ?? ''}
+            category={business.category_name ?? undefined}
             qrSize={260}
+            qrUrl={scanCodeUrl ?? undefined}
             onShare={handleShare}
           />
         </View>
@@ -140,7 +180,7 @@ export default function BusinessQRScreen() {
         <View style={styles.linkBox}>
           <Text style={styles.linkLabel}>Public link</Text>
           <Text style={styles.linkValue} numberOfLines={1} testID="business-qr-link">
-            {qrUrl}
+            {scanCodeUrl ?? '…'}
           </Text>
           <View style={styles.linkActions}>
             <TouchableOpacity
@@ -188,6 +228,7 @@ export default function BusinessQRScreen() {
 }
 
 const styles = StyleSheet.create({
+  loaderRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F5FB' },
   root: { flex: 1, backgroundColor: '#F4F5FB' },
   headerSafe: { backgroundColor: '#FFFFFF' },
   header: {

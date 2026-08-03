@@ -14,19 +14,6 @@ export interface RewardConfig {
   updated_at: string;
 }
 
-export interface RewardTier {
-  id: string;
-  business_id: string;
-  name: string;
-  min_points: number;
-  max_points: number | null;
-  color: string | null;
-  icon: string | null;
-  perks: string[];
-  sort_order: number;
-  is_deleted: boolean;
-}
-
 export interface RewardItem {
   id: string;
   business_id: string;
@@ -42,7 +29,6 @@ export interface RewardItem {
 
 export interface RewardConfigFull {
   config: RewardConfig | null;
-  tiers: RewardTier[];
   rewards: RewardItem[];
 }
 
@@ -52,13 +38,6 @@ export interface UpsertConfigPayload {
   share_points?: number;
   purchase_enabled?: boolean;
   points_per_rupee?: number;
-}
-
-export interface CreateTierPayload {
-  name: string;
-  min_points: number;
-  color?: string;
-  perks?: string[];
 }
 
 export interface CreateRewardPayload {
@@ -82,23 +61,6 @@ export async function upsertRewardConfig(
   const result = await apiClient.put<{ config: RewardConfig }>(`/reward-config/${businessId}`, payload);
   if (!result.success) throw new Error(result.error ?? 'Failed to save reward configuration');
   return result.data!.config;
-}
-
-export async function createTier(payload: CreateTierPayload): Promise<RewardTier> {
-  const result = await apiClient.post<{ tier: RewardTier }>('/reward-tiers', payload);
-  if (!result.success) throw new Error(result.error ?? 'Failed to create tier');
-  return result.data!.tier;
-}
-
-export async function updateTier(id: string, payload: Partial<CreateTierPayload>): Promise<RewardTier> {
-  const result = await apiClient.put<{ tier: RewardTier }>(`/reward-tiers/${id}`, payload);
-  if (!result.success) throw new Error(result.error ?? 'Failed to update tier');
-  return result.data!.tier;
-}
-
-export async function deleteTier(id: string): Promise<void> {
-  const result = await apiClient.delete<{ id: string }>(`/reward-tiers/${id}`);
-  if (!result.success) throw new Error(result.error ?? 'Failed to delete tier');
 }
 
 export async function createReward(payload: CreateRewardPayload): Promise<RewardItem> {

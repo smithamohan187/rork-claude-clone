@@ -1,5 +1,7 @@
 // events.service.js — business logic for the events module. No pool.query() calls.
 const eventsModel = require('./events.model');
+const notificationsService = require('../notifications/notifications.service');
+const { getClient } = require('../../config/database');
 
 async function verifyEventOwnership(userId, eventId) {
   const businessId = await eventsModel.getBusinessIdByUserId(userId);
@@ -15,7 +17,29 @@ async function verifyEventOwnership(userId, eventId) {
 async function createEvent(userId, payload) {
   const businessId = await eventsModel.getBusinessIdByUserId(userId);
   if (!businessId) throw new Error('No business found for this user');
-  return eventsModel.insertEvent({ ...payload, business_id: businessId });
+
+  const client = await getClient();
+  let event;
+  try {
+    await client.query('BEGIN');
+    event = await eventsModel.insertEvent(client, { ...payload, business_id: businessId });
+
+    const businessName = await eventsModel.getBusinessNameById(client, businessId);
+    await notificationsService.createNotificationsBulk(client, businessId, {
+      type: 'new_event',
+      title: 'New event coming up',
+      body: `${businessName ?? 'A business you follow'} just posted a new event: ${event.title}.`,
+      data: { business_id: businessId, event_id: event.id },
+    });
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return event;
 }
 
 async function listMyEvents(userId, filter) {

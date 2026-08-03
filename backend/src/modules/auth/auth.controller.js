@@ -110,10 +110,11 @@ const sessionHandler = asyncHandler(async (req, res) => {
   try {
     const result = await getSession(req.user.userId);
     return res.status(200).json(ok({
-      user_id:      result.user_id,
-      email:        result.email,
-      phone:        result.phone,
-      profile_id:   result.profile_id,
+      user_id:           result.user_id,
+      email:             result.email,
+      phone:             result.phone,
+      active_profile_id: result.active_profile_id,
+      profile_id:        result.profile_id,
       profile_type: result.profile_type,
       display_name: result.display_name,
       avatar_url:   result.avatar_url,

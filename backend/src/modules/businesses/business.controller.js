@@ -5,9 +5,10 @@ const {
   uploadBusinessCoverPhoto,
   completeOnboarding,
   getPublicBusinessProfile,
+  getBusinessScanCode,
   fetchDashboardSummary,
 } = require('./business.service');
-const { ok } = require('../../utils/apiResponse');
+const { ok, fail } = require('../../utils/apiResponse');
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -62,6 +63,22 @@ const getBusinessProfileHandler = asyncHandler(async (req, res) => {
   return res.status(200).json(ok({ business }));
 });
 
+/**
+ * GET /businesses/:id/scan-code — owner-only.
+ * Returns the QR deep-link URL for the business. 403 for non-owners, 404 if not found.
+ */
+const getScanCodeHandler = asyncHandler(async (req, res) => {
+  try {
+    const result = await getBusinessScanCode(req.params.id, req.user.userId);
+    res.status(200).json(ok(result));
+  } catch (err) {
+    if (err.status === 403 || err.status === 404) {
+      return res.status(err.status).json(fail(err.message));
+    }
+    throw err;
+  }
+});
+
 const getDashboardSummaryHandler = asyncHandler(async (req, res) => {
   const summary = await fetchDashboardSummary(req.user.userId);
   if (!summary) return res.status(404).json({ success: false, data: null, error: 'Business not found' });
@@ -75,5 +92,6 @@ module.exports = {
   uploadPhotoHandler,
   completeOnboardingHandler,
   getBusinessProfileHandler,
+  getScanCodeHandler,
   getDashboardSummaryHandler,
 };

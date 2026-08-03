@@ -33,24 +33,25 @@ import {
   ChevronDown,
   PlusCircle,
   ClipboardEdit,
+  Heart,
+  MessageCircle,
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
-import { useCoupons } from '@/contexts/CouponContext';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusinessDashboard } from '@/hooks/useBusinessDashboard';
+import { useRecentActivity } from '@/hooks/useRecentActivity';
+import { useRecentRedemptions } from '@/hooks/useRecentRedemptions';
+import type { RecentActivityItem, ActivityType } from '@/api/services/dashboardFeedService';
 import {
   dashboardStats,
   quickActions,
-  recentActivity,
 } from '@/mocks/businessDashboard';
 import type {
   DashboardStat,
   QuickAction,
-  ActivityItem,
-  ActivityType,
 } from '@/mocks/businessDashboard';
 
 const PURPLE = '#1A5C35';
@@ -79,8 +80,10 @@ const BUSINESS_UNREAD_MESSAGES = 2;
 
 const ACTIVITY_CONFIG: Record<ActivityType, { color: string; icon: typeof UserPlus }> = {
   subscriber: { color: '#22C55E', icon: UserPlus },
-  points: { color: PURPLE, icon: Zap },
   redemption: { color: '#E5A100', icon: Gift },
+  like: { color: '#EF4444', icon: Heart },
+  comment: { color: '#3B82F6', icon: MessageCircle },
+  referral: { color: PURPLE, icon: UserPlus },
 };
 
 function getGreeting(): string {
@@ -88,6 +91,20 @@ function getGreeting(): string {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+function timeAgo(timestamp: string): string {
+  const then = new Date(timestamp).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffMs = Date.now() - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+  return format(new Date(then), 'dd MMM');
 }
 
 const StatCard = React.memo(function StatCard({ stat, onPress }: { stat: DashboardStat; onPress?: () => void }) {
@@ -165,18 +182,18 @@ const QuickActionButton = React.memo(function QuickActionButton({
   );
 });
 
-const ActivityRow = React.memo(function ActivityRow({ item }: { item: ActivityItem }) {
-  const config = ACTIVITY_CONFIG[item.type];
+const ActivityRow = React.memo(function ActivityRow({ item }: { item: RecentActivityItem }) {
+  const config = ACTIVITY_CONFIG[item.type] ?? ACTIVITY_CONFIG.subscriber;
   const IconComp = config.icon;
 
   return (
-    <View style={styles.activityRow} testID={`activity-${item.id}`}>
+    <View style={styles.activityRow} testID={`activity-${item.referenceId}`}>
       <View style={[styles.activityDot, { backgroundColor: config.color + '20' }]}>
         <IconComp size={14} color={config.color} />
       </View>
       <View style={styles.activityContent}>
-        <Text style={styles.activityDesc} numberOfLines={2}>{item.description}</Text>
-        <Text style={styles.activityTime}>{item.timeAgo}</Text>
+        <Text style={styles.activityDesc} numberOfLines={2}>{item.message}</Text>
+        <Text style={styles.activityTime}>{timeAgo(item.timestamp)}</Text>
       </View>
     </View>
   );
@@ -185,8 +202,9 @@ const ActivityRow = React.memo(function ActivityRow({ item }: { item: ActivityIt
 export default function BusinessDashboard() {
   const { authUser, activeProfile, profiles } = useAuth();
   const router = useRouter();
-  const { coupons } = useCoupons();
   const { summary, loading: statsLoading, refresh: refreshStats, businessId } = useBusinessDashboard();
+  const activity = useRecentActivity();
+  const redemptions = useRecentRedemptions();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const hasMultipleProfiles = profiles.length > 1;
@@ -195,31 +213,6 @@ export default function BusinessDashboard() {
     if (!businessId) return;
     router.push({ pathname: '/business-profile/[id]', params: { id: businessId } } as never);
   }, [router, businessId]);
-
-  const bizId = businessId ?? '';
-
-  const redemptionStats = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const startTs = start.getTime();
-    const todays = coupons.filter(
-      (c) =>
-        c.status === 'used' &&
-        c.scannedByBusinessId === bizId &&
-        (c.usedAt ?? 0) >= startTs
-    );
-    const pts = todays.reduce((s, c) => s + (c.pointsDeducted ?? 0), 0);
-    return { count: todays.length, points: pts };
-  }, [coupons, bizId]);
-
-  const recentRedemptions = useMemo(() => {
-    return coupons
-      .filter(
-        (c) => c.status === 'used' && c.scannedByBusinessId === bizId
-      )
-      .sort((a, b) => (b.usedAt ?? 0) - (a.usedAt ?? 0))
-      .slice(0, 10);
-  }, [coupons, bizId]);
 
   const greeting = useMemo(() => getGreeting(), []);
   const businessName = activeProfile?.displayName || authUser?.name || 'Business';
@@ -236,15 +229,27 @@ export default function BusinessDashboard() {
       if (stat.id === 'events') {
         return { ...stat, value: placeholder ?? String(summary?.upcoming_event_count ?? 0) };
       }
+      if (stat.id === 'coupons') {
+        return { ...stat, value: placeholder ?? String(summary?.total_redemption_count ?? 0) };
+      }
       return stat;
     });
   }, [summary, statsLoading]);
 
+  const todaySummary = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const startTs = start.getTime();
+    const todays = redemptions.items.filter((r) => new Date(r.redeemedAt).getTime() >= startTs);
+    const pts = todays.reduce((s, r) => s + (r.pointsCost ?? 0), 0);
+    return { count: todays.length, points: pts };
+  }, [redemptions.items]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshStats();
+    await Promise.all([refreshStats(), activity.refresh(), redemptions.refresh()]);
     setRefreshing(false);
-  }, [refreshStats]);
+  }, [refreshStats, activity, redemptions]);
 
   const handleActionPress = useCallback((action: QuickAction) => {
     console.log('[BusinessDashboard] Quick action pressed:', action.id);
@@ -376,18 +381,36 @@ export default function BusinessDashboard() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <Pressable style={styles.seeAllBtn} hitSlop={8}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={14} color={PURPLE} />
-          </Pressable>
         </View>
         <View style={styles.activityCard}>
-          {recentActivity.map((item, index) => (
-            <React.Fragment key={item.id}>
-              <ActivityRow item={item} />
-              {index < recentActivity.length - 1 && <View style={styles.activityDivider} />}
-            </React.Fragment>
-          ))}
+          {activity.items.length === 0 ? (
+            <View style={styles.redemptionEmpty}>
+              <Text style={styles.redemptionEmptyText}>
+                {activity.loading ? 'Loading activity…' : 'No recent activity yet.'}
+              </Text>
+            </View>
+          ) : (
+            <>
+              {activity.items.map((item, index) => (
+                <React.Fragment key={item.referenceId}>
+                  <ActivityRow item={item} />
+                  {index < activity.items.length - 1 && <View style={styles.activityDivider} />}
+                </React.Fragment>
+              ))}
+              {activity.hasMore && (
+                <Pressable
+                  style={styles.loadMoreBtn}
+                  onPress={activity.loadMore}
+                  disabled={activity.loadingMore}
+                  testID="activity-load-more"
+                >
+                  <Text style={styles.loadMoreText}>
+                    {activity.loadingMore ? 'Loading…' : 'Load more'}
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          )}
         </View>
 
         <View style={styles.sectionHeader}>
@@ -409,26 +432,28 @@ export default function BusinessDashboard() {
         <View style={styles.redemptionsCard}>
           <View style={styles.redemptionSummaryRow}>
             <View style={styles.redemptionSummaryCell}>
-              <Text style={styles.redemptionSummaryVal}>{redemptionStats.count}</Text>
+              <Text style={styles.redemptionSummaryVal}>{todaySummary.count}</Text>
               <Text style={styles.redemptionSummaryLabel}>Today's redemptions</Text>
             </View>
             <View style={styles.redemptionSummaryDivider} />
             <View style={styles.redemptionSummaryCell}>
-              <Text style={styles.redemptionSummaryVal}>{redemptionStats.points}</Text>
+              <Text style={styles.redemptionSummaryVal}>{todaySummary.points}</Text>
               <Text style={styles.redemptionSummaryLabel}>Points redeemed today</Text>
             </View>
           </View>
 
-          {recentRedemptions.length === 0 ? (
+          {redemptions.items.length === 0 ? (
             <View style={styles.redemptionEmpty}>
               <Text style={styles.redemptionEmptyText}>
-                No redemptions yet. Tap "Scan coupon" to get started.
+                {redemptions.loading
+                  ? 'Loading redemptions…'
+                  : 'No redemptions yet. Tap "Scan coupon" to get started.'}
               </Text>
             </View>
           ) : (
             <View>
-              {recentRedemptions.map((c, idx) => {
-                const initials = (c.customerName ?? 'CU')
+              {redemptions.items.map((r, idx) => {
+                const initials = (r.customerName ?? 'CU')
                   .split(' ')
                   .map((w) => w[0])
                   .filter(Boolean)
@@ -436,33 +461,46 @@ export default function BusinessDashboard() {
                   .join('')
                   .toUpperCase();
                 return (
-                  <React.Fragment key={c.id}>
+                  <React.Fragment key={r.referenceId}>
                     <View style={styles.redemptionRow}>
                       <View style={styles.redemptionAvatar}>
                         <Text style={styles.redemptionAvatarText}>{initials || 'CU'}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.redemptionName} numberOfLines={1}>
-                          {c.customerName ?? 'Customer'}
+                          {r.customerName ?? 'Customer'}
                         </Text>
                         <Text style={styles.redemptionReward} numberOfLines={1}>
-                          {c.rewardTitle}
+                          {r.rewardName}
                         </Text>
-                        <Text style={styles.redemptionCode}>{c.couponCode}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.redemptionPoints}>−{c.pointsDeducted} pts</Text>
+                        {r.pointsCost != null && (
+                          <Text style={styles.redemptionPoints}>−{r.pointsCost} pts</Text>
+                        )}
                         <Text style={styles.redemptionTime}>
-                          {c.usedAt ? format(new Date(c.usedAt), 'dd MMM, hh:mm a') : '—'}
+                          {r.redeemedAt ? format(new Date(r.redeemedAt), 'dd MMM, hh:mm a') : '—'}
                         </Text>
                       </View>
                     </View>
-                    {idx < recentRedemptions.length - 1 && (
+                    {idx < redemptions.items.length - 1 && (
                       <View style={styles.activityDivider} />
                     )}
                   </React.Fragment>
                 );
               })}
+              {redemptions.hasMore && (
+                <Pressable
+                  style={styles.loadMoreBtn}
+                  onPress={redemptions.loadMore}
+                  disabled={redemptions.loadingMore}
+                  testID="redemptions-load-more"
+                >
+                  <Text style={styles.loadMoreText}>
+                    {redemptions.loadingMore ? 'Loading…' : 'Load more'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
         </View>
@@ -984,6 +1022,16 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
     color: '#8E8E9A',
     marginTop: 2,
+  },
+  loadMoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  loadMoreText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: PURPLE,
   },
   redemptionEmpty: {
     paddingHorizontal: 20,

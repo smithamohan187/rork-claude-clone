@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getClient } = require('../../config/database');
 const couponsModel = require('./coupons.model');
 const subscriptionModel = require('../subscriptions/subscription.model');
+const notificationsService = require('../notifications/notifications.service');
 
 async function getRedeemableRewards(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
@@ -77,6 +78,14 @@ async function redeemReward(userId, businessId, rewardId) {
       businessId,
       couponId: coupon.id,
       pointsCost: reward.points_required,
+    });
+
+    await notificationsService.createNotification(client, {
+      profileId,
+      type: 'reward_redeemed',
+      title: 'Reward redeemed',
+      body: `You redeemed ${reward.name} at ${reward.business_name}.`,
+      data: { business_id: businessId, coupon_id: coupon.id, reward_id: rewardId },
     });
 
     await client.query('COMMIT');

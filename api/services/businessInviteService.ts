@@ -1,36 +1,15 @@
 import { apiClient } from '@/api/client';
 
-export type InviteContactMethod = 'sms' | 'email' | 'whatsapp' | 'link';
-export type InviteStatus = 'pending' | 'sent' | 'converted' | 'expired';
-
-export interface BusinessInvite {
-  id: string;
-  inviter_profile_id: string;
-  business_name: string;
-  contact_name: string | null;
-  contact_method: InviteContactMethod;
-  contact_value: string | null;
-  status: InviteStatus;
-  is_lead: boolean;
-  invite_code: string;
-  created_at: string;
-  converted_at: string | null;
-  converted_business_id: string | null;
+export interface MyBusinessReferral {
+  code: string;
+  url: string;
 }
 
-export interface CreateInvitePayload {
-  business_name: string;
-  contact_name?: string;
-  contact_method: InviteContactMethod;
-  contact_value?: string;
-}
-
-export async function createBusinessInvite(payload: CreateInvitePayload): Promise<BusinessInvite | null> {
-  const res = await apiClient.post('/marketplace/invite-business', payload);
-  return res.data.data?.invite ?? null;
-}
-
-export async function getBusinessInvites(): Promise<BusinessInvite[]> {
-  const res = await apiClient.get('/marketplace/invite-business');
-  return res.data.data?.invites ?? [];
+// Permanent, reusable, per-profile business-referral code — the caller's own personal link for
+// inviting businesses. Get-or-create: same code/url on every call. Works for either a personal or
+// business active profile.
+export async function getMyBusinessReferralCode(): Promise<MyBusinessReferral> {
+  const res = await apiClient.get<MyBusinessReferral>('/marketplace/my-referral-code');
+  if (!res.success) throw new Error(res.error ?? 'Failed to load referral link');
+  return res.data!;
 }

@@ -78,6 +78,7 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useSavedBusiness } from '@/hooks/useSavedBusiness';
+import { useBusinessScanCode } from '@/hooks/useBusinessScanCode';
 import MembersTab from '@/components/MembersTab';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -219,6 +220,10 @@ export default function BusinessProfileScreen() {
     () => !!authUser && !!realBusiness && authUser.id === realBusiness.owner_user_id,
     [authUser, realBusiness],
   );
+  // Owner-only QR deep link — single source of truth, fetched from the backend.
+  const { url: scanCodeUrl } = useBusinessScanCode(id ?? '', isOwner);
+  // Public-facing welcome-points value — always the configured reward_config value, never hardcoded.
+  const welcomePointsValue = rewardData?.config?.welcome_bonus_points ?? 0;
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
@@ -682,7 +687,7 @@ export default function BusinessProfileScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Gift size={16} color={ACCENT} />
-            <Text style={styles.statValue}>{business.welcomePoints}</Text>
+            <Text style={styles.statValue}>{welcomePointsValue}</Text>
             <Text style={styles.statLabel}>Welcome Pts</Text>
           </View>
         </View>
@@ -732,8 +737,10 @@ export default function BusinessProfileScreen() {
                 router.push({
                   pathname: '/chat-detail/[id]',
                   params: {
-                    id: id ?? business.id,
-                    businessName: business.name,
+                    id: realBusiness?.profile_id ?? business.id,
+                    targetProfileId: realBusiness?.profile_id,
+                    type: 'business',
+                    name: business.name,
                     businessInitials: business.name.slice(0, 2).toUpperCase(),
                     businessColor: ACCENT,
                   },
@@ -835,37 +842,6 @@ export default function BusinessProfileScreen() {
           userRating={rating.userRating}
           onRatePress={handleOpenRatingSheet}
         />
-
-        <View style={styles.rewardTierSection}>
-          <View style={styles.rewardTierHeader}>
-            <Gift size={16} color={ACCENT} />
-            <Text style={styles.rewardTierTitle}>Reward Tiers</Text>
-          </View>
-          <View style={styles.tierTrack}>
-            <View style={styles.tierLine} />
-            {rewardLoading ? (
-              <ActivityIndicator size="small" color={ACCENT} />
-            ) : (rewardData?.tiers ?? []).length === 0 ? (
-              <Text style={styles.tierPoints}>No tiers configured yet</Text>
-            ) : (
-              (rewardData?.tiers ?? []).map((tier) => (
-                <View key={tier.id} style={styles.tierNode}>
-                  <View style={[styles.tierCircle, { backgroundColor: tier.color ?? '#9CA3AF' }]}>
-                    {tier.icon ? (
-                      <Text style={styles.tierEmoji}>{tier.icon}</Text>
-                    ) : (
-                      <Text style={styles.tierEmoji}>{tier.name.charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                  <Text style={styles.tierName}>{tier.name}</Text>
-                  <Text style={styles.tierPoints}>
-                    {tier.min_points === 0 ? 'Start' : `${formatNumber(tier.min_points)} pts`}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
-        </View>
 
         {(() => {
           const cfg = rewardData?.config;
@@ -992,10 +968,12 @@ export default function BusinessProfileScreen() {
               businessLogo={business.logo}
               category={business.category}
               qrSize={200}
+              qrUrl={scanCodeUrl ?? undefined}
               onExpand={() => router.push({ pathname: '/business-qr/[id]', params: { id: id ?? business.id } } as never)}
               onShare={async () => {
                 try {
-                  const url = `https://touchpoint.app/b/${encodeURIComponent(id ?? business.id)}`;
+                  const url = scanCodeUrl;
+                  if (!url) return;
                   await Share.share({
                     message: `Subscribe to ${business.name} on TouchPoint and start earning rewards: ${url}`,
                     url: Platform.OS === 'ios' ? url : undefined,
@@ -1066,7 +1044,7 @@ export default function BusinessProfileScreen() {
                     Subscribe to {business.name}
                   </Text>
                   <Text style={styles.subscribeBannerSub} numberOfLines={1}>
-                    Earn {business.welcomePoints} welcome points
+                    Earn {welcomePointsValue} welcome points
                   </Text>
                 </View>
               </View>
@@ -3425,78 +3403,6 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
     color: '#1F2937',
     marginTop: 2,
-  },
-  rewardTierSection: {
-    marginTop: 24,
-    marginHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
-  rewardTierHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 20,
-  },
-  rewardTierTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: '#1F2937',
-  },
-  tierTrack: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    position: 'relative',
-    paddingHorizontal: 10,
-  },
-  tierLine: {
-    position: 'absolute',
-    top: 24,
-    left: 40,
-    right: 40,
-    height: 3,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-  },
-  tierNode: {
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 1,
-  },
-  tierCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-  },
-  tierEmoji: {
-    fontSize: 20,
-  },
-  tierName: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#374151',
-  },
-  tierPoints: {
-    fontSize: 11,
-    fontWeight: '500' as const,
-    color: '#9CA3AF',
   },
   earnCard: {
     marginTop: 14,

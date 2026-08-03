@@ -22,9 +22,11 @@ export interface ShareRecipientResult {
 }
 
 export interface ResolvedShareReferral {
-  // 'business' is returned when the code belongs to a customer invite (Invite Customers),
-  // not a content-share — resolved via the same /s/<code> link shape.
-  content_type: ShareContentType | 'business';
+  // 'business' is returned when the code belongs to a customer invite (Invite Customers).
+  // 'app_referral' is returned when the code belongs to an app-level Invite Friends referral.
+  // 'business_invite' is returned when the code belongs to an Invite-a-Business referral.
+  // None of these are content-shares — all resolved via the same /s/<code> link shape.
+  content_type: ShareContentType | 'business' | 'app_referral' | 'business_invite';
   content_id: string;
   business_id: string;
   route: string;      // e.g. '/view-post' or '/business-profile/[id]'
@@ -53,4 +55,26 @@ export async function resolveShareReferral(referral_code: string): Promise<Resol
     { referral_code },
   );
   return result.success && result.data ? result.data : null;
+}
+
+// ── Refer an offer to trusted friends via chat ────────────────────────────────
+
+export interface ShareOfferToFriendsResultItem {
+  targetProfileId: string;
+  ok: boolean;
+  conversationId?: string;
+  messageId?: string;
+  error?: string;
+}
+
+export async function shareOfferToFriends(
+  offerId: string,
+  targetProfileIds: string[],
+): Promise<ShareOfferToFriendsResultItem[]> {
+  const result = await apiClient.post<{ results: ShareOfferToFriendsResultItem[] }>(
+    '/feed/share/offer-to-friends',
+    { offerId, targetProfileIds },
+  );
+  if (!result.success) throw new Error(result.error ?? 'Failed to share offer');
+  return result.data!.results ?? [];
 }

@@ -929,7 +929,6 @@ export default function FeedScreen() {
     return [
       { label: 'Explore Businesses', icon: ShoppingBag, route: '/(tabs)/marketplace' },
       { label: 'Invite a Friend', icon: UserPlus, route: '/invite' },
-      { label: 'Invite a new business to join', icon: ShoppingBag, route: '/invite-business' },
       { label: 'My Profile', icon: UserIcon, route: '/(tabs)/profile' },
     ];
   }, [accountType]);

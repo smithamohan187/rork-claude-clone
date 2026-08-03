@@ -158,7 +158,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const data = sessionResult.data as SessionResponse;
     const backendProfiles: BackendProfile[] = data.profiles ?? [];
     setProfiles(backendProfiles.map(toProfileEntry));
-    const aid = data.active_profile_id ?? null;
+    // Fall back to profile_id — in the session query it equals the active profile id
+    // (the JOIN is p.id = u.active_profile_id) — so a missing active_profile_id field
+    // can never null out the state again.
+    const aid = data.active_profile_id ?? (data as { profile_id?: string }).profile_id ?? null;
     if (aid) {
       setActiveProfileId(aid);
       await AsyncStorage.setItem(ACTIVE_PROFILE_ID_KEY, aid);

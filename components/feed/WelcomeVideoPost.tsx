@@ -31,6 +31,7 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/colors';
+import TierBadge from '@/components/TierBadge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 24;
@@ -201,24 +202,15 @@ const welcomeSlides: WelcomeSlide[] = [
 
 const SLIDE_DURATION = TOTAL_CYCLE_MS / welcomeSlides.length;
 
-const TierBadges = React.memo(function TierBadges() {
-  const tiers = [
-    { name: 'Bronze', color: '#CD7F32' },
-    { name: 'Silver', color: '#A8A9AD' },
-    { name: 'Gold', color: '#FFD000' },
-    { name: 'Platinum', color: '#00B246' },
-    { name: 'Diamond', color: '#06B6D4' },
-  ];
+const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
 
+const TierBadges = React.memo(function TierBadges() {
   return (
     <View style={tierStyles.container}>
-      {tiers.map((tier, i) => (
-        <React.Fragment key={tier.name}>
-          <View style={[tierStyles.badge, { backgroundColor: tier.color + '30', borderColor: tier.color }]}>
-            <View style={[tierStyles.dot, { backgroundColor: tier.color }]} />
-            <Text style={[tierStyles.text, { color: tier.color }]}>{tier.name}</Text>
-          </View>
-          {i < tiers.length - 1 && (
+      {TIER_NAMES.map((name, i) => (
+        <React.Fragment key={name}>
+          <TierBadge tierName={name} size="small" showLabel testID={`onboarding-tier-${name}`} />
+          {i < TIER_NAMES.length - 1 && (
             <ChevronRight size={10} color="rgba(255,255,255,0.4)" />
           )}
         </React.Fragment>
@@ -235,25 +227,6 @@ const tierStyles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 3,
     marginTop: 8,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 3,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  text: {
-    fontSize: 9,
-    fontWeight: '700' as const,
-    letterSpacing: 0.3,
   },
 });
 

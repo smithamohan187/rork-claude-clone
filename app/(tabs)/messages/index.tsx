@@ -6,19 +6,16 @@ import {
   TouchableOpacity,
   Text,
   Platform,
-  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Searchbar, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, MessageSquare, Users, Heart } from 'lucide-react-native';
+import { MessageSquare, Heart } from 'lucide-react-native';
 import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
-import {
-  useReferralChat,
-  formatRelativeTime,
-  getLastMessagePreview,
-  type ReferralChat,
-} from '@/contexts/ReferralChatContext';
+import { useConversations } from '@/hooks/useConversations';
+import { useSubscribedBusinesses, useFriends } from '@/hooks/useChatRosters';
+import type { Conversation } from '@/api/services/chatService';
 
 const ACCENT = '#1A5C35';
 const ACCENT_SOFT = '#E8F5EE';
@@ -30,314 +27,251 @@ const TEXT_MUTED = '#1A5C35';
 
 type SegmentKey = 'businesses' | 'people';
 
-interface Conversation {
-  id: string;
-  businessName: string;
-  businessInitials: string;
-  businessColor: string;
-  lastMessage: string;
-  lastMessageAt: string;
-  unreadCount: number;
-  lastSenderType: 'business' | 'customer';
+interface BusinessRow {
+  key: string;
+  businessId: string;
+  targetProfileId: string;
+  name: string;
+  initials: string;
+  color: string;
+  preview: string | null;
+  time: string | null;
+  unread: number;
+  isYou: boolean;
 }
 
-interface Broadcast {
-  id: string;
-  businessName: string;
-  businessInitials: string;
-  businessColor: string;
-  title: string;
-  timestamp: string;
-  unread: boolean;
+interface FriendRow {
+  key: string;
+  targetProfileId: string;
+  name: string;
+  initials: string;
+  color: string;
+  preview: string | null;
+  time: string | null;
+  unread: number;
+  isYou: boolean;
 }
 
-const CONVERSATIONS: Conversation[] = [
-  {
-    id: '1',
-    businessName: "Richard's Pastry",
-    businessInitials: 'RP',
-    businessColor: '#1A5C35',
-    lastMessage: 'Yes, the almond croissant is available today!',
-    lastMessageAt: '2 mins ago',
-    unreadCount: 2,
-    lastSenderType: 'business',
-  },
-  {
-    id: '2',
-    businessName: 'Kochi Fitness Hub',
-    businessInitials: 'KF',
-    businessColor: '#0F6E56',
-    lastMessage: 'Thank you for joining our bootcamp!',
-    lastMessageAt: 'Yesterday',
-    unreadCount: 0,
-    lastSenderType: 'business',
-  },
-  {
-    id: '3',
-    businessName: 'The Beauty Lounge',
-    businessInitials: 'BL',
-    businessColor: '#993556',
-    lastMessage: 'Hi, I wanted to ask about your facial offer',
-    lastMessageAt: '3 days ago',
-    unreadCount: 0,
-    lastSenderType: 'customer',
-  },
-];
+const initialsOf = (name: string): string =>
+  (name.trim().split(/\s+/).map((w) => w[0] ?? '').slice(0, 2).join('') || 'C').toUpperCase();
 
-const BROADCASTS: Broadcast[] = [
-  {
-    id: 'b1',
-    businessName: "Richard's Pastry",
-    businessInitials: 'RP',
-    businessColor: '#1A5C35',
-    title: 'Flash sale this evening — 20% off all pastries from 6 PM',
-    timestamp: '1 hour ago',
-    unread: true,
-  },
-  {
-    id: 'b2',
-    businessName: 'Kochi Fitness Hub',
-    businessInitials: 'KF',
-    businessColor: '#0F6E56',
-    title: 'New morning bootcamp slots open at Marine Drive',
-    timestamp: '5 hours ago',
-    unread: false,
-  },
-];
+function formatRelative(iso: string | null): string | null {
+  if (!iso) return null;
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function ChatListScreen() {
   const router = useRouter();
   const [query, setQuery] = useState<string>('');
   const [segment, setSegment] = useState<SegmentKey>('businesses');
 
-  const {
-    chats: peopleChats,
-    getMessages,
-    currentUserId,
-    totalUnread: peopleTotalUnread,
-  } = useReferralChat();
+  const { businesses, loading: bizLoading } = useSubscribedBusinesses();
+  const { friends, loading: friendsLoading } = useFriends();
+  const { conversations: bizConvos } = useConversations('business');
+  const { conversations: friendConvos } = useConversations('friend');
 
-  const filtered = useMemo<Conversation[]>(() => {
+  // Index conversations by the other participant's profile id for O(1) decoration.
+  const bizConvoByProfile = useMemo(() => {
+    const m = new Map<string, Conversation>();
+    bizConvos.forEach((c) => m.set(c.other_profile_id, c));
+    return m;
+  }, [bizConvos]);
+
+  const friendConvoByProfile = useMemo(() => {
+    const m = new Map<string, Conversation>();
+    friendConvos.forEach((c) => m.set(c.other_profile_id, c));
+    return m;
+  }, [friendConvos]);
+
+  const businessRows = useMemo<BusinessRow[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return CONVERSATIONS;
-    return CONVERSATIONS.filter((c) =>
-      c.businessName.toLowerCase().includes(q)
-    );
-  }, [query]);
+    return businesses
+      .map((b) => {
+        const convo = bizConvoByProfile.get(b.business_profile_id);
+        return {
+          key: b.id,
+          businessId: b.id,
+          targetProfileId: b.business_profile_id,
+          name: b.name,
+          initials: initialsOf(b.name),
+          color: ACCENT,
+          preview: convo?.last_message_body ?? null,
+          time: formatRelative(convo?.last_message_at ?? null),
+          unread: convo?.unread_count ?? 0,
+          isYou:
+            !!convo?.last_message_sender_id &&
+            convo.last_message_sender_id !== convo.other_profile_id,
+        };
+      })
+      .filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [businesses, bizConvoByProfile, query]);
 
-  const filteredPeople = useMemo<ReferralChat[]>(() => {
+  const friendRows = useMemo<FriendRow[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return peopleChats;
-    return peopleChats.filter((c) => c.friend.name.toLowerCase().includes(q));
-  }, [peopleChats, query]);
+    return friends
+      .map((f) => {
+        const convo = friendConvoByProfile.get(f.profile_id);
+        return {
+          key: f.profile_id,
+          targetProfileId: f.profile_id,
+          name: f.display_name,
+          initials: initialsOf(f.display_name),
+          color: PURPLE,
+          preview: convo?.last_message_body ?? null,
+          time: formatRelative(convo?.last_message_at ?? null),
+          unread: convo?.unread_count ?? 0,
+          isYou:
+            !!convo?.last_message_sender_id &&
+            convo.last_message_sender_id !== convo.other_profile_id,
+        };
+      })
+      .filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [friends, friendConvoByProfile, query]);
 
-  const openChat = useCallback(
-    (item: Conversation) => {
-      console.log('[ChatList] open chat', item.id);
+  const peopleTotalUnread = useMemo(
+    () => friendConvos.reduce((s, c) => s + (c.unread_count ?? 0), 0),
+    [friendConvos],
+  );
+
+  const openBusiness = useCallback(
+    (row: BusinessRow) => {
       router.push({
         pathname: '/chat-detail/[id]' as never,
         params: {
-          id: item.id,
-          businessName: item.businessName,
-          businessInitials: item.businessInitials,
-          businessColor: item.businessColor,
+          id: row.targetProfileId,
+          targetProfileId: row.targetProfileId,
+          type: 'business',
+          name: row.name,
+          businessColor: row.color,
         },
       } as never);
     },
-    [router]
+    [router],
   );
 
-  const openPeopleChat = useCallback(
-    (chat: ReferralChat) => {
+  const openFriend = useCallback(
+    (row: FriendRow) => {
       router.push({
-        pathname: '/referral-chat/[id]' as never,
-        params: { id: chat.id, source: 'trusted_friends' },
+        pathname: '/chat-detail/[id]' as never,
+        params: {
+          id: row.targetProfileId,
+          targetProfileId: row.targetProfileId,
+          type: 'friend',
+          name: row.name,
+          avatarColor: row.color,
+        },
       } as never);
     },
-    [router]
+    [router],
   );
 
-  const handleExplore = useCallback(() => {
-    router.push('/(tabs)/marketplace' as never);
-  }, [router]);
+  const handleExplore = useCallback(() => router.push('/(tabs)/marketplace' as never), [router]);
+  const handleInviteFriend = useCallback(() => router.push('/my-referrals' as never), [router]);
+  const goToTrustedFriends = useCallback(() => router.push('/my-referrals' as never), [router]);
 
-  const handleInviteFriend = useCallback(() => {
-    router.push('/my-referrals' as never);
-  }, [router]);
-
-  const goToTrustedFriends = useCallback(() => {
-    router.push('/my-referrals' as never);
-  }, [router]);
-
-  const renderItem = useCallback(
-    ({ item }: { item: Conversation }) => (
+  const renderBusiness = useCallback(
+    ({ item }: { item: BusinessRow }) => (
       <TouchableOpacity
-        testID={`chat-row-${item.id}`}
+        testID={`chat-row-${item.key}`}
         style={styles.row}
-        onPress={() => openChat(item)}
+        onPress={() => openBusiness(item)}
         activeOpacity={0.7}
       >
         <View style={styles.avatarWrap}>
-          <View
-            style={[styles.avatar, { backgroundColor: item.businessColor }]}
-          >
-            <Text style={styles.avatarText}>{item.businessInitials}</Text>
+          <View style={[styles.avatar, { backgroundColor: item.color }]}>
+            <Text style={styles.avatarText}>{item.initials}</Text>
           </View>
-          {item.unreadCount > 0 && <View style={styles.avatarDot} />}
+          {item.unread > 0 && <View style={styles.avatarDot} />}
         </View>
         <View style={styles.rowMain}>
           <View style={styles.rowTop}>
             <Text style={styles.name} numberOfLines={1}>
-              {item.businessName}
+              {item.name}
             </Text>
-            <Text style={styles.time}>{item.lastMessageAt}</Text>
+            {item.time && <Text style={styles.time}>{item.time}</Text>}
           </View>
           <View style={styles.rowBottom}>
             <Text style={styles.preview} numberOfLines={1}>
-              {item.lastSenderType === 'customer' && (
-                <Text style={styles.youPrefix}>You: </Text>
+              {item.preview ? (
+                <>
+                  {item.isYou && <Text style={styles.youPrefix}>You: </Text>}
+                  {item.preview}
+                </>
+              ) : (
+                'Tap to start chatting'
               )}
-              {item.lastMessage}
             </Text>
-            {item.unreadCount > 0 ? (
+            {item.unread > 0 ? (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.unreadCount}</Text>
+                <Text style={styles.badgeText}>{item.unread}</Text>
               </View>
             ) : null}
           </View>
         </View>
       </TouchableOpacity>
     ),
-    [openChat]
+    [openBusiness],
   );
 
-  const renderPersonRow = useCallback(
-    ({ item }: { item: ReferralChat }) => {
-      const msgs = getMessages(item.id);
-      const preview = getLastMessagePreview(msgs, currentUserId);
-      const viaLabel =
-        item.contextType === 'business'
-          ? `Via ${item.businessName ?? 'Business'}`
-          : 'Via App';
-      return (
-        <TouchableOpacity
-          testID={`person-row-${item.id}`}
-          style={styles.row}
-          onPress={() => openPeopleChat(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.avatarWrap}>
-            <View
-              style={[styles.avatar, { backgroundColor: item.friend.avatarColor }]}
-            >
-              <Text style={styles.avatarText}>{item.friend.initials}</Text>
-            </View>
-            {item.unreadCount > 0 && <View style={styles.avatarDot} />}
+  const renderFriend = useCallback(
+    ({ item }: { item: FriendRow }) => (
+      <TouchableOpacity
+        testID={`person-row-${item.key}`}
+        style={styles.row}
+        onPress={() => openFriend(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarWrap}>
+          <View style={[styles.avatar, { backgroundColor: item.color }]}>
+            <Text style={styles.avatarText}>{item.initials}</Text>
           </View>
-          <View style={styles.rowMain}>
-            <View style={styles.rowTop}>
-              <View style={styles.nameWrap}>
-                <Heart size={11} color={TEAL} fill={TEAL} />
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.friend.name}
-                </Text>
-              </View>
-              <Text style={styles.time}>
-                {formatRelativeTime(item.lastMessageAt)}
+          {item.unread > 0 && <View style={styles.avatarDot} />}
+        </View>
+        <View style={styles.rowMain}>
+          <View style={styles.rowTop}>
+            <View style={styles.nameWrap}>
+              <Heart size={11} color={TEAL} fill={TEAL} />
+              <Text style={styles.name} numberOfLines={1}>
+                {item.name}
               </Text>
             </View>
-            <View style={styles.viaRow}>
-              <View
-                style={[
-                  styles.viaChip,
-                  item.contextType === 'business'
-                    ? styles.viaChipBiz
-                    : styles.viaChipApp,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.viaChipText,
-                    item.contextType === 'business'
-                      ? styles.viaChipTextBiz
-                      : styles.viaChipTextApp,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {viaLabel}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.rowBottom}>
-              <Text style={styles.preview} numberOfLines={1}>
-                {preview ? (
-                  <>
-                    {preview.isYou && <Text style={styles.youPrefix}>You: </Text>}
-                    {preview.text}
-                  </>
-                ) : (
-                  'Say hi 👋'
-                )}
-              </Text>
-              {item.unreadCount > 0 ? (
-                <View style={[styles.badge, styles.badgeTrusted]}>
-                  <Text style={styles.badgeText}>{item.unreadCount}</Text>
-                </View>
-              ) : null}
-            </View>
+            {item.time && <Text style={styles.time}>{item.time}</Text>}
           </View>
-        </TouchableOpacity>
-      );
-    },
-    [currentUserId, getMessages, openPeopleChat]
-  );
-
-  const ListFooter = useMemo(
-    () => (
-      <View style={styles.broadcastSection}>
-        <Text style={styles.sectionLabel}>FROM BUSINESSES</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.broadcastScroll}
-        >
-          {BROADCASTS.map((b) => (
-            <View key={b.id} style={styles.broadcastCard}>
-              <View style={styles.broadcastHeader}>
-                <View
-                  style={[
-                    styles.broadcastAvatar,
-                    { backgroundColor: b.businessColor },
-                  ]}
-                >
-                  <Text style={styles.broadcastAvatarText}>
-                    {b.businessInitials}
-                  </Text>
-                </View>
-                <Text style={styles.broadcastBiz} numberOfLines={1}>
-                  {b.businessName}
-                </Text>
-                {b.unread && <View style={styles.broadcastDot} />}
+          <View style={styles.rowBottom}>
+            <Text style={styles.preview} numberOfLines={1}>
+              {item.preview ? (
+                <>
+                  {item.isYou && <Text style={styles.youPrefix}>You: </Text>}
+                  {item.preview}
+                </>
+              ) : (
+                'Say hi 👋'
+              )}
+            </Text>
+            {item.unread > 0 ? (
+              <View style={[styles.badge, styles.badgeTrusted]}>
+                <Text style={styles.badgeText}>{item.unread}</Text>
               </View>
-              <Text style={styles.broadcastTitle} numberOfLines={2}>
-                {b.title}
-              </Text>
-              <Text style={styles.broadcastTime}>{b.timestamp}</Text>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
     ),
-    []
+    [openFriend],
   );
 
   const isBusinessSegment = segment === 'businesses';
-  const isEmpty =
-    isBusinessSegment &&
-    filtered.length === 0 &&
-    query.trim().length === 0;
-  const isPeopleEmpty =
-    !isBusinessSegment && filteredPeople.length === 0 && query.trim().length === 0;
+  const isEmpty = isBusinessSegment && !bizLoading && businessRows.length === 0 && query.trim().length === 0;
+  const isPeopleEmpty = !isBusinessSegment && !friendsLoading && friendRows.length === 0 && query.trim().length === 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -354,14 +288,7 @@ export default function ChatListScreen() {
           activeOpacity={0.85}
           testID="segment-businesses"
         >
-          <Text
-            style={[
-              styles.segmentText,
-              isBusinessSegment && styles.segmentTextActive,
-            ]}
-          >
-            Businesses
-          </Text>
+          <Text style={[styles.segmentText, isBusinessSegment && styles.segmentTextActive]}>Businesses</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segmentPill, !isBusinessSegment && styles.segmentPillActive]}
@@ -369,14 +296,7 @@ export default function ChatListScreen() {
           activeOpacity={0.85}
           testID="segment-people"
         >
-          <Text
-            style={[
-              styles.segmentText,
-              !isBusinessSegment && styles.segmentTextActive,
-            ]}
-          >
-            Trusted Friends
-          </Text>
+          <Text style={[styles.segmentText, !isBusinessSegment && styles.segmentTextActive]}>Trusted Friends</Text>
           {peopleTotalUnread > 0 && (
             <View style={styles.segmentBadge}>
               <Text style={styles.segmentBadgeText}>{peopleTotalUnread}</Text>
@@ -388,11 +308,7 @@ export default function ChatListScreen() {
       <View style={styles.searchWrap}>
         <Searchbar
           testID="chat-search"
-          placeholder={
-            isBusinessSegment
-              ? 'Search conversations...'
-              : 'Search referral chats...'
-          }
+          placeholder={isBusinessSegment ? 'Search businesses...' : 'Search friends...'}
           value={query}
           onChangeText={setQuery}
           style={styles.search}
@@ -403,15 +319,17 @@ export default function ChatListScreen() {
       </View>
 
       {isBusinessSegment ? (
-        isEmpty ? (
+        bizLoading && businessRows.length === 0 ? (
+          <View style={styles.loadingFill}>
+            <ActivityIndicator color={ACCENT} />
+          </View>
+        ) : isEmpty ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
               <MessageSquare size={36} color={ACCENT} />
             </View>
             <Text style={styles.emptyTitle}>No messages yet</Text>
-            <Text style={styles.emptySub}>
-              Subscribe to a business to start chatting
-            </Text>
+            <Text style={styles.emptySub}>Subscribe to a business to start chatting</Text>
             <Button
               mode="contained"
               onPress={handleExplore}
@@ -424,29 +342,30 @@ export default function ChatListScreen() {
           </View>
         ) : (
           <FlatList
-            data={filtered}
-            keyExtractor={(it) => it.id}
-            renderItem={renderItem}
+            data={businessRows}
+            keyExtractor={(it) => it.key}
+            renderItem={renderBusiness}
             ItemSeparatorComponent={() => <View style={styles.sep} />}
             contentContainerStyle={styles.listContent}
-            ListFooterComponent={ListFooter}
             ListEmptyComponent={
               <View style={styles.noResults}>
-                <Text style={styles.emptyTitle}>No conversations found</Text>
+                <Text style={styles.emptyTitle}>No businesses found</Text>
                 <Text style={styles.emptySub}>Try a different search term</Text>
               </View>
             }
           />
         )
+      ) : friendsLoading && friendRows.length === 0 ? (
+        <View style={styles.loadingFill}>
+          <ActivityIndicator color={PURPLE} />
+        </View>
       ) : isPeopleEmpty ? (
         <View style={styles.empty}>
           <View style={[styles.emptyIcon, { backgroundColor: '#CCFBF1' }]}>
             <Heart size={36} color={TEAL} fill={TEAL} />
           </View>
           <Text style={styles.emptyTitle}>No friend chats yet</Text>
-          <Text style={styles.emptySub}>
-            Start a conversation from your Trusted Friends list.
-          </Text>
+          <Text style={styles.emptySub}>Start a conversation from your Trusted Friends list.</Text>
           <TouchableOpacity
             onPress={goToTrustedFriends}
             activeOpacity={0.7}
@@ -467,9 +386,9 @@ export default function ChatListScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredPeople}
-          keyExtractor={(it) => it.id}
-          renderItem={renderPersonRow}
+          data={friendRows}
+          keyExtractor={(it) => it.key}
+          renderItem={renderFriend}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
@@ -502,18 +421,7 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
     letterSpacing: -0.2,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: ACCENT_SOFT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerSpacer: {
-    width: 36,
-    height: 36,
-  },
+  headerSpacer: { width: 36, height: 36 },
   segmentWrap: {
     flexDirection: 'row',
     backgroundColor: '#F1EFE8',
@@ -531,18 +439,9 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 20,
   },
-  segmentPillActive: {
-    backgroundColor: ACCENT,
-  },
-  segmentText: {
-    fontSize: 12,
-    color: '#888780',
-    fontWeight: '600',
-  },
-  segmentTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
+  segmentPillActive: { backgroundColor: ACCENT },
+  segmentText: { fontSize: 12, color: '#888780', fontWeight: '600' },
+  segmentTextActive: { color: '#ffffff', fontWeight: '700' },
   segmentBadge: {
     minWidth: 18,
     height: 18,
@@ -552,27 +451,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentBadgeText: {
-    color: ACCENT,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  searchWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
-  },
+  segmentBadgeText: { color: ACCENT, fontSize: 10, fontWeight: '700' },
+  searchWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
   search: {
     backgroundColor: '#F1EFE8',
     borderRadius: 12,
     ...(Platform.OS === 'web' ? { boxShadow: 'none' as const } : null),
   },
-  searchInput: {
-    fontSize: 14,
-    color: TEXT_DARK,
-    minHeight: 0,
-  },
+  searchInput: { fontSize: 14, color: TEXT_DARK, minHeight: 0 },
   listContent: { paddingBottom: 40 },
+  loadingFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -582,19 +470,8 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   avatarWrap: { position: 'relative' },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
+  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
   avatarDot: {
     position: 'absolute',
     top: -1,
@@ -607,57 +484,12 @@ const styles = StyleSheet.create({
     borderColor: BG,
   },
   rowMain: { flex: 1, gap: 4 },
-  rowTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  name: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_DARK,
-  },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  name: { flex: 1, fontSize: 14, fontWeight: '700', color: TEXT_DARK },
   time: { fontSize: 11, color: TEXT_MUTED, fontWeight: '500' },
-  rowBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  preview: {
-    flex: 1,
-    fontSize: 12,
-    color: TEXT_MUTED,
-    marginRight: 8,
-  },
+  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  preview: { flex: 1, fontSize: 12, color: TEXT_MUTED, marginRight: 8 },
   youPrefix: { color: ACCENT, fontWeight: '600' },
-  viaRow: {
-    flexDirection: 'row',
-    marginBottom: 2,
-  },
-  viaChip: {
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  viaChipApp: {
-    backgroundColor: ACCENT_SOFT,
-  },
-  viaChipBiz: {
-    backgroundColor: '#E1F5EE',
-  },
-  viaChipText: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  viaChipTextApp: {
-    color: ACCENT,
-  },
-  viaChipTextBiz: {
-    color: '#0F6E56',
-  },
   badge: {
     minWidth: 18,
     height: 18,
@@ -667,112 +499,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeTrusted: {
-    backgroundColor: PURPLE,
-  },
-  nameWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginRight: 8,
-  },
-  emptyTextBtn: {
-    marginTop: 14,
-  },
-  emptyTextBtnText: {
-    color: PURPLE,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  sep: {
-    height: 0.5,
-    backgroundColor: '#F0EFF8',
-    marginLeft: 74,
-  },
-  broadcastSection: {
-    marginTop: 16,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: TEXT_MUTED,
-    letterSpacing: 0.8,
-    marginHorizontal: 16,
-    marginBottom: 10,
-  },
-  broadcastScroll: {
-    paddingHorizontal: 16,
-    gap: 10,
-    paddingBottom: 8,
-  },
-  broadcastCard: {
-    width: 200,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 0.5,
-    borderColor: '#E8F5EE',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 10,
-  },
-  broadcastHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  broadcastAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  broadcastAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  broadcastBiz: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: TEXT_DARK,
-  },
-  broadcastDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: ACCENT,
-  },
-  broadcastTitle: {
-    fontSize: 13,
-    color: TEXT_DARK,
-    lineHeight: 18,
-    marginBottom: 8,
-  },
-  broadcastTime: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 8,
-  },
-  noResults: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 40,
-    gap: 8,
-  },
+  badgeTrusted: { backgroundColor: PURPLE },
+  nameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 8 },
+  emptyTextBtn: { marginTop: 14 },
+  emptyTextBtnText: { color: PURPLE, fontSize: 13, fontWeight: '700' },
+  badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  sep: { height: 0.5, backgroundColor: '#F0EFF8', marginLeft: 74 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 8 },
+  noResults: { alignItems: 'center', paddingHorizontal: 40, paddingVertical: 40, gap: 8 },
   emptyIcon: {
     width: 80,
     height: 80,
@@ -782,22 +516,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_DARK,
-  },
-  emptySub: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-  },
-  emptyBtn: {
-    marginTop: 16,
-    borderRadius: 10,
-  },
-  emptyBtnContent: {
-    paddingHorizontal: 8,
-    height: 42,
-  },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: TEXT_DARK },
+  emptySub: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center' },
+  emptyBtn: { marginTop: 16, borderRadius: 10 },
+  emptyBtnContent: { paddingHorizontal: 8, height: 42 },
 });

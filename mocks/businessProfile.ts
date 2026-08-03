@@ -14,6 +14,7 @@ export interface BusinessProfileData {
   address: string;
   hours: string;
   founded: string;
+  updatedAt?: string;
 }
 
 export interface OfferCard {

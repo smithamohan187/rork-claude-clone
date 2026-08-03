@@ -169,7 +169,12 @@ async function getBusinessById(businessId) {
          (SELECT COUNT(*)::int FROM business_reviews
           WHERE business_id = businesses.id),
          0
-       ) AS rating_count
+       ) AS rating_count,
+       COALESCE(
+         (SELECT welcome_bonus_points FROM reward_config
+          WHERE business_id = businesses.id),
+         0
+       ) AS welcome_bonus_points
      FROM businesses
      LEFT JOIN business_categories bc ON bc.id = businesses.category_id
      LEFT JOIN profiles p ON p.id = businesses.profile_id
@@ -266,7 +271,13 @@ async function getDashboardSummary(businessId) {
             AND status != 'cancelled'
             AND starts_at > NOW()),
          0
-       ) AS upcoming_event_count`,
+       ) AS upcoming_event_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM coupons
+          WHERE business_id = $1
+            AND status = 'used'),
+         0
+       ) AS total_redemption_count`,
     [businessId]
   );
   return rows[0];

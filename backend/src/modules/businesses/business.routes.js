@@ -12,6 +12,7 @@ const {
   uploadPhotoHandler,
   completeOnboardingHandler,
   getBusinessProfileHandler,
+  getScanCodeHandler,
   getDashboardSummaryHandler,
 } = require('./business.controller');
 
@@ -28,6 +29,8 @@ const router = Router();
 
 router.get('/me', authenticate, getMyBusinessHandler);
 router.get('/me/dashboard-summary', authenticate, getDashboardSummaryHandler);
+// Owner-only QR deep link — distinct path depth from /:id, no collision
+router.get('/:id/scan-code', authenticate, getScanCodeHandler);
 // Public — no auth — must come after /me so Express doesn't treat 'me' as :id
 router.get('/:id', getBusinessProfileHandler);
 router.post('/register', authenticate, validateRequest(registerBusinessSchema), registerBusinessHandler);

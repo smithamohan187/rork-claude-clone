@@ -1,147 +1,119 @@
-import React, { useCallback, useRef, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Animated,
-  PanResponder,
-  Dimensions,
+  RefreshControl,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   ArrowLeft,
-  Trash2,
   CheckCheck,
   BellOff,
-  Bell,
+  Tag,
+  CalendarDays,
+  Award,
+  Gift,
+  Users,
+  Building2,
+  MessageSquare,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { useNotifications, type NotificationDisplay } from '@/hooks/useNotifications';
+import { useNotifications, type NotificationDisplay, type NotificationType } from '@/hooks/useNotifications';
 
 const PURPLE = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
 const PURPLE_FAINT = '#F7F6FB';
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SWIPE_THRESHOLD = -80;
-const DELETE_WIDTH = 80;
 
-const ICON_CONFIG = { color: '#1A5C35', bg: '#E8F5EE' };
+const TYPE_CONFIG: Record<NotificationType, { icon: typeof Tag; color: string; bg: string }> = {
+  new_offer:           { icon: Tag,          color: '#B8860B', bg: '#FBF3DC' },
+  new_event:           { icon: CalendarDays, color: '#1D4ED8', bg: '#E3EBFD' },
+  points_earned:       { icon: Award,        color: '#1A5C35', bg: '#E8F5EE' },
+  reward_redeemed:     { icon: Gift,         color: '#B91C1C', bg: '#FCE8E8' },
+  referral_joined:     { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
+  customer_subscribed: { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
+  invited_business_joined: { icon: Building2, color: '#0D9488', bg: '#F0FDFA' },
+  new_message:         { icon: MessageSquare, color: '#0D9488', bg: '#F0FDFA' },
+};
+
+function iconConfigFor(type: NotificationType) {
+  return TYPE_CONFIG[type] ?? { icon: Tag, color: PURPLE, bg: '#E8F5EE' };
+}
+
+function routeFor(item: NotificationDisplay): { pathname: string; params?: Record<string, string> } | null {
+  const data = (item.data ?? {}) as Record<string, unknown>;
+  const businessId = typeof data.business_id === 'string' ? data.business_id : undefined;
+
+  switch (item.type) {
+    case 'new_offer':
+      if (typeof data.offer_id === 'string') {
+        return { pathname: '/view-offer', params: { offerId: data.offer_id, businessId: businessId ?? '' } };
+      }
+      return businessId ? { pathname: `/business-profile/${businessId}` } : null;
+    case 'new_event':
+      if (typeof data.event_id === 'string') {
+        return { pathname: '/view-event', params: { eventId: data.event_id, businessId: businessId ?? '' } };
+      }
+      return businessId ? { pathname: `/business-profile/${businessId}` } : null;
+    case 'reward_redeemed':
+      if (typeof data.coupon_id === 'string') {
+        return { pathname: `/coupon/${data.coupon_id}` };
+      }
+      return businessId ? { pathname: `/business-profile/${businessId}` } : null;
+    case 'new_message': {
+      const senderProfileId = typeof data.sender_profile_id === 'string' ? data.sender_profile_id : undefined;
+      const conversationType = typeof data.conversation_type === 'string' ? data.conversation_type : 'friend';
+      if (!senderProfileId) return null;
+      const senderName = item.title.replace(/^New message from /, '') || 'Chat';
+      return {
+        pathname: '/chat-detail/[id]',
+        params: {
+          id: senderProfileId,
+          targetProfileId: senderProfileId,
+          type: conversationType,
+          name: senderName,
+        },
+      };
+    }
+    case 'points_earned':
+    case 'referral_joined':
+    case 'customer_subscribed':
+    case 'invited_business_joined':
+    default:
+      return businessId ? { pathname: `/business-profile/${businessId}` } : null;
+  }
+}
 
 interface NotificationItemProps {
   item: NotificationDisplay;
-  onDismiss: (id: string) => void;
-  onMarkRead: (id: string) => void;
+  onPress: (item: NotificationDisplay) => void;
 }
 
-const NotificationItem = React.memo(function NotificationItem({ item, onDismiss, onMarkRead }: NotificationItemProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const deleteOpacity = useRef(new Animated.Value(0)).current;
-  const rowHeight = useRef(new Animated.Value(1)).current;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx < 0) {
-          translateX.setValue(gestureState.dx);
-          deleteOpacity.setValue(Math.min(1, Math.abs(gestureState.dx) / DELETE_WIDTH));
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx < SWIPE_THRESHOLD) {
-          if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          }
-          Animated.parallel([
-            Animated.timing(translateX, {
-              toValue: -SCREEN_WIDTH,
-              duration: 250,
-              useNativeDriver: true,
-            }),
-            Animated.timing(rowHeight, {
-              toValue: 0,
-              duration: 250,
-              useNativeDriver: false,
-            }),
-          ]).start(() => {
-            onDismiss(item.id);
-          });
-        } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 40,
-            bounciness: 6,
-          }).start();
-          Animated.timing(deleteOpacity, {
-            toValue: 0,
-            duration: 150,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  const handlePress = useCallback(() => {
-    if (!item.isRead) {
-      onMarkRead(item.id);
-    }
-  }, [item.id, item.isRead, onMarkRead]);
+const NotificationItem = React.memo(function NotificationItem({ item, onPress }: NotificationItemProps) {
+  const { icon: Icon, color, bg } = iconConfigFor(item.type);
 
   return (
-    <Animated.View
-      style={[
-        styles.notifRowOuter,
-        {
-          maxHeight: rowHeight.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 200],
-          }),
-          opacity: rowHeight,
-        },
-      ]}
-    >
-      <Animated.View style={[styles.deleteBackground, { opacity: deleteOpacity }]}>
-        <Trash2 size={20} color="#fff" />
-        <Text style={styles.deleteText}>Delete</Text>
-      </Animated.View>
+    <TouchableOpacity activeOpacity={0.8} onPress={() => onPress(item)} style={styles.notifRowOuter}>
+      <View style={[styles.notifCard, !item.isRead && styles.notifCardUnread]}>
+        <View style={[styles.iconWrap, { backgroundColor: bg }]}>
+          <Icon size={20} color={color} />
+        </View>
 
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handlePress}
-      >
-        <Animated.View
-          style={[
-            styles.notifCard,
-            !item.isRead && styles.notifCardUnread,
-            { transform: [{ translateX }] },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <View style={[styles.iconWrap, { backgroundColor: ICON_CONFIG.bg }]}>
-            <Bell size={20} color={ICON_CONFIG.color} />
-          </View>
+        <View style={styles.notifContent}>
+          <Text style={[styles.notifTitle, !item.isRead && styles.notifTitleUnread]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text style={styles.notifDesc} numberOfLines={2}>{item.description}</Text>
+          <Text style={styles.notifTime}>{item.timeAgo}</Text>
+        </View>
 
-          <View style={styles.notifContent}>
-            <Text
-              style={[styles.notifTitle, !item.isRead && styles.notifTitleUnread]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-            <Text style={styles.notifDesc} numberOfLines={2}>{item.description}</Text>
-            <Text style={styles.notifTime}>{item.timeAgo}</Text>
-          </View>
-        </Animated.View>
-      </TouchableOpacity>
-    </Animated.View>
+        {!item.isRead && <View style={styles.unreadDot} />}
+      </View>
+    </TouchableOpacity>
   );
 });
 
@@ -150,14 +122,19 @@ export default function NotificationsScreen() {
   const {
     notifications,
     unreadCount,
+    isLoading,
     markAsRead,
     markAllAsRead,
-    deleteNotification,
+    refetch,
   } = useNotifications();
 
-  const handleDismiss = useCallback((id: string) => {
-    deleteNotification(id);
-  }, [deleteNotification]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const handleMarkAllRead = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -166,9 +143,15 @@ export default function NotificationsScreen() {
     markAllAsRead();
   }, [markAllAsRead]);
 
-  const handleMarkRead = useCallback((id: string) => {
-    markAsRead(id);
-  }, [markAsRead]);
+  const handlePress = useCallback((item: NotificationDisplay) => {
+    if (!item.isRead) {
+      markAsRead(item.id);
+    }
+    const route = routeFor(item);
+    if (route) {
+      router.push(route as never);
+    }
+  }, [markAsRead, router]);
 
   const todayNotifs = useMemo(
     () => notifications.filter(n => n.group === 'today'),
@@ -206,10 +189,10 @@ export default function NotificationsScreen() {
         </View>
       );
     }
-    return <NotificationItem item={item.data} onDismiss={handleDismiss} onMarkRead={handleMarkRead} />;
-  }, [handleDismiss, handleMarkRead]);
+    return <NotificationItem item={item.data} onPress={handlePress} />;
+  }, [handlePress]);
 
-  const isEmpty = notifications.length === 0;
+  const isEmpty = !isLoading && notifications.length === 0;
 
   return (
     <View style={styles.container}>
@@ -263,6 +246,9 @@ export default function NotificationsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={PURPLE} />
+          }
         />
       )}
     </View>
@@ -371,21 +357,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
-  deleteBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#EF4444',
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingRight: 24,
-    gap: 6,
-  },
-  deleteText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
   notifCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -437,6 +408,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500' as const,
     color: '#1A5C35',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2E7D32',
+    marginTop: 6,
   },
   emptyState: {
     flex: 1,

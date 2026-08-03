@@ -44,8 +44,9 @@ import { Modal as RNModal } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { BadgeCard, BadgeDetailModal } from '@/components/badges';
-import { getBadgeForPoints, NO_BADGE_ICON } from '@/config/badgeTiers';
+import { useGlobalRewardTier } from '@/hooks/useGlobalRewardTier';
+import TierBadge, { getTierGradient, getTierIconComponent } from '@/components/TierBadge';
+import TierDetailModal from '@/components/TierDetailModal';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
 import ProfileSwitcherPill from '@/components/ProfileSwitcherPill';
 import ProfileContextBanner from '@/components/ProfileContextBanner';
@@ -67,6 +68,8 @@ export default function UserProfileScreen() {
     }
   })();
   const { authUser, accountType, logout } = useAuth();
+  const { status: tierStatus } = useGlobalRewardTier();
+  const totalPoints = tierStatus.netBalance;
 
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState<boolean>(false);
@@ -88,15 +91,15 @@ export default function UserProfileScreen() {
 
   const memberSince = isBusinessActive ? 'Business since March 2025' : 'Member since January 2025';
 
-  const personalBadge = getBadgeForPoints(0);
-  const personalBadgeIcon = personalBadge?.icon ?? NO_BADGE_ICON;
-  const personalBadgeColor = personalBadge?.colors.text ?? '#A8B0BA';
+  const currentTier = tierStatus.tier;
+  const personalBadgeIcon = currentTier ? getTierIconComponent(currentTier.tier_name) : Shield;
+  const personalBadgeColor = currentTier ? getTierGradient(currentTier.tier_name)[0] : '#A8B0BA';
 
   const personalStats = [
-    { label: 'Total Points', value: (0).toLocaleString(), icon: Star, color: '#F59E0B' },
+    { label: 'Total Points', value: totalPoints.toLocaleString(), icon: Star, color: '#F59E0B' },
     { label: 'Subscribed', value: '7', icon: Store, color: '#0D9488' },
     { label: 'Redeemed', value: '12', icon: Gift, color: '#EC4899' },
-    { label: 'Badge', value: personalBadge ? personalBadge.label : '—', icon: personalBadgeIcon, color: personalBadgeColor },
+    { label: 'Badge', value: currentTier ? currentTier.tier_name : '—', icon: personalBadgeIcon, color: personalBadgeColor },
   ];
 
   const businessStats = [
@@ -211,12 +214,21 @@ export default function UserProfileScreen() {
           })}
         </View>
 
-        {!isBusinessActive && (
-          <BadgeCard
-            points={0}
+        {!isBusinessActive && currentTier && (
+          <TouchableOpacity
+            activeOpacity={0.85}
             onPress={() => setShowBadgeModal(true)}
             testID="profile-badge-card"
-          />
+          >
+            <Surface style={styles.tierCard} elevation={1}>
+              <TierBadge tierName={currentTier.tier_name} size="large" showLabel testID="profile-tier-badge" />
+              <Text style={styles.tierCardHint}>
+                {tierStatus.nextTier
+                  ? `${tierStatus.pointsToNextTier} pts to ${tierStatus.nextTier.tier_name} · Tap to see all tiers`
+                  : 'Top tier reached · Tap to see all tiers'}
+              </Text>
+            </Surface>
+          </TouchableOpacity>
         )}
 
         <Surface style={styles.settingsCard} elevation={1}>
@@ -565,10 +577,12 @@ export default function UserProfileScreen() {
         </View>
       </ScrollView>
 
-      <BadgeDetailModal
+      <TierDetailModal
         visible={showBadgeModal}
         onDismiss={() => setShowBadgeModal(false)}
-        currentPoints={0}
+        tiers={tierStatus.tiers}
+        currentTierId={tierStatus.tier?.id ?? null}
+        netBalance={totalPoints}
       />
 
       <Portal>
@@ -1131,6 +1145,21 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
     color: '#6B7A8D',
     marginTop: 2,
+    textAlign: 'center' as const,
+  },
+  tierCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    paddingVertical: 20,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  tierCardHint: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#6B7A8D',
     textAlign: 'center' as const,
   },
   settingsCard: {

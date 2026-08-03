@@ -113,9 +113,15 @@ export function useSignUp() {
     try {
       // If the user arrived from a deep link, submit the stashed code under the field the backend
       // expects for that code's kind — customer invites link a business, content shares link a
-      // post/offer/event — and remember where to redirect them after signup.
+      // post/offer/event, app referrals link a referring friend — and remember where to redirect
+      // them after signup.
       const pending = await getPendingShareReferral();
       const isCustomerInvite = pending?.content_type === 'business';
+      const isAppReferral = pending?.content_type === 'app_referral';
+      // Business-invite codes resolve at business-registration time, not personal signup — there's
+      // nothing to submit here. The pending referral is deliberately NOT cleared below so it
+      // survives until the user goes through Create Business.
+      const isBusinessInvite = pending?.content_type === 'business_invite';
 
       const payload: SignupPayload = {
         email:         email.trim().toLowerCase(),
@@ -124,8 +130,8 @@ export function useSignUp() {
         phone:         phoneNumber.trim() || undefined,
         location:      location.trim()   || undefined,
         interests:     interests.length  ? interests : undefined,
-        referral_code: referralCode.trim().toUpperCase() || undefined,
-        share_referral_code: isCustomerInvite ? undefined : pending?.referral_code,
+        referral_code: isAppReferral ? pending?.referral_code : (referralCode.trim().toUpperCase() || undefined),
+        share_referral_code: isCustomerInvite || isAppReferral || isBusinessInvite ? undefined : pending?.referral_code,
         customer_invite_code: isCustomerInvite ? pending?.referral_code : undefined,
       };
 
@@ -137,7 +143,9 @@ export function useSignUp() {
           pathname: pending.route,
           params: { [pending.id_param]: pending.content_id, businessId: pending.business_id },
         });
-        await clearPendingShareReferral();
+        if (!isBusinessInvite) {
+          await clearPendingShareReferral();
+        }
       }
       setRegistrationSucceeded(true);
 

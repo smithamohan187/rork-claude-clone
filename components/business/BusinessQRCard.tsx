@@ -26,6 +26,9 @@ interface BusinessQRCardProps {
   onExpand?: () => void;
   onShare?: () => void;
   qrSize?: number;
+  // Backend-provided deep link URL; when supplied it is the source of truth for the encoded QR.
+  // Falls back to the locally-built URL for backward compatibility.
+  qrUrl?: string;
   testID?: string;
 }
 
@@ -37,9 +40,10 @@ function BusinessQRCardComponent({
   onExpand,
   onShare,
   qrSize = 200,
+  qrUrl,
   testID,
 }: BusinessQRCardProps) {
-  const qrValue = buildBusinessQRUrl(businessId);
+  const qrValue = qrUrl ?? buildBusinessQRUrl(businessId);
 
   return (
     <View style={styles.wrap} testID={testID}>

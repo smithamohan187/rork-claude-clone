@@ -63,9 +63,11 @@ async function getSubscribedBusinesses(profileId) {
   const { rows } = await query(
     `SELECT
        b.id,
+       b.profile_id AS business_profile_id,
        b.name,
        b.description,
        b.cover_url,
+       b.logo_url,
        bc.name AS category_name,
        s.subscribed_at,
        COALESCE(
@@ -117,14 +119,11 @@ async function getBusinessMembers(businessId) {
        p.avatar_url,
        p.city,
        s.subscribed_at,
-       up.current_balance,
-       rt.name        AS tier_name,
-       rt.color       AS tier_color
+       up.current_balance
      FROM subscriptions s
      INNER JOIN profiles p   ON p.id = s.profile_id
      LEFT  JOIN user_points up
            ON up.profile_id = s.profile_id AND up.business_id = s.business_id
-     LEFT  JOIN reward_tiers rt ON rt.id = up.tier_id
      WHERE s.business_id = $1 AND s.is_active = true
      ORDER BY s.subscribed_at DESC`,
     [businessId]

@@ -13,4 +13,9 @@ const resolveReferralBodySchema = Joi.object({
   referral_code: Joi.string().max(30).required(),
 });
 
-module.exports = { createRecipientsBodySchema, resolveReferralBodySchema };
+const shareOfferToFriendsBodySchema = Joi.object({
+  offerId: Joi.string().uuid().required(),
+  targetProfileIds: Joi.array().items(Joi.string().uuid()).min(1).required(),
+});
+
+module.exports = { createRecipientsBodySchema, resolveReferralBodySchema, shareOfferToFriendsBodySchema };

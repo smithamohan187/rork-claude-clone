@@ -8,23 +8,11 @@ function resolveUrl(url: string | null): string | null {
   return `${BASE_URL}${url}`;
 }
 
-export interface TierInfo {
-  id: string;
-  name: string;
-  minPoints: number;
-  color: string | null;
-}
-
 export interface PointsBreakdownItem {
   businessId: string;
   businessName: string;
   logoUrl: string | null;
   points: number;
-  tiers: TierInfo[];
-  currentTier: TierInfo | null;
-  nextTier: TierInfo | null;
-  pointsToNextTier: number | null;
-  progressPercent: number;
 }
 
 export interface PointsSummary {

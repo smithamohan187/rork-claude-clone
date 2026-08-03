@@ -7,8 +7,13 @@ const {
   deleteProfileInterests,
   insertProfileInterests,
   updateAvatarUrl,
+  getPublicProfileBase,
+  getSubscribedBusinessCount,
+  getRedeemedRewardCount,
+  getMutualBusinesses,
 } = require('./profile.model');
 const { getClient } = require('../../config/database');
+const subscriptionModel = require('../subscriptions/subscription.model');
 
 async function fetchProfile(userId) {
   const profile = await getProfileByUserId(userId);
@@ -52,4 +57,27 @@ async function updateAvatar(userId, avatarUrl) {
   return updateAvatarUrl(userId, avatarUrl);
 }
 
-module.exports = { fetchProfile, fetchInterestCategories, updateProfile, updateAvatar };
+async function getPublicProfile(viewerUserId, targetProfileId) {
+  const base = await getPublicProfileBase(targetProfileId);
+  if (!base) return null;
+
+  const viewerProfileId = await subscriptionModel.getActiveProfileId(viewerUserId);
+
+  const [businessesCount, rewardsRedeemed, mutualBusinesses] = await Promise.all([
+    getSubscribedBusinessCount(targetProfileId),
+    getRedeemedRewardCount(targetProfileId),
+    viewerProfileId ? getMutualBusinesses(targetProfileId, viewerProfileId) : Promise.resolve([]),
+  ]);
+
+  return {
+    profile_id: base.id,
+    display_name: base.display_name,
+    avatar_url: base.avatar_url,
+    member_since: base.created_at,
+    businesses_count: businessesCount,
+    rewards_redeemed: rewardsRedeemed,
+    mutual_businesses: mutualBusinesses,
+  };
+}
+
+module.exports = { fetchProfile, fetchInterestCategories, updateProfile, updateAvatar, getPublicProfile };

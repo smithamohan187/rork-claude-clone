@@ -4,6 +4,7 @@ export interface DashboardSummary {
   subscriber_count: number;
   active_offer_count: number;
   upcoming_event_count: number;
+  total_redemption_count: number;
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {

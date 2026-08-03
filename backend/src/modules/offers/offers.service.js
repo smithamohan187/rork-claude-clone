@@ -1,4 +1,6 @@
 const offersModel = require('./offers.model');
+const notificationsService = require('../notifications/notifications.service');
+const { getClient } = require('../../config/database');
 
 async function verifyOfferOwnership(userId, offerId) {
   const businessId = await offersModel.getBusinessIdByUserId(userId);
@@ -14,7 +16,29 @@ async function verifyOfferOwnership(userId, offerId) {
 async function createOffer(userId, payload) {
   const businessId = await offersModel.getBusinessIdByUserId(userId);
   if (!businessId) throw new Error('No business found for this user');
-  return offersModel.insertOffer({ ...payload, business_id: businessId });
+
+  const client = await getClient();
+  let offer;
+  try {
+    await client.query('BEGIN');
+    offer = await offersModel.insertOffer(client, { ...payload, business_id: businessId });
+
+    const businessName = await offersModel.getBusinessNameById(client, businessId);
+    await notificationsService.createNotificationsBulk(client, businessId, {
+      type: 'new_offer',
+      title: 'New offer available',
+      body: `${businessName ?? 'A business you follow'} just posted a new offer: ${offer.title}.`,
+      data: { business_id: businessId, offer_id: offer.id },
+    });
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return offer;
 }
 
 async function editOffer(userId, offerId, payload) {

@@ -14,10 +14,6 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  Shield,
-  Crown,
-  Gem,
-  Diamond,
   ChevronRight,
   Gift,
   Ticket,
@@ -32,36 +28,24 @@ import {
   Check,
   ArrowUpRight,
 } from 'lucide-react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCoupons } from '@/contexts/CouponContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePointsSummary } from '@/hooks/usePointsSummary';
-import type { PointsBreakdownItem, TierInfo } from '@/api/services/pointsService';
-import {
-  activityEvents,
-  tierLadder,
-} from '@/mocks/rewardsData';
+import { useGlobalRewardTier } from '@/hooks/useGlobalRewardTier';
+import type { PointsBreakdownItem } from '@/api/services/pointsService';
+import type { GlobalTierInfo } from '@/api/services/globalRewardTierService';
+import { activityEvents } from '@/mocks/rewardsData';
 import type { ActivityEvent } from '@/mocks/rewardsData';
 import { getRedeemableRewards, redeemReward, type RedeemableRewardItem } from '@/api/services/rewardsService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
+import TierBadge, { getTierGradient } from '@/components/TierBadge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PURPLE = '#1A5C35';
 const PURPLE_DARK = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
 const PURPLE_FAINT = '#F7F5FC';
-
-function getTierIcon(tierName: string, size: number, color: string) {
-  switch (tierName) {
-    case 'Bronze': return <Shield size={size} color={color} />;
-    case 'Silver': return <Shield size={size} color={color} />;
-    case 'Gold': return <Crown size={size} color={color} />;
-    case 'Platinum': return <Gem size={size} color={color} />;
-    case 'Diamond': return <Diamond size={size} color={color} />;
-    default: return <Shield size={size} color={color} />;
-  }
-}
 
 function getActivityIcon(type: ActivityEvent['type'], color: string) {
   switch (type) {
@@ -76,13 +60,6 @@ function getActivityIcon(type: ActivityEvent['type'], color: string) {
   }
 }
 
-const TIER_BADGE_ICONS = ['medal-outline', 'medal', 'trophy-outline', 'trophy', 'crown'] as const;
-type TierBadgeIcon = typeof TIER_BADGE_ICONS[number];
-
-function getTierBadgeIcon(rank: number): TierBadgeIcon {
-  return TIER_BADGE_ICONS[Math.min(rank, TIER_BADGE_ICONS.length - 1)];
-}
-
 function getRewardTypeIcon(type: RedeemableRewardItem['type']) {
   switch (type) {
     case 'discount': return <Tag size={20} color={PURPLE} />;
@@ -91,27 +68,15 @@ function getRewardTypeIcon(type: RedeemableRewardItem['type']) {
   }
 }
 
-function TotalPointsCard({ totalPoints, currentTier, nextTier, pointsToNext }: {
+function TotalPointsCard({ totalPoints, currentTier, nextTier, pointsToNext, progressPercent }: {
   totalPoints: number;
-  currentTier: TierInfo;
-  nextTier: TierInfo | null;
-  pointsToNext: number;
+  currentTier: GlobalTierInfo | null;
+  nextTier: GlobalTierInfo | null;
+  pointsToNext: number | null;
+  progressPercent: number;
 }) {
-  const glowAnim = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1800, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.6, duration: 1800, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [glowAnim]);
-
-  const progress = nextTier
-    ? (totalPoints - currentTier.threshold) / (nextTier.threshold - currentTier.threshold)
-    : 1;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const clampedProgress = Math.max(0, Math.min(100, progressPercent));
+  const progressFillColor = nextTier ? getTierGradient(nextTier.tier_name)[0] : '#FFD700';
 
   return (
     <View style={heroStyles.container}>
@@ -122,17 +87,18 @@ function TotalPointsCard({ totalPoints, currentTier, nextTier, pointsToNext }: {
         <View style={heroStyles.content}>
           <Text style={heroStyles.label}>Total Points</Text>
           <Text style={heroStyles.points}>{totalPoints.toLocaleString()}</Text>
-          <Animated.View style={[heroStyles.tierBadge, { opacity: glowAnim, backgroundColor: currentTier.color + '30' }]}>
-            {getTierIcon(currentTier.name, 16, '#fff')}
-            <Text style={heroStyles.tierText}>{currentTier.name} Member</Text>
-          </Animated.View>
+          {currentTier && (
+            <View style={heroStyles.tierBadgeWrap}>
+              <TierBadge tierName={currentTier.tier_name} size="large" showLabel testID="hero-tier-badge" />
+            </View>
+          )}
           {nextTier && (
             <View style={heroStyles.progressSection}>
               <View style={heroStyles.progressBarBg}>
-                <View style={[heroStyles.progressBarFill, { width: `${clampedProgress * 100}%` }]} />
+                <View style={[heroStyles.progressBarFill, { width: `${clampedProgress}%`, backgroundColor: progressFillColor }]} />
               </View>
               <Text style={heroStyles.progressText}>
-                {pointsToNext} pts to {nextTier.name}
+                {pointsToNext} pts to {nextTier.tier_name}
               </Text>
             </View>
           )}
@@ -200,22 +166,8 @@ const heroStyles = StyleSheet.create({
     letterSpacing: -2,
     lineHeight: 54,
   },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+  tierBadgeWrap: {
     marginTop: 10,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  tierText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
   },
   progressSection: {
     width: '100%',
@@ -229,7 +181,6 @@ const heroStyles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#FFD700',
     borderRadius: 4,
   },
   progressText: {
@@ -241,43 +192,40 @@ const heroStyles = StyleSheet.create({
   },
 });
 
-function TierProgressRow({ currentTierName }: { currentTierName: string }) {
-  const currentIdx = tierLadder.findIndex(t => t.name === currentTierName);
+function TierProgressRow({ tiers, currentTierName }: { tiers: GlobalTierInfo[]; currentTierName: string }) {
+  const currentIdx = tiers.findIndex(t => t.tier_name === currentTierName);
+
+  if (tiers.length === 0) return null;
 
   return (
     <View style={tierStyles.container}>
       <Text style={tierStyles.sectionTitle}>Tier Progress</Text>
       <View style={tierStyles.row}>
-        {tierLadder.map((tier, idx) => {
+        {tiers.map((tier, idx) => {
           const isActive = idx === currentIdx;
           const isPast = idx < currentIdx;
-          const isLast = idx === tierLadder.length - 1;
+          const isLocked = idx > currentIdx;
+          const isLast = idx === tiers.length - 1;
+          const color = getTierGradient(tier.tier_name)[0];
 
           return (
-            <View key={tier.name} style={tierStyles.tierItem}>
+            <View key={tier.id} style={tierStyles.tierItem}>
               <View style={tierStyles.nodeRow}>
-                <View style={[
-                  tierStyles.node,
-                  isActive && { backgroundColor: tier.color, borderColor: tier.color },
-                  isPast && { backgroundColor: tier.color, borderColor: tier.color, opacity: 0.5 },
-                  !isActive && !isPast && { backgroundColor: '#E8E6EF', borderColor: '#E8E6EF' },
-                ]}>
-                  {getTierIcon(tier.name, isActive ? 14 : 11, isActive || isPast ? '#fff' : '#B0AEBC')}
-                </View>
+                <TierBadge tierName={tier.tier_name} size="small" locked={isLocked} testID={`ladder-tier-${tier.id}`} />
                 {!isLast && (
                   <View style={[
                     tierStyles.line,
                     (isPast || isActive) && idx < currentIdx
-                      ? { backgroundColor: tierLadder[idx + 1 <= currentIdx ? idx + 1 : idx].color + '60' }
+                      ? { backgroundColor: getTierGradient(tiers[idx + 1 <= currentIdx ? idx + 1 : idx].tier_name)[0] + '60' }
                       : { backgroundColor: '#E8E6EF' },
                   ]} />
                 )}
               </View>
               <Text style={[
                 tierStyles.tierName,
-                isActive && { color: tier.color, fontWeight: '700' as const },
-              ]}>{tier.name}</Text>
-              <Text style={tierStyles.tierThreshold}>{tier.threshold === 0 ? '0' : `${tier.threshold}`}</Text>
+                isActive && { color, fontWeight: '700' as const },
+              ]}>{tier.tier_name}</Text>
+              <Text style={tierStyles.tierThreshold}>{tier.min_points === 0 ? '0' : `${tier.min_points}`}</Text>
             </View>
           );
         })}
@@ -320,21 +268,12 @@ const tierStyles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
   },
-  node: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    zIndex: 1,
-  },
   line: {
     position: 'absolute',
     height: 3,
     left: '55%',
     right: '-50%',
-    top: 15,
+    top: 13,
     borderRadius: 2,
     zIndex: 0,
   },
@@ -358,13 +297,7 @@ function BusinessPointCard({ biz, onRedeem }: {
   onRedeem: () => void;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const progress = biz.tiers.length > 0 ? biz.progressPercent / 100 : Math.min(biz.points / 1000, 1);
-
-  const currentTierRank = biz.currentTier
-    ? biz.tiers.findIndex(t => t.id === biz.currentTier!.id)
-    : -1;
-  const tierColor = biz.currentTier?.color ?? PURPLE;
-  const hasTiers = biz.tiers.length > 0;
+  const progress = Math.min(biz.points / 1000, 1);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
@@ -393,31 +326,10 @@ function BusinessPointCard({ biz, onRedeem }: {
           </View>
           <View style={bizStyles.progressRow}>
             <View style={bizStyles.progressBarBg}>
-              <View style={[bizStyles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: tierColor }]} />
+              <View style={[bizStyles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: PURPLE }]} />
             </View>
             <Text style={bizStyles.ptsText}>{biz.points} pts</Text>
           </View>
-          {hasTiers && (
-            <View style={bizStyles.tierRow}>
-              {biz.currentTier ? (
-                <View style={[bizStyles.tierChip, { backgroundColor: tierColor + '18' }]}>
-                  <MaterialCommunityIcons
-                    name={getTierBadgeIcon(currentTierRank)}
-                    size={13}
-                    color={tierColor}
-                  />
-                  <Text style={[bizStyles.tierChipText, { color: tierColor }]}>{biz.currentTier.name}</Text>
-                </View>
-              ) : (
-                <Text style={bizStyles.tierToFirstText}>Working toward {biz.tiers[0].name}</Text>
-              )}
-              {biz.nextTier ? (
-                <Text style={bizStyles.tierNextText}>{biz.pointsToNextTier} pts to {biz.nextTier.name}</Text>
-              ) : biz.currentTier ? (
-                <Text style={bizStyles.tierTopText}>Top tier reached</Text>
-              ) : null}
-            </View>
-          )}
         </View>
         <TouchableOpacity style={bizStyles.redeemBtn} activeOpacity={0.75} onPress={onRedeem}>
           <Gift size={13} color="#fff" />
@@ -521,40 +433,6 @@ const bizStyles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#fff',
     letterSpacing: 0.2,
-  },
-  tierRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    gap: 6,
-  },
-  tierChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 4,
-  },
-  tierChipText: {
-    fontSize: 10,
-    fontWeight: '700' as const,
-  },
-  tierToFirstText: {
-    fontSize: 10,
-    fontWeight: '500' as const,
-    color: '#8E8E9A',
-  },
-  tierNextText: {
-    fontSize: 10,
-    fontWeight: '500' as const,
-    color: '#8E8E9A',
-  },
-  tierTopText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: '#16A34A',
   },
 });
 
@@ -1138,29 +1016,12 @@ export default function RewardsDashboard() {
   const router = useRouter();
   const { coupons } = useCoupons();
   const { summary } = usePointsSummary();
+  const { status: tierStatus } = useGlobalRewardTier();
   const [redeemSheet, setRedeemSheet] = useState<{ visible: boolean; businessId: string; businessName: string }>({
     visible: false, businessId: '', businessName: '',
   });
 
   const totalPoints = summary.total;
-
-  const currentTier = useMemo(() => {
-    let tier = tierLadder[0];
-    for (const t of tierLadder) {
-      if (totalPoints >= t.threshold) tier = t;
-    }
-    return tier;
-  }, [totalPoints]);
-
-  const nextTier = useMemo(() => {
-    const idx = tierLadder.findIndex(t => t.name === currentTier.name);
-    return idx < tierLadder.length - 1 ? tierLadder[idx + 1] : null;
-  }, [currentTier]);
-
-  const pointsToNext = useMemo(
-    () => nextTier ? nextTier.threshold - totalPoints : 0,
-    [nextTier, totalPoints]
-  );
 
   const handleRedeem = useCallback((biz: PointsBreakdownItem) => {
     setRedeemSheet({ visible: true, businessId: biz.businessId, businessName: biz.businessName });
@@ -1213,12 +1074,13 @@ export default function RewardsDashboard() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <TotalPointsCard
           totalPoints={totalPoints}
-          currentTier={currentTier}
-          nextTier={nextTier}
-          pointsToNext={pointsToNext}
+          currentTier={tierStatus.tier}
+          nextTier={tierStatus.nextTier}
+          pointsToNext={tierStatus.pointsToNextTier}
+          progressPercent={tierStatus.progressPercent}
         />
 
-        <TierProgressRow currentTierName={currentTier.name} />
+        <TierProgressRow tiers={tierStatus.tiers} currentTierName={tierStatus.tier?.tier_name ?? ''} />
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
