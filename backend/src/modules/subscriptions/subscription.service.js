@@ -19,11 +19,12 @@ async function subscribeToBusiness(userId, businessId) {
   // index prevents re-awarding on resubscribe.
   const client = await getClient();
   let subscription;
+  let welcomePoints = 0;
   try {
     await client.query('BEGIN');
     subscription = await subscriptionModel.subscribeWithClient(client, profileId, businessId);
 
-    const welcomePoints = await pointsModel.getWelcomeBonusWithClient(client, businessId);
+    welcomePoints = await pointsModel.getWelcomeBonusWithClient(client, businessId);
     if (welcomePoints > 0) {
       await pointsModel.insertJoinBonusWithClient(client, profileId, businessId, welcomePoints);
       await notificationsService.createNotification(client, {
@@ -51,7 +52,7 @@ async function subscribeToBusiness(userId, businessId) {
   // mark it subscribed and notify the business owner. No match => organic subscribe, no-op.
   await customerInviteService.resolveCustomerInviteOnSubscribe(profileId, businessId);
 
-  return { subscribed: true, subscription };
+  return { subscribed: true, subscription, welcomePoints, business: { id: business.id, name: business.name } };
 }
 
 async function maybeLinkTrustedFriend(subscriberProfileId, businessId, businessName) {

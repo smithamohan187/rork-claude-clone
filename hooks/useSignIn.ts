@@ -2,6 +2,16 @@ import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { signIn, SignInPayload } from '@/api/services/authService';
+import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
+import { resolvePendingInvite } from '@/api/services/customerInviteService';
+
+// Populated only when login was reached via a customer-invite link — lets the screen show one
+// combined "joined + welcome points" message instead of navigating straight to the feed.
+export interface WelcomeInfo {
+  businessId: string;
+  businessName: string;
+  welcomePoints: number;
+}
 
 function isValidEmail(val: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
@@ -28,6 +38,7 @@ export function useSignIn() {
   const [submitted, setSubmitted]   = useState(false);
   const [loading, setLoading]       = useState(false);
   const [authError, setAuthError]   = useState('');
+  const [welcomeInfo, setWelcomeInfo] = useState<WelcomeInfo | null>(null);
 
   const mode: InputMode = useMemo(() => detectMode(identifier), [identifier]);
 
@@ -68,8 +79,29 @@ export function useSignIn() {
 
       const data = await signIn(payload);
       await loginWithTokens(data, mode === 'email' ? identifier.trim().toLowerCase() : undefined);
-      //await restoreLastProfile();
-      //router.replace('/my-profile' as never);
+
+      // If this login was reached via a customer-invite link, auto-subscribe to the inviting
+      // business and credit any configured welcome points, then show a combined confirmation
+      // instead of navigating straight to the feed. Best-effort — a failure here must not block
+      // the (already-successful) login itself.
+      const pending = await getPendingShareReferral();
+      if (pending?.content_type === 'business') {
+        try {
+          const resolved = await resolvePendingInvite(pending.referral_code);
+          if (resolved.matched && resolved.business) {
+            setWelcomeInfo({
+              businessId: resolved.business.id,
+              businessName: resolved.business.name,
+              welcomePoints: resolved.welcomePoints,
+            });
+            await clearPendingShareReferral();
+            return;
+          }
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignIn] resolvePendingInvite error:', resolveErr);
+        }
+      }
+
       router.replace('/feed' as never);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
@@ -90,6 +122,7 @@ export function useSignIn() {
     passwordError,
     loading,
     authError,
+    welcomeInfo,
     handleLogin,
   };
 }

@@ -3,6 +3,13 @@ const customerInviteModel = require('./customerInvite.model');
 const subscriptionModel = require('../subscriptions/subscription.model');
 const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
+// Lazy require to avoid a circular dependency: subscription.service already requires
+// customerInvite.service (for resolveCustomerInviteOnSubscribe), so this module cannot require
+// subscription.service at the top level.
+function getSubscriptionService() {
+  return require('../subscriptions/subscription.service');
+}
+
 function generateReferralCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = 'CI-';
@@ -200,6 +207,57 @@ async function notifyBusinessOwner(client, businessId, invite) {
   });
 }
 
+// Called by the frontend as a separate step right after auth succeeds — either right after
+// signup, right after login, or right when an already-authenticated user taps an invite link —
+// never from inside the signup/auth transaction itself. Takes the customer_invite_code from the
+// link and reuses the existing subscribe flow (subscription.service.js#subscribeToBusiness) to
+// create the subscription, credit welcome points, and fire the existing notifications — no
+// subscribe/points/notification logic is duplicated here.
+//
+// Deliberately does NOT require invite.registered_profile_id to match the caller: that field is
+// only ever set for the exact profile that registered through this link (auth.service.js's
+// markRegistered call), so a caller who is logging in with a pre-existing account, or who is
+// already logged in and just tapped the link, would never have it set. subscribeToBusiness's own
+// resolveCustomerInviteOnSubscribe already has a fallback match (subscriber's phone/email against
+// invitee_identifier/invitee_email) for exactly this case — and subscribing + crediting welcome
+// points never depended on the invite matching at all, only the owner's "converted" notification
+// does. So resolving the business from the code and always calling subscribeToBusiness covers the
+// registration path, the login path, and the already-authenticated-tap path with one function.
+async function resolvePendingCustomerInvite(userId, customerInviteCode) {
+  const profileId = await resolveProfileId(userId);
+
+  const invite = await customerInviteModel.findInviteByReferralCode(customerInviteCode);
+  if (!invite) {
+    return { matched: false, alreadyProcessed: false, business: null, welcomePoints: 0 };
+  }
+
+  // Idempotency guard: since the same code can legitimately be presented by more than one profile
+  // (forwarded links, shared invites), the per-profile signal is whether THIS caller already has
+  // an active subscription to this business — not the invite row's own global status. If so, skip
+  // re-invoking subscribeToBusiness (no re-crediting, no re-notifying) and just report the
+  // business for redirect purposes.
+  const existingSub = await subscriptionModel.getSubscription(profileId, invite.business_id);
+  if (existingSub?.is_active) {
+    const { rows } = await query('SELECT id, name FROM businesses WHERE id = $1', [invite.business_id]);
+    return {
+      matched: true,
+      alreadyProcessed: true,
+      business: rows[0] ? { id: rows[0].id, name: rows[0].name } : null,
+      welcomePoints: 0,
+    };
+  }
+
+  const subscriptionService = getSubscriptionService();
+  const result = await subscriptionService.subscribeToBusiness(userId, invite.business_id);
+
+  return {
+    matched: true,
+    alreadyProcessed: false,
+    business: result.business,
+    welcomePoints: result.welcomePoints,
+  };
+}
+
 async function getMyCustomerInvites(userId) {
   const inviter_profile_id = await resolveProfileId(userId);
   return customerInviteModel.getInvitesByProfile(inviter_profile_id);
@@ -216,6 +274,7 @@ module.exports = {
   createCustomerInvite,
   bulkCreateCustomerInvites,
   resolveCustomerInviteOnSubscribe,
+  resolvePendingCustomerInvite,
   getMyCustomerInvites,
   getBusinessCustomerInvites,
 };

@@ -42,7 +42,7 @@ export async function createShareRecipients(payload: {
   recipients?: { contact: string | null }[];
 }): Promise<ShareRecipientResult[]> {
   const result = await apiClient.post<{ recipients: ShareRecipientResult[] }>(
-    '/feed/share-recipients',
+    '/feed/share/share-recipients',
     payload,
   );
   return result.data?.recipients ?? [];

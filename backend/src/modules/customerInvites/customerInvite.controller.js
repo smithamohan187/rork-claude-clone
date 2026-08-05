@@ -62,9 +62,22 @@ const listBusinessInvitesHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
+const resolvePendingInviteHandler = asyncHandler(async (req, res, next) => {
+  const userId = req.user.userId;
+  const { customer_invite_code } = req.body;
+  try {
+    const result = await customerInviteService.resolvePendingCustomerInvite(userId, customer_invite_code);
+    res.json(ok(result));
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+    next(err);
+  }
+});
+
 module.exports = {
   createInviteHandler,
   bulkCreateInviteHandler,
   listMyInvitesHandler,
   listBusinessInvitesHandler,
+  resolvePendingInviteHandler,
 };

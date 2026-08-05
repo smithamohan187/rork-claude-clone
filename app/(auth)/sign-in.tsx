@@ -13,6 +13,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Snackbar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useSignIn } from '@/hooks/useSignIn';
 import { THEME } from '@/theme/tokens';
@@ -44,11 +45,13 @@ export default function SignInScreen() {
     identifierError, passwordError,
     mode,
     loading, authError,
+    welcomeInfo,
     handleLogin,
   } = useSignIn();
 
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [welcomeSnackVisible, setWelcomeSnackVisible] = useState<boolean>(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -59,6 +62,18 @@ export default function SignInScreen() {
       Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
+
+  // Login reached via a customer-invite link — show the combined join/points confirmation.
+  useEffect(() => {
+    if (welcomeInfo) setWelcomeSnackVisible(true);
+  }, [welcomeInfo]);
+
+  const handleWelcomeSnackDismiss = () => {
+    setWelcomeSnackVisible(false);
+    if (welcomeInfo) {
+      router.replace({ pathname: '/business-profile/[id]' as never, params: { id: welcomeInfo.businessId } as never });
+    }
+  };
 
   return (
     <ImageBackground source={AUTH_BG} style={styles.bg} resizeMode="cover">
@@ -198,6 +213,18 @@ export default function SignInScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <Snackbar
+        visible={welcomeSnackVisible}
+        onDismiss={handleWelcomeSnackDismiss}
+        duration={3000}
+      >
+        {welcomeInfo
+          ? welcomeInfo.welcomePoints > 0
+            ? `You're now a member of ${welcomeInfo.businessName}! You've been credited ${welcomeInfo.welcomePoints} welcome points.`
+            : `You're now a member of ${welcomeInfo.businessName}!`
+          : ''}
+      </Snackbar>
     </ImageBackground>
   );
 }

@@ -27,6 +27,7 @@ const sharesRoutes            = require('./modules/shares/shares.routes');
 const rewardConfigRoutes      = require('./modules/rewardConfig/rewardConfig.routes');
 const marketplaceRoutes       = require('./modules/marketplace/marketplace.routes');
 const shareReferralRoutes     = require('./modules/shareReferrals/shareReferrals.routes');
+const { sharePreviewPageHandler } = require('./modules/shareReferrals/shareReferrals.controller');
 const pointsRoutes            = require('./modules/points/points.routes');
 const globalRewardTierRoutes  = require('./modules/globalRewardTiers/globalRewardTiers.routes');
 const customerInviteRoutes    = require('./modules/customerInvites/customerInvite.routes');
@@ -34,6 +35,7 @@ const referralRoutes          = require('./modules/referrals/referral.routes');
 const notificationRoutes      = require('./modules/notifications/notifications.routes');
 const chatRoutes              = require('./modules/chat/chat.routes');
 const dashboardFeedRoutes     = require('./modules/dashboardFeed/dashboardFeed.routes');
+const analyticsRoutes         = require('./modules/analytics/analytics.routes');
 const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modules/coupons/coupons.routes');
 
 const app = express();
@@ -72,6 +74,9 @@ app.use('/saved-events',      savedEventRoutes);
 app.use('/saved-posts',       savedPostRoutes);
 app.use('/feed',              feedRoutes);
 app.use('/feed/share',              shareReferralRoutes);
+// Public link-preview page for scrapers (Facebook/WhatsApp/iMessage) hitting SHARE_BASE_URL/s/:code
+// directly — must be plain server-rendered HTML, not part of the JSON API above.
+app.get('/s/:code',                 sharePreviewPageHandler);
 app.use('/likes',             likesRoutes);
 app.use('/comments',          commentsRoutes);
 app.use('/shares',            sharesRoutes);
@@ -83,6 +88,7 @@ app.use('/referrals',         referralRoutes);
 app.use('/notifications',     notificationRoutes);
 app.use('/conversations',     chatRoutes);
 app.use('/dashboard/feed',    dashboardFeedRoutes);
+app.use('/analytics',         analyticsRoutes);
 app.use('/businesses',        couponsBusinessRouter);
 app.use('/coupons',           couponRouter);
 app.use('/',                  rewardConfigRoutes);

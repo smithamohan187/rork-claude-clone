@@ -13,6 +13,7 @@ import {
   CustomerInviteChannel,
 } from '@/api/services/customerInviteService';
 import { sendInviteEmail } from '@/api/services/mailComposerService';
+import { sendInviteSms } from '@/api/services/smsComposerService';
 import { useContactsPermission } from '@/hooks/useContactsPermission';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 
@@ -182,6 +183,15 @@ export function useInviteCustomers(businessId: string, businessName: string) {
     setIsSubmitting(true);
     const results: SendResultRow[] = [];
 
+    // Nothing sends real SMS/email server-side — open the device's own SMS/mail app (or copy to
+    // clipboard as a last resort) so the user can actually deliver the invite. Each recipient gets
+    // their OWN dispatch session with their OWN invite link — a shared/batched session would carry
+    // only one recipient's code, silently sending everyone else the wrong referral link.
+    const inviteMessage = (url: string) =>
+      `You're invited to join ${businessName} on TouchPoints! Subscribe to earn points and unlock rewards.\n\n${url}`;
+    let smsCount = 0;
+    let smsClipboardCount = 0;
+
     try {
       for (const contact of selectedContacts) {
         const idx = contactPhoneIdx[contact.id] ?? 0;
@@ -200,6 +210,11 @@ export function useInviteCustomers(businessId: string, businessName: string) {
             channel: 'contact',
             status: res.duplicate ? 'duplicate' : 'sent',
           });
+          if (res.invite && phone) {
+            const dispatchResult = await sendInviteSms({ phone, message: inviteMessage(res.invite.url) });
+            if (dispatchResult === 'sms') smsCount += 1;
+            else if (dispatchResult === 'clipboard') smsClipboardCount += 1;
+          }
         } catch (err) {
           results.push({
             name: contact.name,
@@ -210,11 +225,6 @@ export function useInviteCustomers(businessId: string, businessName: string) {
         }
       }
 
-      // Nothing sends real email server-side — open the device's mail app (or copy to clipboard
-      // as a last resort) so the user can actually deliver the invite, same pattern as
-      // app/business-invite-email.tsx. Each recipient gets their OWN dispatch with their OWN
-      // invite link — a shared/batched email would carry only one recipient's code, which
-      // silently sends everyone else the wrong referral link.
       const subject = `Join ${businessName} on TouchPoints!`;
       let mailtoCount = 0;
       let clipboardCount = 0;
@@ -233,8 +243,7 @@ export function useInviteCustomers(businessId: string, businessName: string) {
             status: res.duplicate ? 'duplicate' : 'sent',
           });
           if (res.invite) {
-            const body = `You're invited to join ${businessName} on TouchPoints! Subscribe to earn points and unlock rewards.\n\n${res.invite.url}`;
-            const dispatchResult = await sendInviteEmail({ recipients: [row.email], subject, body });
+            const dispatchResult = await sendInviteEmail({ recipients: [row.email], subject, body: inviteMessage(res.invite.url) });
             if (dispatchResult === 'mailto') mailtoCount += 1;
             else if (dispatchResult === 'clipboard') clipboardCount += 1;
           }
@@ -267,6 +276,11 @@ export function useInviteCustomers(businessId: string, businessName: string) {
             email: row.email || undefined,
           });
           results.push({ name: label, channel: 'manual', status: res.duplicate ? 'duplicate' : 'sent' });
+          if (res.invite && row.phone) {
+            const dispatchResult = await sendInviteSms({ phone: row.phone, message: inviteMessage(res.invite.url) });
+            if (dispatchResult === 'sms') smsCount += 1;
+            else if (dispatchResult === 'clipboard') smsClipboardCount += 1;
+          }
         } catch (err) {
           results.push({
             name: label,
@@ -275,6 +289,14 @@ export function useInviteCustomers(businessId: string, businessName: string) {
             message: err instanceof Error ? err.message : 'Failed to send',
           });
         }
+      }
+
+      let smsDispatchNote = '';
+      if (smsCount > 0 || smsClipboardCount > 0) {
+        const parts: string[] = [];
+        if (smsCount > 0) parts.push(`${smsCount} SMS session${smsCount === 1 ? '' : 's'} opened`);
+        if (smsClipboardCount > 0) parts.push(`${smsClipboardCount} copied to clipboard (no SMS app)`);
+        smsDispatchNote = ` ${parts.join(', ')} — check your messages app to deliver.`;
       }
 
       if (csvValidRows.length > 0) {
@@ -307,7 +329,7 @@ export function useInviteCustomers(businessId: string, businessName: string) {
         (sentCount === results.length
           ? `${sentCount} invite${sentCount === 1 ? '' : 's'} sent!`
           : `${sentCount} of ${results.length} invites sent — some were duplicates or failed.`
-        ) + emailDispatchNote,
+        ) + emailDispatchNote + smsDispatchNote,
       );
 
       if (sentCount > 0) {

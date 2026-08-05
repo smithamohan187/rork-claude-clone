@@ -547,50 +547,43 @@ CREATE TABLE saved_events (
 CREATE INDEX idx_saved_events_profile_id ON saved_events(profile_id);
 
 -- ============================================================
--- DOMAIN 11: CHAT
+-- DOMAIN 11: CHAT  (see migration 011_chat_conversations.sql)
 -- ============================================================
+-- Participant-based direct chat: Customer<->Business and
+-- Customer<->Friend. Replaced the earlier chat_rooms/messages/
+-- message_reads design (dead schema, never wired to any backend module).
 
-CREATE TABLE chat_rooms (
-  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_id         UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  type                VARCHAR(20) NOT NULL CHECK (type IN ('direct', 'broadcast')),
-  customer_profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  created_at          TIMESTAMPTZ DEFAULT NOW(),
-  last_message_at     TIMESTAMPTZ,
-
-  UNIQUE(business_id, customer_profile_id, type)
+CREATE TABLE conversations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        VARCHAR(20) NOT NULL CHECK (type IN ('direct_business', 'direct_friend')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_chat_rooms_business_id   ON chat_rooms(business_id);
-CREATE INDEX idx_chat_rooms_customer      ON chat_rooms(customer_profile_id);
-CREATE INDEX idx_chat_rooms_last_message  ON chat_rooms(last_message_at DESC);
+-- -------------------------------------------------------
+
+CREATE TABLE conversation_participants (
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  profile_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_read_at    TIMESTAMPTZ,
+
+  PRIMARY KEY (conversation_id, profile_id)
+);
+
+CREATE INDEX idx_conv_participants_profile ON conversation_participants(profile_id);
 
 -- -------------------------------------------------------
 
 CREATE TABLE messages (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id           UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+  conversation_id   UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_profile_id UUID NOT NULL REFERENCES profiles(id),
-  body              TEXT,
-  media_url         TEXT,
-  media_type        VARCHAR(20) CHECK (media_type IN ('image', 'video', 'file')),
-  is_deleted        BOOLEAN DEFAULT FALSE,
-  created_at        TIMESTAMPTZ DEFAULT NOW()
+  body              TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_messages_room_id ON messages(room_id, created_at DESC);
-CREATE INDEX idx_messages_sender  ON messages(sender_profile_id);
-
--- -------------------------------------------------------
-
-CREATE TABLE message_reads (
-  profile_id           UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  room_id              UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
-  last_read_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-  last_read_at         TIMESTAMPTZ DEFAULT NOW(),
-
-  PRIMARY KEY(profile_id, room_id)
-);
+CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at);
+CREATE INDEX idx_messages_sender       ON messages(sender_profile_id);
 
 -- ============================================================
 -- DOMAIN 12: NOTIFICATIONS
@@ -874,3 +867,54 @@ CREATE UNIQUE INDEX uq_customer_invites_biz_identifier
 ALTER TABLE customer_invites
   ADD COLUMN registered_profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
 CREATE INDEX idx_customer_invites_registered_profile ON customer_invites(registered_profile_id);
+
+
+-- Remove dead, unused chat schema (no backend references; approved drop)
+DROP TABLE IF EXISTS message_reads CASCADE;
+DROP TABLE IF EXISTS messages      CASCADE;
+DROP TABLE IF EXISTS chat_rooms    CASCADE;
+
+CREATE TABLE conversations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        VARCHAR(20) NOT NULL CHECK (type IN ('direct_business','direct_friend')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE conversation_participants (
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  profile_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_read_at    TIMESTAMPTZ,
+  PRIMARY KEY (conversation_id, profile_id)
+);
+CREATE INDEX idx_conv_participants_profile ON conversation_participants(profile_id);
+
+CREATE TABLE messages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id   UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_profile_id UUID NOT NULL REFERENCES profiles(id),
+  body              TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at);
+
+-- Migration 012: reward tiers become a global admin-level setting, not per-business.
+-- No admin UI yet — global_reward_tiers is hand-edited in the DB.
+ALTER TABLE user_points DROP COLUMN tier_id;
+DROP TABLE reward_tiers;
+
+CREATE TABLE global_reward_tiers (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tier_name   VARCHAR(100) NOT NULL,
+  min_points  INT NOT NULL,
+  badge_icon  VARCHAR(50),
+  sort_order  INT DEFAULT 0,
+  is_active   BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+INSERT INTO global_reward_tiers (tier_name, min_points, badge_icon, sort_order, is_active) VALUES
+  ('Bronze',   0,    'shield',  1, TRUE),
+  ('Silver',   500,  'shield',  2, TRUE),
+  ('Gold',     1500, 'crown',   3, TRUE),
+  ('Platinum', 3000, 'gem',     4, TRUE),
+  ('Diamond',  5000, 'diamond', 5, TRUE);

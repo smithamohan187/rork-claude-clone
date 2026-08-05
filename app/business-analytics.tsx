@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   RefreshControl,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -21,7 +22,7 @@ import {
   ArrowLeft,
   Download,
   Users,
-  Eye,
+  Share2,
   Zap,
   Gift,
   TrendingUp,
@@ -32,13 +33,15 @@ import {
   Activity,
   Trophy,
 } from 'lucide-react-native';
+import { useBusinessAnalytics, type Range } from '@/hooks/useBusinessAnalytics';
+import { exportAnalyticsCsv, exportAnalyticsPdf } from '@/utils/analyticsExport';
 
 const PURPLE = '#1A5C35';
 const PURPLE_DARK = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
 const PURPLE_FAINT = '#F7F6FB';
 const INK = '#1A1730';
-const MUTED = '#E8F5EE';
+const MUTED = '#6B7280';
 const BORDER = '#EFECF6';
 const TEAL = '#0D9488';
 const GOLD = '#E5A100';
@@ -48,50 +51,22 @@ const RED = '#EF4444';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-type Range = '7d' | '30d' | '90d';
-
-const RANGES: { key: Range; label: string; days: number }[] = [
-  { key: '7d', label: '7 days', days: 7 },
-  { key: '30d', label: '30 days', days: 30 },
-  { key: '90d', label: '90 days', days: 90 },
+const RANGES: { key: Range; label: string }[] = [
+  { key: '7d', label: '7 days' },
+  { key: '30d', label: '30 days' },
+  { key: '90d', label: '90 days' },
 ];
 
 interface Metric {
   key: string;
   label: string;
   value: number;
-  prevValue: number;
+  changePct: number;
   icon: React.ComponentType<{ size?: number; color?: string }>;
   color: string;
-  format?: (n: number) => string;
 }
 
-interface TopOffer {
-  id: string;
-  name: string;
-  views: number;
-  shares: number;
-  redemptions: number;
-}
-
-function seed(n: number): number {
-  const x = Math.sin(n) * 10000;
-  return x - Math.floor(x);
-}
-
-function buildSeries(days: number, base: number, variance: number, offset: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < days; i++) {
-    const noise = seed(i + offset) * variance;
-    const trend = (i / days) * variance * 0.5;
-    out.push(Math.max(0, Math.round(base + noise + trend)));
-  }
-  return out;
-}
-
-function sum(arr: number[]): number {
-  return arr.reduce((a, b) => a + b, 0);
-}
+const BREAKDOWN_COLORS = [PURPLE, TEAL, GOLD, CORAL];
 
 function formatNum(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -99,89 +74,71 @@ function formatNum(n: number): string {
   return `${n}`;
 }
 
-function useAnalyticsData(range: Range) {
-  return useMemo(() => {
-    const days = RANGES.find(r => r.key === range)?.days ?? 30;
+function formatDateShort(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-    const subscribersSeries = buildSeries(days, 6, 10, 1);
-    const prevSubscribersSeries = buildSeries(days, 5, 8, 100);
-
-    const viewsSeries = buildSeries(days, 120, 80, 2);
-    const prevViewsSeries = buildSeries(days, 110, 70, 200);
-
-    const pointsSeries = buildSeries(days, 400, 300, 3);
-    const prevPointsSeries = buildSeries(days, 380, 250, 300);
-
-    const redemptionsSeries = buildSeries(days, 4, 6, 4);
-    const prevRedemptionsSeries = buildSeries(days, 3, 5, 400);
-
-    const metrics: Metric[] = [
-      {
-        key: 'subs',
-        label: 'New Subscribers',
-        value: sum(subscribersSeries),
-        prevValue: sum(prevSubscribersSeries),
-        icon: Users,
-        color: PURPLE,
-      },
-      {
-        key: 'views',
-        label: 'Offers Viewed',
-        value: sum(viewsSeries),
-        prevValue: sum(prevViewsSeries),
-        icon: Eye,
-        color: TEAL,
-      },
-      {
-        key: 'points',
-        label: 'Points Awarded',
-        value: sum(pointsSeries),
-        prevValue: sum(prevPointsSeries),
-        icon: Zap,
-        color: GOLD,
-      },
-      {
-        key: 'redemptions',
-        label: 'Coupons Redeemed',
-        value: sum(redemptionsSeries),
-        prevValue: sum(prevRedemptionsSeries),
-        icon: Gift,
-        color: CORAL,
-      },
-    ];
-
-    const pointsBreakdown = [
-      { key: 'welcome', label: 'Welcome', value: Math.round(sum(pointsSeries) * 0.35), color: PURPLE },
-      { key: 'referral', label: 'Referral', value: Math.round(sum(pointsSeries) * 0.28), color: TEAL },
-      { key: 'sharing', label: 'Sharing', value: Math.round(sum(pointsSeries) * 0.2), color: GOLD },
-      { key: 'purchase', label: 'Purchase', value: Math.round(sum(pointsSeries) * 0.17), color: CORAL },
-    ];
-
-    const topOffers: TopOffer[] = [
-      { id: '1', name: '20% Off First Order', views: 1420, shares: 186, redemptions: 94 },
-      { id: '2', name: 'Free Coffee Friday', views: 1180, shares: 142, redemptions: 78 },
-      { id: '3', name: 'Buy 1 Get 1 Pastry', views: 940, shares: 98, redemptions: 61 },
-      { id: '4', name: 'Happy Hour 4-6 PM', views: 760, shares: 64, redemptions: 42 },
-      { id: '5', name: 'Loyalty Member Perk', views: 520, shares: 41, redemptions: 28 },
-    ].sort((a, b) => b.redemptions - a.redemptions);
-
-    return {
-      days,
-      subscribersSeries,
-      redemptionsSeries,
-      metrics,
-      pointsBreakdown,
-      topOffers,
-    };
-  }, [range]);
+// Picks up to `count` evenly spaced indices from [0, length-1], always including the first and last.
+function evenIndices(length: number, count: number): number[] {
+  if (length <= 0) return [];
+  if (length <= count) return Array.from({ length }, (_, i) => i);
+  return Array.from({ length: count }, (_, i) => Math.round((i * (length - 1)) / (count - 1)));
 }
 
 export default function BusinessAnalyticsScreen() {
   const router = useRouter();
-  const [range, setRange] = useState<Range>('30d');
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [exporting, setExporting] = useState<boolean>(false);
 
-  const data = useAnalyticsData(range);
+  const { data: analytics, loading, error, range, setRange, refresh } = useBusinessAnalytics();
+
+  const metrics: Metric[] | null = analytics
+    ? [
+        {
+          key: 'subs',
+          label: 'New Subscribers',
+          value: analytics.summary.new_subscribers.value,
+          changePct: analytics.summary.new_subscribers.changePct,
+          icon: Users,
+          color: PURPLE,
+        },
+        {
+          key: 'shares',
+          label: 'Offers Shared',
+          value: analytics.summary.offers_shared.value,
+          changePct: analytics.summary.offers_shared.changePct,
+          icon: Share2,
+          color: TEAL,
+        },
+        {
+          key: 'points',
+          label: 'Points Awarded',
+          value: analytics.summary.points_awarded.value,
+          changePct: analytics.summary.points_awarded.changePct,
+          icon: Zap,
+          color: GOLD,
+        },
+        {
+          key: 'redemptions',
+          label: 'Coupons Redeemed',
+          value: analytics.summary.coupons_redeemed.value,
+          changePct: analytics.summary.coupons_redeemed.changePct,
+          icon: Gift,
+          color: CORAL,
+        },
+      ]
+    : null;
+
+  const subscriberGrowth = analytics?.subscriberGrowth ?? [];
+  const redemptionTrend = analytics?.redemptionTrend ?? [];
+  const pointsBreakdown = (analytics?.pointsBreakdown ?? []).map((seg, i) => ({
+    key: seg.label,
+    label: seg.label,
+    value: seg.value,
+    color: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length],
+  }));
+  const topSharedOffers = analytics?.topSharedOffers ?? [];
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(12)).current;
@@ -205,39 +162,58 @@ export default function BusinessAnalyticsScreen() {
         Haptics.selectionAsync();
       }
       setRange(r);
-      console.log('[Analytics] Range changed:', r);
+      if (__DEV__) console.log('[Analytics] Range changed:', r);
     },
     [range],
+  );
+
+  const runExport = useCallback(
+    async (format: 'csv' | 'pdf') => {
+      if (!analytics) return;
+      setExporting(true);
+      try {
+        if (format === 'csv') await exportAnalyticsCsv(analytics);
+        else await exportAnalyticsPdf(analytics);
+      } catch (err: unknown) {
+        Alert.alert('Export failed', err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      } finally {
+        setExporting(false);
+      }
+    },
+    [analytics],
   );
 
   const handleExport = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    Alert.alert(
-      'Export Coming Soon',
-      'We\'re polishing up CSV and PDF exports for your analytics. Check back soon!',
-      [{ text: 'Got it' }],
-    );
-  }, []);
+    if (!analytics) {
+      Alert.alert('Nothing to export yet', 'Wait for your analytics to finish loading, then try again.');
+      return;
+    }
+    Alert.alert('Export Analytics', `Last ${analytics.period} days`, [
+      { text: 'Export CSV', onPress: () => runExport('csv') },
+      { text: 'Export PDF', onPress: () => runExport('pdf') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [analytics, runExport]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    setTimeout(() => {
-      setRefreshing(false);
-      fadeAnim.setValue(0);
-      slideAnim.setValue(12);
-      chartAnim.setValue(0);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-        Animated.timing(chartAnim, { toValue: 1, duration: 900, useNativeDriver: false }),
-      ]).start();
-    }, 600);
-  }, [fadeAnim, slideAnim, chartAnim]);
+    await refresh();
+    setRefreshing(false);
+    fadeAnim.setValue(0);
+    slideAnim.setValue(12);
+    chartAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(chartAnim, { toValue: 1, duration: 900, useNativeDriver: false }),
+    ]).start();
+  }, [fadeAnim, slideAnim, chartAnim, refresh]);
 
   return (
     <View style={styles.root} testID="business-analytics-screen">
@@ -260,9 +236,10 @@ export default function BusinessAnalyticsScreen() {
             style={styles.headerBtn}
             onPress={handleExport}
             hitSlop={12}
+            disabled={exporting}
             testID="analytics-export"
           >
-            <Download size={18} color="#fff" />
+            {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Download size={18} color="#fff" />}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -299,130 +276,142 @@ export default function BusinessAnalyticsScreen() {
             })}
           </View>
 
-          <View style={styles.metricsGrid}>
-            {data.metrics.map((m) => (
-              <MetricCard key={m.key} metric={m} />
-            ))}
-          </View>
-
-          <Surface style={styles.card} elevation={0}>
-            <View style={styles.cardHeader}>
-              <View style={[styles.cardIconWrap, { backgroundColor: PURPLE_LIGHT }]}>
-                <BarChart3 size={16} color={PURPLE} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Subscriber Growth</Text>
-                <Text style={styles.cardSubtitle}>
-                  {sum(data.subscribersSeries)} new subscribers over last {data.days} days
-                </Text>
-              </View>
+          {loading && !analytics ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color={PURPLE} />
+              <Text style={styles.loadingText}>Loading analytics…</Text>
             </View>
-            <BarChart series={data.subscribersSeries} progress={chartAnim} />
-          </Surface>
-
-          <Surface style={styles.card} elevation={0}>
-            <View style={styles.cardHeader}>
-              <View style={[styles.cardIconWrap, { backgroundColor: '#FFF4E0' }]}>
-                <PieIcon size={16} color={GOLD} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Points Breakdown</Text>
-                <Text style={styles.cardSubtitle}>How subscribers are earning</Text>
-              </View>
+          ) : error && !analytics ? (
+            <View style={styles.loadingWrap}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryBtn} onPress={() => refresh()}>
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </Pressable>
             </View>
-            <View style={styles.donutRow}>
-              <DonutChart data={data.pointsBreakdown} progress={chartAnim} />
-              <View style={styles.legend}>
-                {data.pointsBreakdown.map((seg) => {
-                  const total = data.pointsBreakdown.reduce((a, b) => a + b.value, 0);
-                  const pct = total > 0 ? Math.round((seg.value / total) * 100) : 0;
-                  return (
-                    <View key={seg.key} style={styles.legendRow}>
-                      <View style={[styles.legendDot, { backgroundColor: seg.color }]} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.legendLabel}>{seg.label}</Text>
-                        <Text style={styles.legendValue}>{formatNum(seg.value)} pts</Text>
-                      </View>
-                      <Text style={styles.legendPct}>{pct}%</Text>
+          ) : (
+            <>
+              <View style={styles.metricsGrid}>
+                {metrics!.map((m) => (
+                  <MetricCard key={m.key} metric={m} />
+                ))}
+              </View>
+
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: PURPLE_LIGHT }]}>
+                    <BarChart3 size={16} color={PURPLE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>Subscriber Growth</Text>
+                    <Text style={styles.cardSubtitle}>
+                      {metrics![0].value} new subscribers over last {analytics!.period} days
+                    </Text>
+                  </View>
+                </View>
+                <BarChart data={subscriberGrowth} progress={chartAnim} />
+              </Surface>
+
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: '#FFF4E0' }]}>
+                    <PieIcon size={16} color={GOLD} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>Points Breakdown</Text>
+                    <Text style={styles.cardSubtitle}>How subscribers are earning</Text>
+                  </View>
+                </View>
+                {pointsBreakdown.length === 0 ? (
+                  <Text style={styles.emptyText}>No points awarded in this period yet.</Text>
+                ) : (
+                  <View style={styles.donutRow}>
+                    <DonutChart data={pointsBreakdown} progress={chartAnim} />
+                    <View style={styles.legend}>
+                      {pointsBreakdown.map((seg) => {
+                        const total = pointsBreakdown.reduce((a, b) => a + b.value, 0);
+                        const pct = total > 0 ? Math.round((seg.value / total) * 100) : 0;
+                        return (
+                          <View key={seg.key} style={styles.legendRow}>
+                            <View style={[styles.legendDot, { backgroundColor: seg.color }]} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.legendLabel}>{seg.label}</Text>
+                              <Text style={styles.legendValue}>{formatNum(seg.value)} pts</Text>
+                            </View>
+                            <Text style={styles.legendPct}>{pct}%</Text>
+                          </View>
+                        );
+                      })}
                     </View>
-                  );
-                })}
-              </View>
-            </View>
-          </Surface>
+                  </View>
+                )}
+              </Surface>
 
-          <Surface style={styles.card} elevation={0}>
-            <View style={styles.cardHeader}>
-              <View style={[styles.cardIconWrap, { backgroundColor: '#FFEEF0' }]}>
-                <Trophy size={16} color={CORAL} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Top Offers</Text>
-                <Text style={styles.cardSubtitle}>Ranked by redemptions</Text>
-              </View>
-            </View>
-            <DataTable style={styles.dataTable}>
-              <DataTable.Header style={styles.dtHeader}>
-                <DataTable.Title textStyle={styles.dtHeaderText} style={styles.dtColName}>
-                  Offer
-                </DataTable.Title>
-                <DataTable.Title numeric textStyle={styles.dtHeaderText}>
-                  Views
-                </DataTable.Title>
-                <DataTable.Title numeric textStyle={styles.dtHeaderText}>
-                  Shares
-                </DataTable.Title>
-                <DataTable.Title numeric textStyle={styles.dtHeaderText}>
-                  Redeem
-                </DataTable.Title>
-              </DataTable.Header>
-              {data.topOffers.map((o, i) => (
-                <DataTable.Row key={o.id} style={[styles.dtRow, i === data.topOffers.length - 1 && styles.dtRowLast]}>
-                  <DataTable.Cell textStyle={styles.dtCellName} style={styles.dtColName}>
-                    <View style={styles.offerNameWrap}>
-                      <View style={[styles.offerRank, i === 0 && styles.offerRankTop]}>
-                        <Text style={[styles.offerRankText, i === 0 && styles.offerRankTextTop]}>
-                          {i + 1}
-                        </Text>
-                      </View>
-                      <Text style={styles.offerName} numberOfLines={1}>
-                        {o.name}
-                      </Text>
-                    </View>
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric textStyle={styles.dtCell}>
-                    {formatNum(o.views)}
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric textStyle={styles.dtCell}>
-                    {o.shares}
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric textStyle={[styles.dtCell, styles.dtCellAccent]}>
-                    {o.redemptions}
-                  </DataTable.Cell>
-                </DataTable.Row>
-              ))}
-            </DataTable>
-          </Surface>
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: '#FFEEF0' }]}>
+                    <Trophy size={16} color={CORAL} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>Top Shared Offers</Text>
+                    <Text style={styles.cardSubtitle}>Ranked by shares</Text>
+                  </View>
+                </View>
+                {topSharedOffers.length === 0 ? (
+                  <Text style={styles.emptyText}>No offer shares in this period yet.</Text>
+                ) : (
+                  <DataTable style={styles.dataTable}>
+                    <DataTable.Header style={styles.dtHeader}>
+                      <DataTable.Title textStyle={styles.dtHeaderText} style={styles.dtColName}>
+                        Offer
+                      </DataTable.Title>
+                      <DataTable.Title numeric textStyle={styles.dtHeaderText}>
+                        Shares
+                      </DataTable.Title>
+                    </DataTable.Header>
+                    {topSharedOffers.map((o, i) => (
+                      <DataTable.Row key={o.id} style={[styles.dtRow, i === topSharedOffers.length - 1 && styles.dtRowLast]}>
+                        <DataTable.Cell textStyle={styles.dtCellName} style={styles.dtColName}>
+                          <View style={styles.offerNameWrap}>
+                            <View style={[styles.offerRank, i === 0 && styles.offerRankTop]}>
+                              <Text style={[styles.offerRankText, i === 0 && styles.offerRankTextTop]}>
+                                {i + 1}
+                              </Text>
+                            </View>
+                            <Text style={styles.offerName} numberOfLines={1}>
+                              {o.name}
+                            </Text>
+                          </View>
+                        </DataTable.Cell>
+                        <DataTable.Cell numeric textStyle={[styles.dtCell, styles.dtCellAccent]}>
+                          {o.shares}
+                        </DataTable.Cell>
+                      </DataTable.Row>
+                    ))}
+                  </DataTable>
+                )}
+              </Surface>
 
-          <Surface style={styles.card} elevation={0}>
-            <View style={styles.cardHeader}>
-              <View style={[styles.cardIconWrap, { backgroundColor: '#E6F7F3' }]}>
-                <Activity size={16} color={TEAL} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Redemption Trend</Text>
-                <Text style={styles.cardSubtitle}>
-                  {sum(data.redemptionsSeries)} redemptions · last {data.days} days
-                </Text>
-              </View>
-            </View>
-            <LineChart series={data.redemptionsSeries} progress={chartAnim} />
-          </Surface>
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: '#E6F7F3' }]}>
+                    <Activity size={16} color={TEAL} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>Redemption Trend</Text>
+                    <Text style={styles.cardSubtitle}>
+                      {metrics![3].value} redemptions · last {analytics!.period} days
+                    </Text>
+                  </View>
+                </View>
+                <LineChart data={redemptionTrend} progress={chartAnim} />
+              </Surface>
 
-          <View style={styles.footerNote}>
-            <Sparkles size={12} color={MUTED} />
-            <Text style={styles.footerText}>Data updates hourly</Text>
-          </View>
+              <View style={styles.footerNote}>
+                <Sparkles size={12} color={MUTED} />
+                <Text style={styles.footerText}>Data updates hourly</Text>
+              </View>
+            </>
+          )}
           <View style={{ height: 32 }} />
         </Animated.View>
       </ScrollView>
@@ -432,7 +421,7 @@ export default function BusinessAnalyticsScreen() {
 
 function MetricCard({ metric }: { metric: Metric }) {
   const Icon = metric.icon;
-  const delta = metric.prevValue > 0 ? ((metric.value - metric.prevValue) / metric.prevValue) * 100 : 0;
+  const delta = metric.changePct;
   const isUp = delta >= 0;
   const TrendIcon = isUp ? TrendingUp : TrendingDown;
 
@@ -455,24 +444,31 @@ function MetricCard({ metric }: { metric: Metric }) {
   );
 }
 
-function BarChart({ series, progress }: { series: number[]; progress: Animated.Value }) {
+function BarChart({ data, progress }: { data: { date: string; count: number }[]; progress: Animated.Value }) {
   const width = SCREEN_WIDTH - 64;
-  const height = 160;
-  const max = Math.max(...series, 1);
-  const paddingV = 16;
-  const paddingH = 4;
+  const height = 180;
+  const leftPad = 28;
+  const topPad = 10;
+  const bottomPad = 22;
+  const chartWidth = width - leftPad;
+  const chartHeight = height - topPad - bottomPad;
+
+  const max = Math.max(...data.map((d) => d.count), 1);
 
   const maxBars = 30;
-  const step = Math.max(1, Math.ceil(series.length / maxBars));
-  const bars = series.filter((_, i) => i % step === 0);
+  const step = Math.max(1, Math.ceil(data.length / maxBars));
+  const bars = data.filter((_, i) => i % step === 0);
   const barSpacing = 3;
-  const barWidth = Math.max(4, (width - paddingH * 2 - barSpacing * (bars.length - 1)) / bars.length);
+  const barWidth = Math.max(4, (chartWidth - barSpacing * (bars.length - 1)) / Math.max(1, bars.length));
 
   const [animValue, setAnimValue] = useState<number>(0);
   useEffect(() => {
     const id = progress.addListener(({ value }) => setAnimValue(value));
     return () => progress.removeListener(id);
   }, [progress]);
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
+  const xLabelIndices = evenIndices(bars.length, 4);
 
   return (
     <View style={styles.chartWrap}>
@@ -483,23 +479,30 @@ function BarChart({ series, progress }: { series: number[]; progress: Animated.V
             <Stop offset="1" stopColor={PURPLE} stopOpacity="0.45" />
           </LinearGradient>
         </Defs>
-        {[0.25, 0.5, 0.75, 1].map((ratio, i) => (
-          <Line
-            key={i}
-            x1={0}
-            y1={paddingV + (height - paddingV * 2) * (1 - ratio)}
-            x2={width}
-            y2={paddingV + (height - paddingV * 2) * (1 - ratio)}
-            stroke={BORDER}
-            strokeWidth={1}
-            strokeDasharray="3,4"
-          />
-        ))}
-        {bars.map((v, i) => {
-          const fullH = (v / max) * (height - paddingV * 2);
+        {yTicks.map((ratio, i) => {
+          const y = topPad + chartHeight * (1 - ratio);
+          return (
+            <G key={i}>
+              <Line
+                x1={leftPad}
+                y1={y}
+                x2={width}
+                y2={y}
+                stroke={BORDER}
+                strokeWidth={1}
+                strokeDasharray="3,4"
+              />
+              <SvgText x={leftPad - 6} y={y + 3} fontSize="9" fill={MUTED} textAnchor="end">
+                {formatNum(Math.round(max * ratio))}
+              </SvgText>
+            </G>
+          );
+        })}
+        {bars.map((bar, i) => {
+          const fullH = (bar.count / max) * chartHeight;
           const h = fullH * animValue;
-          const x = paddingH + i * (barWidth + barSpacing);
-          const y = height - paddingV - h;
+          const x = leftPad + i * (barWidth + barSpacing);
+          const y = topPad + chartHeight - h;
           return (
             <Rect
               key={i}
@@ -510,6 +513,16 @@ function BarChart({ series, progress }: { series: number[]; progress: Animated.V
               rx={3}
               fill="url(#barGrad)"
             />
+          );
+        })}
+        {xLabelIndices.map((i) => {
+          const bar = bars[i];
+          if (!bar) return null;
+          const x = leftPad + i * (barWidth + barSpacing) + barWidth / 2;
+          return (
+            <SvgText key={i} x={x} y={height - 6} fontSize="9" fill={MUTED} textAnchor="middle">
+              {formatDateShort(bar.date)}
+            </SvgText>
           );
         })}
       </Svg>
@@ -595,17 +608,22 @@ function DonutChart({
   );
 }
 
-function LineChart({ series, progress }: { series: number[]; progress: Animated.Value }) {
+function LineChart({ data, progress }: { data: { date: string; count: number }[]; progress: Animated.Value }) {
   const width = SCREEN_WIDTH - 64;
-  const height = 160;
-  const paddingV = 20;
-  const paddingH = 8;
-  const max = Math.max(...series, 1);
-  const min = Math.min(...series, 0);
+  const height = 180;
+  const leftPad = 28;
+  const topPad = 16;
+  const bottomPad = 24;
+  const chartWidth = width - leftPad;
+  const chartHeight = height - topPad - bottomPad;
+
+  const counts = data.map((d) => d.count);
+  const max = Math.max(...counts, 1);
+  const min = Math.min(...counts, 0);
 
   const maxPoints = 40;
-  const step = Math.max(1, Math.ceil(series.length / maxPoints));
-  const points = series.filter((_, i) => i % step === 0);
+  const step = Math.max(1, Math.ceil(data.length / maxPoints));
+  const points = data.filter((_, i) => i % step === 0);
 
   const [animValue, setAnimValue] = useState<number>(0);
   useEffect(() => {
@@ -613,25 +631,25 @@ function LineChart({ series, progress }: { series: number[]; progress: Animated.
     return () => progress.removeListener(id);
   }, [progress]);
 
-  const stepX = (width - paddingH * 2) / Math.max(1, points.length - 1);
+  const stepX = chartWidth / Math.max(1, points.length - 1);
   const getY = (v: number) => {
     const norm = (v - min) / Math.max(1, max - min);
-    return paddingV + (1 - norm) * (height - paddingV * 2);
+    return topPad + (1 - norm) * chartHeight;
   };
+  const getX = (i: number) => leftPad + i * stepX;
 
   const visibleCount = Math.max(2, Math.round(points.length * animValue));
   const visible = points.slice(0, visibleCount);
 
   const pathD = visible
-    .map((v, i) => {
-      const x = paddingH + i * stepX;
-      const y = getY(v);
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    })
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(p.count)}`)
     .join(' ');
 
-  const lastX = paddingH + (visible.length - 1) * stepX;
-  const areaD = `${pathD} L ${lastX} ${height - paddingV} L ${paddingH} ${height - paddingV} Z`;
+  const lastX = getX(visible.length - 1);
+  const areaD = `${pathD} L ${lastX} ${topPad + chartHeight} L ${leftPad} ${topPad + chartHeight} Z`;
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
+  const xLabelIndices = evenIndices(points.length, 4);
 
   return (
     <View style={styles.chartWrap}>
@@ -642,30 +660,47 @@ function LineChart({ series, progress }: { series: number[]; progress: Animated.
             <Stop offset="1" stopColor={TEAL} stopOpacity="0" />
           </LinearGradient>
         </Defs>
-        {[0.25, 0.5, 0.75, 1].map((ratio, i) => (
-          <Line
-            key={i}
-            x1={0}
-            y1={paddingV + (height - paddingV * 2) * (1 - ratio)}
-            x2={width}
-            y2={paddingV + (height - paddingV * 2) * (1 - ratio)}
-            stroke={BORDER}
-            strokeWidth={1}
-            strokeDasharray="3,4"
-          />
-        ))}
+        {yTicks.map((ratio, i) => {
+          const y = topPad + chartHeight * (1 - ratio);
+          const value = Math.round(min + (max - min) * ratio);
+          return (
+            <G key={i}>
+              <Line
+                x1={leftPad}
+                y1={y}
+                x2={width}
+                y2={y}
+                stroke={BORDER}
+                strokeWidth={1}
+                strokeDasharray="3,4"
+              />
+              <SvgText x={leftPad - 6} y={y + 3} fontSize="9" fill={MUTED} textAnchor="end">
+                {formatNum(value)}
+              </SvgText>
+            </G>
+          );
+        })}
         <Path d={areaD} fill="url(#lineGrad)" />
         <Path d={pathD} stroke={TEAL} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
         {visible.length > 0 && (
           <Circle
             cx={lastX}
-            cy={getY(visible[visible.length - 1])}
+            cy={getY(visible[visible.length - 1].count)}
             r={5}
             fill="#fff"
             stroke={TEAL}
             strokeWidth={2.5}
           />
         )}
+        {xLabelIndices.map((i) => {
+          const p = points[i];
+          if (!p) return null;
+          return (
+            <SvgText key={i} x={getX(i)} y={height - 6} fontSize="9" fill={MUTED} textAnchor="middle">
+              {formatDateShort(p.date)}
+            </SvgText>
+          );
+        })}
       </Svg>
     </View>
   );
@@ -755,6 +790,18 @@ const styles = StyleSheet.create({
   },
   trendText: { fontSize: 10, fontWeight: '700' },
 
+  loadingWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+  loadingText: { fontSize: 13, color: MUTED },
+  errorText: { fontSize: 13, color: RED, textAlign: 'center', paddingHorizontal: 24 },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: PURPLE,
+  },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  emptyText: { fontSize: 12.5, color: MUTED, textAlign: 'center', paddingVertical: 12 },
+
   card: {
     backgroundColor: '#fff',
     borderRadius: 18,
@@ -789,9 +836,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     paddingHorizontal: 0,
-    height: 36,
+    minHeight: 40,
   },
-  dtHeaderText: { fontSize: 11, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.4 },
+  dtHeaderText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   dtRow: {
     borderBottomWidth: 1,
     borderBottomColor: BORDER,

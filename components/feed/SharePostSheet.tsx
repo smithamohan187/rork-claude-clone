@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   FlatList,
@@ -16,8 +17,9 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
-import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FontAwesome } from '@expo/vector-icons';
 import {
+  AlertTriangle,
   Check,
   ExternalLink,
   Mail,
@@ -87,11 +89,19 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   // Real, backend-issued referral link. Populated when the sheet opens (a null-contact
   // share_recipients row is created for the social/native single-link channels).
   const [shareUrl, setShareUrl] = useState<string>('');
+  // fallbackUrl is a raw '${SHARE_BASE}/{type}/{id}' path — it does NOT match the '/s/<code>' shape
+  // useShareDeepLink.ts parses, so it is not a working deep link. It exists only to keep
+  // shareMessage non-empty while the real link is loading/retrying; no send action may fire while
+  // resting on it — see linkStatus gating below.
   const fallbackUrl = useMemo(
     () => (SHARE_BASE ? `${SHARE_BASE}/${pathSegment}/${postId}` : ''),
     [pathSegment, postId],
   );
   const effectiveUrl = shareUrl || fallbackUrl;
+
+  // Tracks whether the real referral link has been minted, so every send path can be blocked
+  // until it's ready instead of silently sending the non-functional fallbackUrl above.
+  const [linkStatus, setLinkStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
 
   const buildMessage = useCallback(
     (url: string) =>
@@ -100,22 +110,45 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   );
   const shareMessage = useMemo(() => buildMessage(effectiveUrl), [buildMessage, effectiveUrl]);
 
-  // On open, mint a single referral link for the social/native channels. Per-contact links are
-  // minted separately in sendToSelected.
+  // Mints a single referral link for the social/native channels. Per-contact links are minted
+  // separately in sendToSelected. Exposed as a stable callback so both the on-open effect and the
+  // manual Retry tap can call it.
+  const mintShareLink = useCallback(async (): Promise<boolean> => {
+    setLinkStatus('loading');
+    try {
+      const rows = await createShareRecipients({ content_type: postType, content_id: postId, business_id: businessId });
+      if (rows[0]?.url) {
+        setShareUrl(rows[0].url);
+        setLinkStatus('ready');
+        return true;
+      }
+      setLinkStatus('failed');
+      return false;
+    } catch (e) {
+      console.log('[SharePostSheet] mintShareLink failed', e);
+      setLinkStatus('failed');
+      return false;
+    }
+  }, [postType, postId, businessId]);
+
+  const retryMintShareLink = useCallback(() => {
+    void mintShareLink();
+  }, [mintShareLink]);
+
   useEffect(() => {
     if (!visible) {
       setShareUrl('');
+      setLinkStatus('loading');
       return;
     }
     let cancelled = false;
-    createShareRecipients({ content_type: postType, content_id: postId, business_id: businessId })
-      .then((rows) => {
-        if (!cancelled && rows[0]?.url) setShareUrl(rows[0].url);
-      })
-      .catch(() => {});
+    mintShareLink().then((ok) => {
+      if (!cancelled && !ok) onToast("Couldn't create your share link. Tap Retry.");
+    });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, postType, postId, businessId]);
 
   const slideAnim = React.useRef(new Animated.Value(0)).current;
@@ -256,51 +289,68 @@ export const SharePostSheet = React.memo(function SharePostSheet({
     [postType, postId],
   );
 
+  // Every send handler below must not fire while the real referral link hasn't been minted yet —
+  // otherwise it silently sends the non-deep-linkable fallbackUrl. Returns false (and toasts) when
+  // blocked, so callers can early-return.
+  const LINK_NOT_READY_MSG = 'Still preparing your share link — try again in a moment';
+  const requireLinkReady = useCallback((): boolean => {
+    if (linkStatus === 'ready') return true;
+    onToast(LINK_NOT_READY_MSG);
+    return false;
+  }, [linkStatus, onToast]);
+
   const handleFacebook = useCallback(() => {
+    if (!requireLinkReady()) return undefined;
     logShareSilently('facebook');
+    // Facebook's sharer.php ignores the 'quote' param (deprecated by FB itself, anti-spam) — no
+    // app can pre-fill the editor's text field via this URL, so it's not included here. The link
+    // preview card FB shows instead is populated from OG tags on the target URL (see the new
+    // GET /s/:code page on the backend).
     return openUrl(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(effectiveUrl)}&quote=${encodeURIComponent(shareMessage)}`,
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(effectiveUrl)}`,
       'Could not open Facebook',
     );
-  }, [openUrl, effectiveUrl, shareMessage, logShareSilently]);
+  }, [requireLinkReady, openUrl, effectiveUrl, logShareSilently]);
 
   const handleTwitter = useCallback(() => {
+    if (!requireLinkReady()) return undefined;
     logShareSilently('twitter');
     return openUrl(
       `https://twitter.com/intent/tweet?url=${encodeURIComponent(effectiveUrl)}&text=${encodeURIComponent(shareMessage)}`,
       'Could not open X',
     );
-  }, [openUrl, effectiveUrl, shareMessage, logShareSilently]);
+  }, [requireLinkReady, openUrl, effectiveUrl, shareMessage, logShareSilently]);
 
   const handleInstagram = useCallback(async () => {
+    if (!requireLinkReady()) return;
+    logShareSilently('instagram');
+    // Instagram has no URL scheme that accepts pre-filled post text/links (unlike WhatsApp's
+    // whatsapp://send?text=), so the standard workaround is: copy the link, then open the app so
+    // the user can paste it themselves.
     try {
-      logShareSilently('instagram');
       await Clipboard.setStringAsync(effectiveUrl);
-      onToast('Link copied — paste in Instagram');
     } catch (e) {
-      console.log('[SharePostSheet] instagram failed', e);
+      console.log('[SharePostSheet] instagram clipboard failed', e);
     }
-  }, [effectiveUrl, onToast, logShareSilently]);
-
-  const handleTikTok = useCallback(async () => {
+    // Deliberately do NOT gate this on Linking.canOpenURL() first — without declaring the
+    // 'instagram' scheme in LSApplicationQueriesSchemes (iOS) / <queries> (Android), canOpenURL
+    // silently returns false even when the app IS installed, so it would always report "not
+    // installed." Just attempt openURL directly and catch failure instead (same shape as the
+    // shared openUrl() helper used elsewhere in this file for WhatsApp/etc).
     try {
-      logShareSilently('tiktok');
-      await Clipboard.setStringAsync(effectiveUrl);
-      onToast('Link copied — paste in TikTok');
+      await Linking.openURL('instagram://app');
+      onToast('Link copied — paste it in Instagram');
     } catch (e) {
-      console.log('[SharePostSheet] tiktok failed', e);
+      console.log('[SharePostSheet] instagram open failed', e);
+      onToast('Link copied — Instagram is not installed');
     }
-  }, [effectiveUrl, onToast, logShareSilently]);
+  }, [requireLinkReady, effectiveUrl, onToast, logShareSilently]);
 
   const handleWhatsApp = useCallback(() => {
+    if (!requireLinkReady()) return undefined;
     logShareSilently('whatsapp');
     return openUrl(`whatsapp://send?text=${encodeURIComponent(shareMessage)}`, 'WhatsApp is not installed');
-  }, [openUrl, shareMessage, logShareSilently]);
-
-  const handleMessenger = useCallback(() => {
-    logShareSilently('messenger');
-    return openUrl(`fb-messenger://share?link=${encodeURIComponent(effectiveUrl)}`, 'Messenger is not installed');
-  }, [openUrl, effectiveUrl, logShareSilently]);
+  }, [requireLinkReady, openUrl, shareMessage, logShareSilently]);
 
   const navParams = useMemo(
     () => ({
@@ -313,32 +363,36 @@ export const SharePostSheet = React.memo(function SharePostSheet({
   );
 
   const handleOpenSms = useCallback(() => {
+    if (!requireLinkReady()) return;
     logShareSilently('sms');
     onClose();
     setTimeout(() => {
       router.push({ pathname: '/share-sms', params: navParams });
     }, 220);
-  }, [router, navParams, onClose, logShareSilently]);
+  }, [requireLinkReady, router, navParams, onClose, logShareSilently]);
 
   const handleOpenEmail = useCallback(() => {
+    if (!requireLinkReady()) return;
     logShareSilently('email');
     onClose();
     setTimeout(() => {
       router.push({ pathname: '/share-email', params: navParams });
     }, 220);
-  }, [router, navParams, onClose, logShareSilently]);
+  }, [requireLinkReady, router, navParams, onClose, logShareSilently]);
 
   const handleNativeShare = useCallback(async () => {
+    if (!requireLinkReady()) return;
     try {
       logShareSilently('native');
       await RNShare.share({ message: shareMessage, url: effectiveUrl });
     } catch (e) {
       console.log('[SharePostSheet] native share failed', e);
     }
-  }, [shareMessage, effectiveUrl, logShareSilently]);
+  }, [requireLinkReady, shareMessage, effectiveUrl, logShareSilently]);
 
   const sendToSelected = useCallback(async () => {
     if (selected.size === 0) return;
+    if (!requireLinkReady()) return;
     const selectedContacts = contacts.filter((c) => selected.has(c.id) && !!c.phone);
     const phones = selectedContacts.map((c) => c.phone);
 
@@ -392,7 +446,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
       console.log('[SharePostSheet] send sms failed', e);
       onToast('Could not send SMS');
     }
-  }, [selected, contacts, shareMessage, buildMessage, postType, postId, businessId, onClose, onToast, logShareSilently]);
+  }, [selected, requireLinkReady, contacts, shareMessage, buildMessage, postType, postId, businessId, onClose, onToast, logShareSilently]);
 
   const renderContact = useCallback(
     ({ item }: { item: DeviceContact }) => {
@@ -466,6 +520,27 @@ export const SharePostSheet = React.memo(function SharePostSheet({
                   </View>
                 </View>
 
+                {linkStatus !== 'ready' ? (
+                  <View style={styles.linkStatusRow} testID="share-link-status">
+                    {linkStatus === 'loading' ? (
+                      <>
+                        <ActivityIndicator size="small" color={PURPLE} />
+                        <Text style={styles.linkStatusText}>Preparing your link…</Text>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={16} color="#B3261E" />
+                        <Text style={[styles.linkStatusText, styles.linkStatusFailedText]}>
+                          Couldn&apos;t create your share link.
+                        </Text>
+                        <Pressable onPress={retryMintShareLink} hitSlop={8} testID="share-link-retry">
+                          <Text style={styles.linkStatusRetry}>Retry</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                ) : null}
+
                 {/* Section 1 — Social */}
                 <View style={styles.sectionHead}>
                   <ExternalLink size={12} color="#9aa0b3" />
@@ -488,12 +563,8 @@ export const SharePostSheet = React.memo(function SharePostSheet({
                             return handleTwitter();
                           case 'instagram':
                             return handleInstagram();
-                          case 'tiktok':
-                            return handleTikTok();
                           case 'whatsapp':
                             return handleWhatsApp();
-                          case 'messenger':
-                            return handleMessenger();
                         }
                       }}
                     />
@@ -584,9 +655,9 @@ export const SharePostSheet = React.memo(function SharePostSheet({
 
           <View style={styles.bottomBar}>
             <Pressable
-              disabled={selected.size === 0}
+              disabled={selected.size === 0 || linkStatus !== 'ready'}
               onPress={sendToSelected}
-              style={[styles.sendBtn, selected.size === 0 && styles.sendBtnDisabled]}
+              style={[styles.sendBtn, (selected.size === 0 || linkStatus !== 'ready') && styles.sendBtnDisabled]}
               testID="share-send-contacts"
             >
               <Send size={16} color="#fff" />
@@ -604,7 +675,7 @@ export const SharePostSheet = React.memo(function SharePostSheet({
 });
 
 interface SocialChannel {
-  id: 'facebook' | 'twitter' | 'instagram' | 'tiktok' | 'whatsapp' | 'messenger';
+  id: 'facebook' | 'twitter' | 'instagram' | 'whatsapp';
   label: string;
 }
 
@@ -612,9 +683,7 @@ const SOCIAL_CHANNELS: SocialChannel[] = [
   { id: 'facebook', label: 'Facebook' },
   { id: 'twitter', label: 'X' },
   { id: 'instagram', label: 'Instagram' },
-  { id: 'tiktok', label: 'TikTok' },
   { id: 'whatsapp', label: 'WhatsApp' },
-  { id: 'messenger', label: 'Messenger' },
 ];
 
 function SocialIcon({ channel, onPress }: { channel: SocialChannel; onPress: () => void }) {
@@ -651,28 +720,11 @@ function renderSocialIcon(id: SocialChannel['id']): React.ReactNode {
           <FontAwesome name="instagram" size={22} color="#fff" />
         </LinearGradient>
       );
-    case 'tiktok':
-      return (
-        <View style={[styles.iconBg, { backgroundColor: '#000' }]}>
-          <MaterialCommunityIcons name="music-note" size={22} color="#fff" />
-        </View>
-      );
     case 'whatsapp':
       return (
         <View style={[styles.iconBg, { backgroundColor: '#25D366' }]}>
           <FontAwesome name="whatsapp" size={24} color="#fff" />
         </View>
-      );
-    case 'messenger':
-      return (
-        <LinearGradient
-          colors={['#00B246', '#00B246']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.iconBg}
-        >
-          <FontAwesome name="facebook-messenger" size={22} color="#fff" />
-        </LinearGradient>
       );
     default:
       return null;
@@ -750,6 +802,20 @@ const styles = StyleSheet.create({
   previewInitials: { color: PURPLE, fontWeight: '800', fontSize: 14 },
   previewName: { fontSize: 14, fontWeight: '800', color: '#1A5C35' },
   previewBody: { fontSize: 12, color: '#1A5C35', marginTop: 2, lineHeight: 16 },
+  // Link status (loading/failed)
+  linkStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F7F6FB',
+  },
+  linkStatusText: { fontSize: 12, color: '#5C6072', flexShrink: 1 },
+  linkStatusFailedText: { color: '#B3261E' },
+  linkStatusRetry: { fontSize: 12, fontWeight: '800', color: PURPLE, marginLeft: 'auto' },
   // Sections
   sectionHead: {
     flexDirection: 'row',

@@ -23,4 +23,8 @@ const bulkCreateInviteSchema = Joi.object({
     .required(),
 });
 
-module.exports = { createInviteSchema, bulkCreateInviteSchema };
+const resolvePendingInviteSchema = Joi.object({
+  customer_invite_code: Joi.string().trim().required(),
+});
+
+module.exports = { createInviteSchema, bulkCreateInviteSchema, resolvePendingInviteSchema };

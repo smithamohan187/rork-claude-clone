@@ -62,6 +62,7 @@ export default function SignUpScreen() {
     nameError, emailError, passwordError, confirmError,
     loading, authError, registrationSucceeded,
     postSignupRedirect,
+    welcomeInfo,
     handleRegister,
     toggleInterest,
     inputFocus,
@@ -427,7 +428,11 @@ export default function SignUpScreen() {
         onDismiss={handleSnackbarDismiss}
         duration={3000}
       >
-        Registration successful! Welcome to TouchPoints.
+        {welcomeInfo
+          ? welcomeInfo.welcomePoints > 0
+            ? `Thanks for joining ${welcomeInfo.businessName}! You've been credited ${welcomeInfo.welcomePoints} welcome points.`
+            : `Thanks for joining ${welcomeInfo.businessName}!`
+          : 'Registration successful! Welcome to TouchPoints.'}
       </Snackbar>
     </ImageBackground>
   );

@@ -157,7 +157,7 @@ function validateDraft(
 }
 
 export default function BusinessProfileScreen() {
-  const { id, subscribe: subscribeParam } = useLocalSearchParams<{ id: string; subscribe?: string }>();
+  const { id, subscribe: subscribeParam, welcomePoints: welcomePointsParam } = useLocalSearchParams<{ id: string; subscribe?: string; welcomePoints?: string }>();
   const { business: realBusiness, loading: profileLoading, error: profileError,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
   const { authUser, activeProfile } = useAuth();
@@ -227,6 +227,22 @@ export default function BusinessProfileScreen() {
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
+
+  // Landed here via an already-authenticated tap on a customer-invite link (useShareDeepLink.ts) —
+  // the auto-subscribe + welcome-points crediting already happened before navigation; just show
+  // the combined confirmation once, reusing the existing snackbar mechanism.
+  const welcomeSnackShownRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!realBusiness || !welcomePointsParam || welcomeSnackShownRef.current) return;
+    welcomeSnackShownRef.current = true;
+    const pts = parseInt(welcomePointsParam, 10) || 0;
+    setSnackMsg(
+      pts > 0
+        ? `You're now a member of ${realBusiness.name}! You've been credited ${pts} welcome points.`
+        : `You're now a member of ${realBusiness.name}!`,
+    );
+    setSnackVisible(true);
+  }, [realBusiness, welcomePointsParam]);
 
   const EMPTY_BUSINESS: BusinessProfileData = {
     id: '', name: '', category: '', description: '',

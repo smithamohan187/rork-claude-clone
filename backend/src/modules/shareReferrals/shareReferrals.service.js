@@ -129,6 +129,82 @@ async function resolveReferral(referral_code) {
   throw Object.assign(new Error('Referral code not found'), { status: 404 });
 }
 
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function truncate(str, max) {
+  const s = String(str ?? '');
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+const DEFAULT_OG = {
+  title: 'TouchPoints',
+  description: 'Discover local businesses, earn rewards, and get exclusive offers.',
+  image_url: '',
+};
+
+function buildPreviewHtml({ title, description, image_url, url }) {
+  const safeTitle = escapeHtml(title);
+  const safeDescription = escapeHtml(truncate(description, 200));
+  const safeUrl = escapeHtml(url);
+  const imageTag = image_url ? `<meta property="og:image" content="${escapeHtml(image_url)}">\n` : '';
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${safeTitle}</title>
+<meta property="og:title" content="${safeTitle}">
+<meta property="og:description" content="${safeDescription}">
+<meta property="og:url" content="${safeUrl}">
+<meta property="og:type" content="website">
+${imageTag}<meta name="description" content="${safeDescription}">
+</head>
+<body>
+<h1>${safeTitle}</h1>
+<p>${safeDescription}</p>
+<p>Open this in the TouchPoints app to see more.</p>
+</body>
+</html>`;
+}
+
+// og:image must be an absolute URL for scrapers to fetch it, but content image_url columns store
+// relative paths (e.g. '/uploads/offers/x.jpg') — same reason the frontend has its own resolveUrl
+// helper (api/services/businessProfileService.ts) against EXPO_PUBLIC_API_BASE_URL. This page is
+// served by the backend itself, so the request's own host is always the correct absolute origin
+// (dev IP or production domain, whichever it was actually reached on) without needing a new env var.
+function resolveAbsoluteImageUrl(imageUrl, requestOrigin) {
+  if (!imageUrl) return '';
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  return `${requestOrigin}${imageUrl}`;
+}
+
+// Server-rendered HTML page for GET /s/:code (link-preview scrapers like Facebook/WhatsApp don't
+// execute JS, so this must be a plain HTML response, not an Expo Router screen). Reuses the
+// existing resolveReferral resolution — not duplicated — then looks up OG-relevant content fields.
+// Unknown/expired codes still get a valid 200 page with generic branding rather than a bare 404
+// with no tags, so scrapers always have something sane to read.
+async function renderSharePreviewHtml(referral_code, requestOrigin) {
+  const url = buildShareUrl(referral_code);
+  try {
+    const resolved = await resolveReferral(referral_code);
+    const og = await shareReferralsModel.getOgDataForContent(resolved.content_type, resolved.content_id, resolved.business_id);
+    return buildPreviewHtml({
+      title: og?.title || DEFAULT_OG.title,
+      description: og?.description || DEFAULT_OG.description,
+      image_url: resolveAbsoluteImageUrl(og?.image_url, requestOrigin),
+      url,
+    });
+  } catch {
+    return buildPreviewHtml({ ...DEFAULT_OG, url });
+  }
+}
+
 // Shares an offer to one or more of the sender's trusted friends via the existing chat infra.
 // Per-recipient, best-effort: a failure for one target (e.g. not a trusted friend, so
 // getOrCreateConversation 403s) never blocks the others. No separate friendship check is
@@ -172,4 +248,4 @@ async function shareOfferToFriends(userId, offerId, targetProfileIds) {
   return results;
 }
 
-module.exports = { createShareRecipients, resolveReferral, shareOfferToFriends };
+module.exports = { createShareRecipients, resolveReferral, shareOfferToFriends, renderSharePreviewHtml };

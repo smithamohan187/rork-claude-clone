@@ -44,4 +44,18 @@ const shareOfferToFriendsHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
-module.exports = { createRecipientsHandler, resolveReferralHandler, shareOfferToFriendsHandler };
+// Public HTML page for link-preview scrapers (Facebook, WhatsApp, iMessage, ...) hitting
+// SHARE_BASE_URL/s/:code directly. Always 200s with a valid HTML/OG page, even for unknown codes.
+const sharePreviewPageHandler = asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  const requestOrigin = `${req.protocol}://${req.get('host')}`;
+  const html = await shareReferralsService.renderSharePreviewHtml(code, requestOrigin);
+  res.type('html').send(html);
+});
+
+module.exports = {
+  createRecipientsHandler,
+  resolveReferralHandler,
+  shareOfferToFriendsHandler,
+  sharePreviewPageHandler,
+};

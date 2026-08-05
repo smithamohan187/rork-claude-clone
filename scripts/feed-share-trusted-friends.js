@@ -97,7 +97,7 @@ async function run() {
     const contentId = crypto.randomUUID(); // content_id has no FK; any UUID is valid.
 
     // ── T1: A shares a post to a recipient → share_recipients row (status=sent) ──
-    const shareRes = await api('POST', '/feed/share-recipients', {
+    const shareRes = await api('POST', '/feed/share/share-recipients', {
       token: A.token,
       body: {
         content_type: 'post',
@@ -114,7 +114,7 @@ async function run() {
     assert('T1-DB', sentRow?.status === 'sent', "share_recipients row created with status='sent'", sentRow);
 
     // ── T2: resolve valid code → 200 with correct content ─────────────────────
-    const r2 = await api('POST', '/feed/resolve-share-referral', { body: { referral_code: referralCode } });
+    const r2 = await api('POST', '/feed/share/resolve-share-referral', { body: { referral_code: referralCode } });
     assert('T2-RESOLVE', r2.status === 200
       && r2.data?.data?.content_type === 'post'
       && r2.data?.data?.content_id === contentId
@@ -122,7 +122,7 @@ async function run() {
       'resolve-share-referral → 200 with correct content_type/content_id/business_id', r2.data);
 
     // ── T3: resolve garbage code → 404 ────────────────────────────────────────
-    const r3 = await api('POST', '/feed/resolve-share-referral', { body: { referral_code: 'SH-NOTAREALCODE' } });
+    const r3 = await api('POST', '/feed/share/resolve-share-referral', { body: { referral_code: 'SH-NOTAREALCODE' } });
     assert('T3-RESOLVE-404', r3.status === 404, `resolve garbage code → 404 (got ${r3.status})`, r3.data);
 
     // ── T4: register Profile B with the referral code ─────────────────────────

@@ -140,6 +140,32 @@ async function insertPointsLog(client, { profile_id, points_type, source_type, s
   return rows[0];
 }
 
+// Fetches title/description/image for the Open Graph preview page (GET /s/:code). post/offer/event
+// each have exactly these columns (confirmed in DBschema.sql); everything else (business,
+// business_invite, app_referral) falls back to the business's own name/description/logo.
+async function getOgDataForContent(content_type, content_id, business_id) {
+  if (content_type === 'post') {
+    const { rows } = await query('SELECT title, content AS description, image_url FROM posts WHERE id = $1', [content_id]);
+    if (rows[0]) return rows[0];
+  } else if (content_type === 'offer') {
+    const { rows } = await query('SELECT title, description, image_url FROM offers WHERE id = $1', [content_id]);
+    if (rows[0]) return rows[0];
+  } else if (content_type === 'event') {
+    const { rows } = await query('SELECT title, description, image_url FROM events WHERE id = $1', [content_id]);
+    if (rows[0]) return rows[0];
+  }
+
+  if (business_id) {
+    const { rows } = await query(
+      'SELECT name AS title, description, logo_url AS image_url FROM businesses WHERE id = $1',
+      [business_id],
+    );
+    if (rows[0]) return rows[0];
+  }
+
+  return null;
+}
+
 module.exports = {
   insertRecipient,
   insertRegisteredRecipient,
@@ -150,4 +176,5 @@ module.exports = {
   markFriendLinked,
   insertTrustedFriend,
   insertPointsLog,
+  getOgDataForContent,
 };

@@ -2,12 +2,20 @@ import { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { signUp, SignupPayload } from '@/api/services/authService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
+import { resolvePendingInvite } from '@/api/services/customerInviteService';
 
 // Where to land the user after signup: the shared detail screen when they arrived via a share
 // deep link, otherwise null (screen falls back to its default landing).
 export interface PostSignupRedirect {
   pathname: string;
   params: Record<string, string>;
+}
+
+// Populated only when signup was submitted via a customer-invite link — lets the success screen
+// show one combined "joined + welcome points" message instead of a generic one.
+export interface WelcomeInfo {
+  businessName: string;
+  welcomePoints: number;
 }
 
 type StrengthLevel = 0 | 1 | 2 | 3 | 4;
@@ -54,6 +62,7 @@ export function useSignUp() {
   const [authError, setAuthError]             = useState('');
   const [registrationSucceeded, setRegistrationSucceeded] = useState(false);
   const [postSignupRedirect, setPostSignupRedirect] = useState<PostSignupRedirect | null>(null);
+  const [welcomeInfo, setWelcomeInfo] = useState<WelcomeInfo | null>(null);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const strength = useMemo(() => computeStrength(password), [password]);
@@ -147,6 +156,21 @@ export function useSignUp() {
           await clearPendingShareReferral();
         }
       }
+
+      // Customer-invite signup: auto-subscribe to the inviting business and credit any configured
+      // welcome points, then show a combined confirmation. Best-effort — a failure here must not
+      // block the (already-successful) registration itself.
+      if (isCustomerInvite && pending?.referral_code) {
+        try {
+          const resolved = await resolvePendingInvite(pending.referral_code);
+          if (resolved.matched && resolved.business) {
+            setWelcomeInfo({ businessName: resolved.business.name, welcomePoints: resolved.welcomePoints });
+          }
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignUp] resolvePendingInvite error:', resolveErr);
+        }
+      }
+
       setRegistrationSucceeded(true);
 
     } catch (err) {
@@ -185,6 +209,7 @@ export function useSignUp() {
     // Submission state
     loading, authError, registrationSucceeded,
     postSignupRedirect,
+    welcomeInfo,
 
     // Handlers
     handleRegister,

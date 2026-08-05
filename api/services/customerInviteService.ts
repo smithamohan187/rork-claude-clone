@@ -79,3 +79,21 @@ export const getBusinessCustomerInvites = async (businessId: string): Promise<Cu
   if (!result.success) throw new Error(result.error ?? 'Failed to load invites');
   return result.data!.invites;
 };
+
+export interface ResolvePendingInviteResult {
+  matched: boolean;
+  alreadyProcessed: boolean;
+  business: { id: string; name: string } | null;
+  welcomePoints: number;
+}
+
+// Called once, right after signup succeeds, when the signup was submitted with a
+// customer_invite_code. Auto-subscribes the new customer to the inviting business and credits
+// any configured welcome points (reusing the same backend flow the Subscribe button uses).
+export const resolvePendingInvite = async (customerInviteCode: string): Promise<ResolvePendingInviteResult> => {
+  const result = await apiClient.post<ResolvePendingInviteResult>('/invites/customer/resolve-pending', {
+    customer_invite_code: customerInviteCode,
+  });
+  if (!result.success) throw new Error(result.error ?? 'Failed to resolve invite');
+  return result.data!;
+};
