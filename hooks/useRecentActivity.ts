@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { fetchRecentActivity, type RecentActivityItem } from '@/api/services/dashboardFeedService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PAGE_SIZE = 20;
 
 export function useRecentActivity() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [items, setItems] = useState<RecentActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -13,6 +15,7 @@ export function useRecentActivity() {
   const offsetRef = useRef(0);
 
   const load = useCallback(async () => {
+    if (authLoading || !isAuthenticated) return;
     setLoading(true);
     setError(null);
     try {
@@ -25,7 +28,7 @@ export function useRecentActivity() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;

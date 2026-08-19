@@ -18,6 +18,22 @@ const submitReviewHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const deleteReviewHandler = asyncHandler(async (req, res) => {
+  const { business_id } = req.query;
+  if (!business_id) {
+    return res.status(400).json(fail('business_id query param is required'));
+  }
+  try {
+    const summary = await reviewsService.deleteReview(req.user.activeProfileId, business_id);
+    res.json(ok(summary));
+  } catch (err) {
+    if (err.statusCode === 404) {
+      return res.status(404).json(fail(err.message));
+    }
+    throw err;
+  }
+});
+
 const getRatingSummaryHandler = asyncHandler(async (req, res) => {
   const { business_id } = req.query;
   if (!business_id) {
@@ -56,6 +72,7 @@ const getRatingBreakdownHandler = asyncHandler(async (req, res) => {
 
 module.exports = {
   submitReviewHandler,
+  deleteReviewHandler,
   getRatingSummaryHandler,
   getMyReviewHandler,
   getBusinessReviewsHandler,

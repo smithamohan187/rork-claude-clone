@@ -140,11 +140,10 @@ function validateDraft(
     errors.category = 'Please select a valid category';
   if ((draft.description?.length ?? 0) > 500)
     errors.description = 'Description must be at most 500 characters';
-  if (!draft.phone?.trim()) errors.phone = 'Phone is required';
-  else if (!/^\+?[\d\s\-()+]{7,20}$/.test(draft.phone.trim()))
+  if (draft.phone?.trim() && !/^\+?[\d\s\-()+]{7,20}$/.test(draft.phone.trim()))
     errors.phone = 'Invalid phone number format';
   const addr = draft.address?.trim() ?? '';
-  if (addr.length < 5) errors.address = 'Address must be at least 5 characters';
+  if (addr.length > 0 && addr.length < 5) errors.address = 'Address must be at least 5 characters';
   hours.forEach(h => {
     if (!h.is_closed) {
       if (!h.open_time) errors[`hours_${h.day_of_week}`] = 'Open time required';
@@ -160,7 +159,7 @@ export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam, welcomePoints: welcomePointsParam } = useLocalSearchParams<{ id: string; subscribe?: string; welcomePoints?: string }>();
   const { business: realBusiness, loading: profileLoading, error: profileError,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
-  const { authUser, activeProfile } = useAuth();
+  const { authUser, activeProfile, authLoading, isAuthenticated } = useAuth();
   const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '');
   const { isSaved, isSaving, save: saveBusinessFn, unsave: unsaveBusinessFn } = useSavedBusiness(id ?? '');
   const router = useRouter();
@@ -213,7 +212,12 @@ export default function BusinessProfileScreen() {
     }
   }, [id]);
 
-  useFocusEffect(useCallback(() => { loadRewardConfig(); }, [loadRewardConfig]));
+  // Guard against firing before AuthContext's session-restore finishes on a fresh page load —
+  // otherwise this 401s and leaves the rewards/offers sections in their empty state.
+  useFocusEffect(useCallback(() => {
+    if (authLoading || !isAuthenticated) return;
+    loadRewardConfig();
+  }, [loadRewardConfig, authLoading, isAuthenticated]));
 
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   const isOwner = useMemo(
@@ -360,7 +364,7 @@ export default function BusinessProfileScreen() {
   const rating = useBusinessRating({
     businessId: id ?? business.id,
     isSubscriber: isSubscribed,
-    isOwner: false,
+    isOwner,
     initialAverageRating: Number(realBusiness?.avg_rating ?? 0),
     initialRatingCount: Number(realBusiness?.rating_count ?? 0),
   });
@@ -1367,7 +1371,7 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
   const router = useRouter();
   const [filter, setFilter] = useState<EventFilter>('upcoming');
   const [commentOpenFor, setCommentOpenFor] = useState<string | null>(null);
-  const { events, isLoading, toggleStatus } = useBusinessEvents(businessId, filter);
+  const { events, counts, isLoading, toggleStatus } = useBusinessEvents(businessId, filter);
   const [eventConfirmDialog, setEventConfirmDialog] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
 
   const handleRequestToggleEvent = useCallback((eventId: string) => {
@@ -1383,13 +1387,6 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
       });
     }
   }, [events, toggleStatus, onShowSnack]);
-
-  const counts = useMemo(() => ({
-    all: events.length,
-    upcoming: events.filter((e) => e.effective_status === 'upcoming').length,
-    past: events.filter((e) => e.effective_status === 'past').length,
-    cancelled: events.filter((e) => e.effective_status === 'cancelled').length,
-  }), [events]);
 
   const emptyCopy: Record<EventFilter, string> = {
     upcoming: 'No upcoming events right now',

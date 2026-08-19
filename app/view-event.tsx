@@ -15,13 +15,18 @@ import { ActivityIndicator, Snackbar, Button } from 'react-native-paper';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
   ArrowLeft,
+  Bookmark,
   Share2,
   Calendar,
   MapPin,
+  MessageCircle,
   Check,
 } from 'lucide-react-native';
 import { fetchEventById, type Event } from '@/api/services/eventsService';
 import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/businessProfileService';
+import LikeButton from '@/components/feed/LikeButton';
+import CommentSheet from '@/components/feed/CommentSheet';
+import { toggleSaveEvent } from '@/api/services/savedEventService';
 
 const PURPLE = '#1A5C35';
 const BG = '#F8F7FF';
@@ -76,6 +81,9 @@ export default function ViewEventScreen() {
   const [snackVisible, setSnackVisible] = useState(false);
   const [snackMsg, setSnackMsg] = useState('');
   const [isSubscribed] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!eventId) {
@@ -87,6 +95,7 @@ export default function ViewEventScreen() {
       setLoading(true);
       const ev = await fetchEventById(eventId);
       setEvent(ev);
+      setSaved(ev.is_saved ?? false);
       const biz = await fetchBusinessProfile(paramBizId || ev.business_id);
       setBusiness(biz);
     } catch (e) {
@@ -100,6 +109,22 @@ export default function ViewEventScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleToggleSave = useCallback(async () => {
+    if (savingBookmark || !event) return;
+    setSavingBookmark(true);
+    const next = !saved;
+    setSaved(next);
+    try {
+      const result = await toggleSaveEvent(event.id);
+      setSaved(result.saved);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewEvent] toggle save error', e);
+      setSaved(!next);
+    } finally {
+      setSavingBookmark(false);
+    }
+  }, [savingBookmark, saved, event]);
 
   const handleSubscribe = useCallback(() => {
     // Subscriptions module not yet built
@@ -330,6 +355,39 @@ export default function ViewEventScreen() {
           {/* ABOUT */}
           <Text style={styles.sectionLabel}>ABOUT THIS EVENT</Text>
           <Text style={styles.bodyText}>{event.description ?? ''}</Text>
+
+          <View style={styles.engagementRow}>
+            <LikeButton
+              contentType="event"
+              contentId={event.id}
+              initialLikeCount={event.like_count ?? 0}
+              initialHasLiked={event.liked_by_me ?? false}
+              isOwner={event.is_owner ?? false}
+            />
+            <TouchableOpacity style={styles.commentBtn} onPress={() => setCommentOpen(true)} hitSlop={8} testID="view-event-comment-btn">
+              <MessageCircle size={18} color="#6B7280" />
+              <Text style={styles.commentCount}>{event.comment_count ?? 0}</Text>
+            </TouchableOpacity>
+            <CommentSheet
+              visible={commentOpen}
+              contentType="event"
+              contentId={event.id}
+              initialCommentCount={event.comment_count ?? 0}
+              onClose={() => setCommentOpen(false)}
+            />
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleToggleSave}
+              hitSlop={8}
+              disabled={savingBookmark}
+              testID="view-event-save-btn"
+            >
+              <Bookmark size={18} color={saved ? '#DC2626' : '#6B7280'} fill={saved ? '#DC2626' : 'transparent'} />
+              <Text style={[styles.saveBtnText, saved && styles.saveBtnTextActive]}>
+                {saved ? 'Saved' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.divider} />
 
@@ -578,6 +636,37 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: BORDER,
     marginVertical: 14,
+  },
+
+  engagementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 14,
+  },
+  commentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  commentCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto',
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  saveBtnTextActive: {
+    color: '#DC2626',
   },
 
   sectionLabel: {

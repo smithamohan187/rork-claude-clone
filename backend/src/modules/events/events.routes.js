@@ -3,7 +3,7 @@ const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, optionalAuthenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
 const { createEventSchema, updateEventSchema } = require('./events.validation');
 const {
@@ -35,7 +35,7 @@ router.get('/business/:businessId', authenticate, getBusinessEventsHandler);
 router.get('/', authenticate, listMyEventsHandler);
 
 // Public single-event fetch
-router.get('/:id', getEventHandler);
+router.get('/:id', optionalAuthenticate, getEventHandler);
 
 // Protected mutations
 router.post('/', authenticate, validateRequest(createEventSchema), createEventHandler);

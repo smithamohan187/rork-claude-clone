@@ -27,6 +27,7 @@ import {
   Users,
   Pencil,
   ShieldCheck,
+  History,
 } from 'lucide-react-native';
 import {
   TextInput as PaperTextInput,
@@ -38,7 +39,9 @@ import {
 } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import { useInviteCustomers, EmailRow, ManualRow, SendResultRow } from '@/hooks/useInviteCustomers';
+import { useCustomerInviteHistory } from '@/hooks/useCustomerInviteHistory';
 import { DeviceContact } from '@/api/services/contactsService';
+import { CustomerInvite, CustomerInviteStatus } from '@/api/services/customerInviteService';
 import { CsvPreviewRow } from '@/api/services/fileParseService';
 
 const ACCENT = '#00B246';
@@ -71,6 +74,7 @@ export default function InviteCustomersScreen() {
   const businessName = params.businessName ?? 'Your Business';
 
   const inv = useInviteCustomers(businessId, businessName);
+  const history = useCustomerInviteHistory(businessId);
   const [confirmVisible, setConfirmVisible] = React.useState<boolean>(false);
   const [phonePickerFor, setPhonePickerFor] = React.useState<string | null>(null);
 
@@ -116,6 +120,9 @@ export default function InviteCustomersScreen() {
             {businessName}
           </Text>
         </View>
+        <TouchableOpacity onPress={history.open} hitSlop={12} testID="invite-history-btn">
+          <History size={20} color="#fff" />
+        </TouchableOpacity>
       </SafeAreaView>
 
       <View style={styles.tabStripWrap}>
@@ -321,7 +328,66 @@ export default function InviteCustomersScreen() {
             Close
           </PaperButton>
         </Modal>
+
+        <Modal
+          visible={history.visible}
+          onDismiss={history.close}
+          contentContainerStyle={styles.historyModalCard}
+        >
+          <Text style={styles.modalTitle}>Sent Invites</Text>
+          <ScrollView style={{ maxHeight: 420 }} testID="invite-history-list">
+            {history.loading ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator color={ACCENT} />
+              </View>
+            ) : history.error ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>{history.error}</Text>
+              </View>
+            ) : history.invites.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No invites sent yet</Text>
+              </View>
+            ) : (
+              history.invites.map((item) => <InviteHistoryRow key={item.id} invite={item} />)
+            )}
+          </ScrollView>
+          <PaperButton mode="text" onPress={history.close} textColor={MUTED} style={{ marginTop: 8 }}>
+            Close
+          </PaperButton>
+        </Modal>
       </Portal>
+    </View>
+  );
+}
+
+const STATUS_LABEL: Record<CustomerInviteStatus, string> = {
+  sent: 'Sent',
+  registered: 'Registered',
+  subscribed: 'Subscribed',
+};
+
+function InviteHistoryRow({ invite }: { invite: CustomerInvite }) {
+  return (
+    <View style={styles.historyRow} testID={`invite-history-row-${invite.id}`}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.historyRowName} numberOfLines={1}>
+          {invite.invitee_name || invite.invitee_identifier}
+        </Text>
+        <Text style={styles.historyRowMeta} numberOfLines={1}>
+          {invite.invitee_identifier} · {invite.channel}
+        </Text>
+      </View>
+      <Text
+        style={[
+          styles.csvStatusBadge,
+          invite.status === 'subscribed' && styles.csvStatusValid,
+          invite.status === 'registered' && styles.csvStatusDuplicate,
+          invite.status === 'sent' && styles.historyStatusPending,
+        ]}
+      >
+        {STATUS_LABEL[invite.status]}
+      </Text>
     </View>
   );
 }
@@ -936,6 +1002,11 @@ const styles = StyleSheet.create({
   sendBtn: { borderRadius: 12 },
   sendBtnLabel: { fontWeight: '700' as const, fontSize: 14 },
   modalCard: { backgroundColor: '#fff', margin: 24, padding: 20, borderRadius: 16 },
+  historyModalCard: { backgroundColor: '#fff', margin: 24, padding: 20, borderRadius: 16, maxHeight: '80%' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EFEAF7' },
+  historyRowName: { color: '#1A1A2E', fontSize: 13, fontWeight: '600' as const },
+  historyRowMeta: { color: MUTED, fontSize: 11, marginTop: 2 },
+  historyStatusPending: { color: '#9A6B00', backgroundColor: '#FDF1D6' },
   modalTitle: { color: '#1A5C35', fontWeight: '700' as const, fontSize: 17, marginBottom: 8 },
   modalHeadline: { color: '#1A5C35', fontSize: 13, lineHeight: 18 },
   totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: ACCENT_LIGHT, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10 },

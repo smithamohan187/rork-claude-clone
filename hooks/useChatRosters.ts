@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getSubscribedBusinesses } from '@/api/services/subscriptionService';
 import { getFriends, ChatFriend } from '@/api/services/chatService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface SubscribedBusiness {
   id: string;
@@ -17,12 +18,14 @@ export interface SubscribedBusiness {
 // Roster of businesses the caller is subscribed to (the Messages "Businesses" tab
 // source). Refetches on focus — same pattern as useMyReferrals / useConversations.
 export function useSubscribedBusinesses() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [businesses, setBusinesses] = useState<SubscribedBusiness[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       let active = true;
       (async () => {
         try {
@@ -37,7 +40,7 @@ export function useSubscribedBusinesses() {
       return () => {
         active = false;
       };
-    }, []),
+    }, [authLoading, isAuthenticated]),
   );
 
   return { businesses, loading, error };
@@ -45,12 +48,14 @@ export function useSubscribedBusinesses() {
 
 // Roster of the caller's trusted friends (the Messages "Friends" tab source).
 export function useFriends() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [friends, setFriends] = useState<ChatFriend[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       let active = true;
       (async () => {
         try {
@@ -65,7 +70,7 @@ export function useFriends() {
       return () => {
         active = false;
       };
-    }, []),
+    }, [authLoading, isAuthenticated]),
   );
 
   return { friends, loading, error };

@@ -12,6 +12,21 @@ export async function subscribeToBusiness(businessId: string): Promise<{ subscri
   return result.data!;
 }
 
+export interface ScanSubscribeResult {
+  alreadySubscribed: boolean;
+  isOwner: boolean;
+  business: { id: string; name: string };
+  welcomePoints: number;
+}
+
+// Resolves a business "Scan to subscribe" QR deep link for an already-authenticated user —
+// auto-subscribes (idempotent) and credits any configured welcome points server-side.
+export async function scanSubscribeToBusiness(businessId: string): Promise<ScanSubscribeResult> {
+  const result = await apiClient.post<ScanSubscribeResult>('/subscriptions/scan-subscribe', { business_id: businessId });
+  if (!result.success) throw new Error(result.error ?? 'Failed to subscribe');
+  return result.data!;
+}
+
 export async function unsubscribeFromBusiness(businessId: string): Promise<{ subscribed: boolean }> {
   const result = await apiClient.post<{ subscribed: boolean }>('/subscriptions/unsubscribe', { business_id: businessId });
   if (!result.success) throw new Error(result.error ?? 'Unsubscribe failed');

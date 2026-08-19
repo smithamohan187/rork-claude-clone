@@ -109,6 +109,18 @@ async function run() {
     assert('T3-SCAN-CODE-OWNER', scanRes.status === 200 && scanUrl === `${SHARE_BASE_URL}/b/${businessId}`,
       'Owner GET /businesses/:id/scan-code → 200 with the /b/:id deep link', { status: scanRes.status, url: scanUrl, expected: `${SHARE_BASE_URL}/b/${businessId}` });
 
+    // ── The scan-code URL itself actually resolves (not a bare 404) ───────────────────────
+    const landingRes = await fetch(scanUrl);
+    const landingHtml = await landingRes.text();
+    assert('T3b-SCAN-LANDING-PAGE-RESOLVES', landingRes.status === 200 && landingHtml.includes(`QR Test Biz ${stamp}`),
+      'GET the scan-code URL itself (the actual QR target) → 200 with the business name in the page',
+      { status: landingRes.status, snippet: landingHtml.slice(0, 200) });
+
+    const landing404 = await fetch(`${SHARE_BASE_URL}/b/00000000-0000-0000-0000-000000000000`);
+    assert('T3c-SCAN-LANDING-UNKNOWN-BUSINESS-STILL-200', landing404.status === 200,
+      'Scan-code landing page for an unknown business ID still 200s with a generic fallback (never a bare 404)',
+      { status: landing404.status });
+
     // ── Non-owner is rejected (403) ──────────────────────────────────────────────────────
     const Other = await registerUser({ email: `qr-other-${stamp}@test.com`, phone: `+1721${String(stamp).slice(-7)}`, full_name: 'QR Other' });
     assert('T4-REGISTER-OTHER', Other.ok && Other.token && Other.profileId, 'A second (non-owner) user registers → 201', Other.data);

@@ -37,6 +37,7 @@ const chatRoutes              = require('./modules/chat/chat.routes');
 const dashboardFeedRoutes     = require('./modules/dashboardFeed/dashboardFeed.routes');
 const analyticsRoutes         = require('./modules/analytics/analytics.routes');
 const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modules/coupons/coupons.routes');
+const { getScanLandingPageHandler } = require('./modules/businesses/business.controller');
 
 const app = express();
 
@@ -77,6 +78,9 @@ app.use('/feed/share',              shareReferralRoutes);
 // Public link-preview page for scrapers (Facebook/WhatsApp/iMessage) hitting SHARE_BASE_URL/s/:code
 // directly — must be plain server-rendered HTML, not part of the JSON API above.
 app.get('/s/:code',                 sharePreviewPageHandler);
+// Public landing page for a business's "Scan to subscribe" QR code (built by
+// GET /businesses/:id/scan-code) — same plain-HTML-for-scrapers pattern as /s/:code above.
+app.get('/b/:id',                   getScanLandingPageHandler);
 app.use('/likes',             likesRoutes);
 app.use('/comments',          commentsRoutes);
 app.use('/shares',            sharesRoutes);

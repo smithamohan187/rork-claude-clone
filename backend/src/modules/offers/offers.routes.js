@@ -2,7 +2,7 @@ const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, optionalAuthenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
 const {
   createOfferSchema,
@@ -35,7 +35,7 @@ router.get('/business/:businessId', authenticate, getBusinessOffersHandler);
 
 // /my must come before /:id to avoid being captured as a param
 router.get('/my', authenticate, listMyOffersHandler);
-router.get('/:id', getOfferHandler);
+router.get('/:id', optionalAuthenticate, getOfferHandler);
 
 // Protected mutation routes
 router.post('/', authenticate, validateRequest(createOfferSchema), createOfferHandler);

@@ -98,11 +98,9 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
       > & { id?: string; qrPayload?: string }
     ): StoredCoupon => {
       const now = Date.now();
-      const qrPayload =
-        input.qrPayload ??
-        `tp_${now}_${Math.random().toString(36).slice(2, 10)}${Math.random()
-          .toString(36)
-          .slice(2, 10)}`;
+      // The QR encodes the real server coupon code (not a locally-generated string) so a scan
+      // on a different device/install can be validated server-side via POST /coupons/scan.
+      const qrPayload = input.qrPayload ?? input.couponCode;
       const newCoupon: StoredCoupon = {
         rewardId: undefined,
         pointsDeducted: 0,

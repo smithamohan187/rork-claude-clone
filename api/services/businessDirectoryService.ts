@@ -21,6 +21,7 @@ export interface BusinessDirectoryItem {
   subscriber_count: number;
   avg_rating: number | null;      // null when no ratings have been submitted yet
   rating_count: number;
+  is_subscribed: boolean;         // always false when browsing unauthenticated
 }
 
 // Shape of the paginated response from GET /businessdirectory

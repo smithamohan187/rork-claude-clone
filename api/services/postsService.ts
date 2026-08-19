@@ -14,6 +14,7 @@ export interface Post {
   like_count?: number;
   liked_by_me?: boolean;
   comment_count?: number;
+  is_owner?: boolean;
 }
 
 export interface CreatePostPayload {
@@ -62,7 +63,10 @@ export async function createPost(payload: CreatePostPayload): Promise<Post> {
   return resolvePost(result.data!.post);
 }
 
-export async function updatePost(id: string, payload: Partial<CreatePostPayload>): Promise<Post> {
+export async function updatePost(
+  id: string,
+  payload: Partial<CreatePostPayload> & { image_url?: string | null },
+): Promise<Post> {
   const result = await apiClient.put<{ post: Post }>(`/posts/${id}`, payload);
   if (!result.success) throw new Error(result.error ?? 'Failed to update post');
   return resolvePost(result.data!.post);

@@ -14,8 +14,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Calendar,
+  MessageCircle,
   Share2,
 } from 'lucide-react-native';
+import LikeButton from '@/components/feed/LikeButton';
+import CommentSheet from '@/components/feed/CommentSheet';
 import {
   ActivityIndicator,
   Button,
@@ -63,6 +66,7 @@ export default function ViewPostScreen() {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarText, setSnackbarText] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!postId) {
@@ -232,6 +236,27 @@ export default function ViewPostScreen() {
           </View>
 
           <Text style={styles.body}>{post.content}</Text>
+
+          <View style={styles.engagementRow}>
+            <LikeButton
+              contentType="post"
+              contentId={post.id}
+              initialLikeCount={post.like_count ?? 0}
+              initialHasLiked={post.liked_by_me ?? false}
+              isOwner={post.is_owner ?? false}
+            />
+            <TouchableOpacity style={styles.commentBtn} onPress={() => setCommentOpen(true)} hitSlop={8} testID="view-post-comment-btn">
+              <MessageCircle size={18} color="#6B7280" />
+              <Text style={styles.commentCount}>{post.comment_count ?? 0}</Text>
+            </TouchableOpacity>
+            <CommentSheet
+              visible={commentOpen}
+              contentType="post"
+              contentId={post.id}
+              initialCommentCount={post.comment_count ?? 0}
+              onClose={() => setCommentOpen(false)}
+            />
+          </View>
         </View>
       </ScrollView>
 
@@ -335,6 +360,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 16,
+  },
+  engagementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 16,
+  },
+  commentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  commentCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
   },
   bottomBarWrap: {
     position: 'absolute',

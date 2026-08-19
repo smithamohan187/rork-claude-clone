@@ -5,6 +5,7 @@ import {
   unsubscribeFromBusiness,
 } from '@/api/services/subscriptionService';
 import { API_BASE_URL } from '@/api/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 function resolveUrl(url: string | null): string | null {
   if (!url) return null;
@@ -40,13 +41,14 @@ function mapItem(raw: any): SubscribedBusinessItem {
     }),
     rating: Number(raw.avg_rating ?? 0),
     tags: [],
-    points: 0,
+    points: raw.points ?? 0,
     activeOffers: raw.active_offer_count ?? 0,
     tier: 'Bronze',
   };
 }
 
 export function useSubscribedBusinesses() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [businesses, setBusinesses] = useState<SubscribedBusinessItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,7 +64,10 @@ export function useSubscribedBusinesses() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
+  useFocusEffect(useCallback(() => {
+    if (authLoading || !isAuthenticated) return;
+    refresh();
+  }, [refresh, authLoading, isAuthenticated]));
 
   const filteredBusinesses = businesses.filter((b) => {
     const matchFilter = activeFilter === 'All' || b.category === activeFilter;

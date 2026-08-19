@@ -63,7 +63,7 @@ async function toDisplayUri(uri: string): Promise<string> {
 
 export function useCreateBusiness() {
   const router = useRouter();
-  const { updateAuthUser, refreshProfiles } = useAuth();
+  const { updateAuthUser, refreshProfiles, authLoading, isAuthenticated } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -125,8 +125,11 @@ export function useCreateBusiness() {
       .catch(() => {});
   }, []);
 
-  // Prefill from existing business on mount
+  // Prefill from existing business on mount — waits for session restore to finish so this
+  // doesn't fire on a cold page load before the access token is back in memory (would 401
+  // and silently leave the form blank instead of showing the existing business).
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     fetchMyBusiness()
       .then((biz) => {
         if (!biz) return;
@@ -146,9 +149,24 @@ export function useCreateBusiness() {
         setLogoUri(biz.logo_url ?? null);
         setCoverUri(biz.cover_url ?? null);
         if (biz.hours && biz.hours.length > 0) setHours(biz.hours);
+
+        // Re-derive countryCode/stateCode from the saved names so the State/City
+        // autocomplete lookups (which need ISO codes, not names) work again after
+        // a reload — the business row only stores names, never the codes.
+        if (biz.country) {
+          const countryMatch = Country.getAllCountries().find((c) => c.name === biz.country);
+          if (countryMatch) {
+            setCountryCode(countryMatch.isoCode);
+            if (biz.state) {
+              const stateMatch = State.getStatesOfCountry(countryMatch.isoCode)
+                .find((s) => s.name === biz.state);
+              if (stateMatch) setStateCode(stateMatch.isoCode);
+            }
+          }
+        }
       })
       .catch(() => {});
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const clearFieldError = useCallback((field: string) => {
     setErrors(prev => {

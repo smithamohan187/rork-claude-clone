@@ -12,6 +12,13 @@ function firstName(name: string, max: number = 10): string {
   return `${first.slice(0, max - 1)}…`;
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const second = parts[1]?.[0] ?? '';
+  return (first + second).toUpperCase() || '?';
+}
+
 interface Props {
   testID?: string;
 }
@@ -19,7 +26,6 @@ interface Props {
 export default function ActiveProfileBadge({ testID }: Props) {
   const { authUser, profiles } = useAuth();
   const [open, setOpen] = useState<boolean>(false);
-  console.log(authUser, profiles);
 
   const hasMultiple = profiles.length > 1;
   const displayName = authUser?.name ?? authUser?.email ?? '';
@@ -46,11 +52,17 @@ export default function ActiveProfileBadge({ testID }: Props) {
         accessibilityLabel={`Active profile ${displayName}. ${hasMultiple ? 'Tap to switch profile.' : ''}`}
         testID={testID ?? 'active-profile-badge'}
       >
-        <Image
-          source={{ uri: avatarUrl }}
-          style={styles.avatar}
-          contentFit="cover"
-        />
+        {avatarUrl ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>
+          </View>
+        )}
         <Text style={styles.name} numberOfLines={1}>
           {firstName(displayName)}
         </Text>
@@ -85,6 +97,15 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: Colors.surface,
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primary,
   },
   name: {
     fontSize: 13,

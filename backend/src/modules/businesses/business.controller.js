@@ -6,6 +6,7 @@ const {
   completeOnboarding,
   getPublicBusinessProfile,
   getBusinessScanCode,
+  renderBusinessScanPageHtml,
   fetchDashboardSummary,
 } = require('./business.service');
 const { ok, fail } = require('../../utils/apiResponse');
@@ -79,6 +80,17 @@ const getScanCodeHandler = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * GET /b/:id — public, no auth. The landing page a "Scan to subscribe" QR code actually opens.
+ * Always 200s with a valid HTML/OG page (even for an unknown business) — never a bare 404.
+ */
+const getScanLandingPageHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const requestOrigin = `${req.protocol}://${req.get('host')}`;
+  const html = await renderBusinessScanPageHtml(id, requestOrigin);
+  res.type('html').send(html);
+});
+
 const getDashboardSummaryHandler = asyncHandler(async (req, res) => {
   const summary = await fetchDashboardSummary(req.user.userId);
   if (!summary) return res.status(404).json({ success: false, data: null, error: 'Business not found' });
@@ -93,5 +105,6 @@ module.exports = {
   completeOnboardingHandler,
   getBusinessProfileHandler,
   getScanCodeHandler,
+  getScanLandingPageHandler,
   getDashboardSummaryHandler,
 };

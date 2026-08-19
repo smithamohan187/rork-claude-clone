@@ -5,10 +5,12 @@ import {
   CombinedReferral,
   ReferralDirection,
 } from '@/api/services/referralService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function useMyReferrals() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [direction, setDirection] = useState<ReferralDirection>('all');
   const [search, setSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -28,6 +30,7 @@ export function useMyReferrals() {
   }, [search]);
 
   const load = useCallback(async () => {
+    if (authLoading || !isAuthenticated) return;
     setLoading(true);
     setError(null);
     try {
@@ -38,7 +41,7 @@ export function useMyReferrals() {
     } finally {
       setLoading(false);
     }
-  }, [direction, debouncedSearch]);
+  }, [direction, debouncedSearch, authLoading, isAuthenticated]);
 
   useEffect(() => {
     load();

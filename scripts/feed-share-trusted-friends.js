@@ -110,8 +110,9 @@ async function run() {
     assert('T1-SHARE', shareRes.status === 201 && !!referralCode,
       'POST /feed/share-recipients → 201 with a referral_code', shareRes.data);
 
-    const sentRow = (await db.query('SELECT status FROM share_recipients WHERE referral_code=$1', [referralCode])).rows[0];
+    const sentRow = (await db.query('SELECT id, status FROM share_recipients WHERE referral_code=$1', [referralCode])).rows[0];
     assert('T1-DB', sentRow?.status === 'sent', "share_recipients row created with status='sent'", sentRow);
+    const recipientId = sentRow?.id;
 
     // ── T2: resolve valid code → 200 with correct content ─────────────────────
     const r2 = await api('POST', '/feed/share/resolve-share-referral', { body: { referral_code: referralCode } });
@@ -150,8 +151,12 @@ async function run() {
     const noFriend = (await db.query(
       `SELECT * FROM trusted_friends WHERE profile_id_one=LEAST($1::uuid,$2::uuid) AND profile_id_two=GREATEST($1::uuid,$2::uuid)`,
       [A.profileId, B.profileId])).rows;
+    // Scoped to THIS run's own share_recipients row (source_id) — A.profileId (pinky@test.com) is a
+    // fixed, reused account across every historical run of this script, so an unscoped
+    // profile-wide count here would accumulate across runs and never pass after the first one.
     const noShareLog = (await db.query(
-      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share'`, [A.profileId])).rows;
+      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share' AND source_id=$2::uuid`,
+      [A.profileId, recipientId])).rows;
     assert('T5-NO-TRIGGER', noFriend.length === 0 && noShareLog.length === 0,
       'Mismatched subscribe created NO trusted_friends row and NO share points log',
       { friends: noFriend.length, shareLogs: noShareLog.length });
@@ -179,8 +184,8 @@ async function run() {
       { ordered: orderedPair.length, either: eitherDirection.length });
 
     const shareLog = (await db.query(
-      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share' AND source_type='content_share'`,
-      [A.profileId])).rows;
+      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share' AND source_type='content_share' AND source_id=$2::uuid`,
+      [A.profileId, recipientId])).rows;
     assert('T6-POINTS-SHARE', shareLog.length === 1,
       "referral_points_log has a 'share' row for Profile A (sharer)", { count: shareLog.length });
 
@@ -190,7 +195,8 @@ async function run() {
       `SELECT * FROM trusted_friends WHERE profile_id_one=LEAST($1::uuid,$2::uuid) AND profile_id_two=GREATEST($1::uuid,$2::uuid)`,
       [A.profileId, B.profileId])).rows;
     const dupShareLog = (await db.query(
-      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share'`, [A.profileId])).rows;
+      `SELECT * FROM referral_points_log WHERE profile_id=$1::uuid AND points_type='share' AND source_id=$2::uuid`,
+      [A.profileId, recipientId])).rows;
     assert('T7-IDEMPOTENT', dupFriends.length === 1 && dupShareLog.length === 1,
       'Re-subscribe creates no duplicate trusted_friends or share points row',
       { friends: dupFriends.length, shareLogs: dupShareLog.length });

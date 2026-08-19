@@ -41,6 +41,7 @@ import { useEvents } from '@/hooks/useEvents';
 import { type Event } from '@/api/services/eventsService';
 import { usePosts } from '@/hooks/usePosts';
 import { type Post } from '@/api/services/postsService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -173,13 +174,17 @@ export default function ManageContentScreen() {
     removePost,
     refresh: refreshPosts,
   } = usePosts(postFilter);
+  const { authLoading, isAuthenticated } = useAuth();
 
+  // Guard against firing before AuthContext's session-restore finishes on a fresh page load —
+  // otherwise these 401 and leave all three lists empty (same race as each hook's internal auto-load).
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       refreshOffers(offerFilter);
       refreshEvents(eventFilter);
       refreshPosts(postFilter);
-    }, [refreshOffers, offerFilter, refreshEvents, eventFilter, refreshPosts, postFilter])
+    }, [refreshOffers, offerFilter, refreshEvents, eventFilter, refreshPosts, postFilter, authLoading, isAuthenticated])
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>('offers');

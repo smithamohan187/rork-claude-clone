@@ -24,7 +24,8 @@ const getCommentsHandler = asyncHandler(async (req, res) => {
   const { content_type, content_id } = req.params;
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
-  const comments = await commentsService.getComments(content_type, content_id, limit, offset);
+  const callerProfileId = req.user.activeProfileId;
+  const comments = await commentsService.getComments(content_type, content_id, limit, offset, callerProfileId);
   res.json(ok({ comments }));
 });
 
@@ -32,7 +33,8 @@ const getRepliesHandler = asyncHandler(async (req, res) => {
   const { comment_id } = req.params;
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
-  const replies = await commentsService.getReplies(comment_id, limit, offset);
+  const callerProfileId = req.user.activeProfileId;
+  const replies = await commentsService.getReplies(comment_id, limit, offset, callerProfileId);
   res.json(ok({ replies }));
 });
 

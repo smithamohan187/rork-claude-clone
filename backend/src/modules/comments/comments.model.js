@@ -18,7 +18,7 @@ async function getParentInfo(commentId) {
   return rows[0] ?? null;
 }
 
-async function getTopLevelComments(contentType, contentId, limit, offset) {
+async function getTopLevelComments(contentType, contentId, limit, offset, callerProfileId) {
   const { rows } = await query(
     `SELECT
        c.id, c.content_type, c.content_id, c.profile_id, c.parent_comment_id,
@@ -27,18 +27,22 @@ async function getTopLevelComments(contentType, contentId, limit, offset) {
        CASE WHEN c.is_deleted THEN NULL ELSE p.display_name END AS display_name,
        CASE WHEN c.is_deleted THEN NULL ELSE p.avatar_url END AS avatar_url,
        (SELECT COUNT(*)::int FROM comments r
-        WHERE r.parent_comment_id = c.id AND r.is_deleted = FALSE) AS reply_count
+        WHERE r.parent_comment_id = c.id AND r.is_deleted = FALSE) AS reply_count,
+       (SELECT COUNT(*)::int FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id) AS like_count,
+       EXISTS(SELECT 1 FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id AND l.profile_id = $5) AS liked_by_me
      FROM comments c
      JOIN profiles p ON p.id = c.profile_id
      WHERE c.content_type = $1 AND c.content_id = $2 AND c.parent_comment_id IS NULL
      ORDER BY c.created_at ASC
      LIMIT $3 OFFSET $4`,
-    [contentType, contentId, limit, offset]
+    [contentType, contentId, limit, offset, callerProfileId]
   );
   return rows;
 }
 
-async function getRepliesBatch(parentIds) {
+async function getRepliesBatch(parentIds, callerProfileId) {
   if (!parentIds.length) return [];
   const { rows } = await query(
     `SELECT
@@ -46,30 +50,38 @@ async function getRepliesBatch(parentIds) {
        CASE WHEN c.is_deleted THEN '[comment deleted]' ELSE c.body END AS body,
        c.is_deleted, c.created_at, c.updated_at,
        CASE WHEN c.is_deleted THEN NULL ELSE p.display_name END AS display_name,
-       CASE WHEN c.is_deleted THEN NULL ELSE p.avatar_url END AS avatar_url
+       CASE WHEN c.is_deleted THEN NULL ELSE p.avatar_url END AS avatar_url,
+       (SELECT COUNT(*)::int FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id) AS like_count,
+       EXISTS(SELECT 1 FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id AND l.profile_id = $2) AS liked_by_me
      FROM comments c
      JOIN profiles p ON p.id = c.profile_id
      WHERE c.parent_comment_id = ANY($1::uuid[])
      ORDER BY c.created_at ASC`,
-    [parentIds]
+    [parentIds, callerProfileId]
   );
   return rows;
 }
 
-async function getRepliesPaginated(commentId, limit, offset) {
+async function getRepliesPaginated(commentId, limit, offset, callerProfileId) {
   const { rows } = await query(
     `SELECT
        c.id, c.content_type, c.content_id, c.profile_id, c.parent_comment_id,
        CASE WHEN c.is_deleted THEN '[comment deleted]' ELSE c.body END AS body,
        c.is_deleted, c.created_at, c.updated_at,
        CASE WHEN c.is_deleted THEN NULL ELSE p.display_name END AS display_name,
-       CASE WHEN c.is_deleted THEN NULL ELSE p.avatar_url END AS avatar_url
+       CASE WHEN c.is_deleted THEN NULL ELSE p.avatar_url END AS avatar_url,
+       (SELECT COUNT(*)::int FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id) AS like_count,
+       EXISTS(SELECT 1 FROM likes l
+        WHERE l.content_type = 'comment' AND l.content_id = c.id AND l.profile_id = $4) AS liked_by_me
      FROM comments c
      JOIN profiles p ON p.id = c.profile_id
      WHERE c.parent_comment_id = $1
      ORDER BY c.created_at ASC
      LIMIT $2 OFFSET $3`,
-    [commentId, limit, offset]
+    [commentId, limit, offset, callerProfileId]
   );
   return rows;
 }
@@ -125,6 +137,13 @@ async function getCommentCount(contentType, contentId) {
   return rows[0].comment_count;
 }
 
+async function deleteByContent(contentType, contentId) {
+  await query(
+    'DELETE FROM comments WHERE content_type = $1 AND content_id = $2',
+    [contentType, contentId]
+  );
+}
+
 module.exports = {
   addComment,
   getParentInfo,
@@ -135,4 +154,5 @@ module.exports = {
   softDeleteComment,
   getContentOwnerProfileId,
   getCommentCount,
+  deleteByContent,
 };

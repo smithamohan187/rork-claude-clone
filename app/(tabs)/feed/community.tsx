@@ -851,7 +851,7 @@ const fullScreenStyles = StyleSheet.create({
 });
 
 export default function FeedScreen() {
-  const { accountType, currentUser } = useAuth();
+  const { accountType, authUser } = useAuth();
   const { announcements } = useAdmin();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -887,7 +887,7 @@ export default function FeedScreen() {
 
     let basePosts: Post[];
     if (accountType === 'business') {
-      basePosts = regularPosts.filter(p => p.author.id === currentUser.id);
+      basePosts = regularPosts.filter(p => p.author.id === authUser?.id);
     } else {
       basePosts = [touchPointsPinnedPost, ...adminPosts, ...regularPosts];
     }
@@ -905,7 +905,7 @@ export default function FeedScreen() {
         localInfo?.businessLocation.localTags.some(t => t.toLowerCase().includes(q))
       );
     });
-  }, [searchQuery, announcements, accountType, currentUser.id]);
+  }, [searchQuery, announcements, accountType, authUser?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -975,7 +975,7 @@ export default function FeedScreen() {
           >
             <Heart size={20} color={Colors.bannerText} />
           </TouchableOpacity>
-          <Image source={{ uri: currentUser.avatar }} style={styles.headerAvatar} />
+          <Image source={{ uri: authUser?.avatar }} style={styles.headerAvatar} />
           {bookmarkTooltipVisible && (
             <View style={styles.headerTooltip} pointerEvents="none">
               <Text style={styles.headerTooltipText}>Bookmarks</Text>
@@ -1060,7 +1060,7 @@ export default function FeedScreen() {
         <EventsSection onEventPress={handleEventPress} />
       )}
     </View>
-  ), [accountType, currentUser, searchQuery, router, handleEventPress]);
+  ), [accountType, authUser, searchQuery, router, handleEventPress]);
 
   return (
     <View style={styles.container}>

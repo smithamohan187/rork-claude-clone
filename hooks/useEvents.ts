@@ -10,8 +10,10 @@ import {
   type CreateEventPayload,
   type UpdateEventPayload,
 } from '@/api/services/eventsService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useEvents(initialFilter?: string) {
+  const { authLoading, isAuthenticated } = useAuth();
   const [events, setEvents]   = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -29,7 +31,12 @@ export function useEvents(initialFilter?: string) {
     }
   }, [initialFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  // Wait for AuthContext's session-restore to finish — firing before it settles hits the API
+  // with no access token yet, 401s, and silently leaves the list empty on fresh page loads.
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    load();
+  }, [load, authLoading, isAuthenticated]);
 
   const addEvent = useCallback(async (payload: CreateEventPayload): Promise<Event> => {
     const event = await createEvent(payload);

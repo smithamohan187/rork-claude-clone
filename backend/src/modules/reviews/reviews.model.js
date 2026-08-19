@@ -32,6 +32,14 @@ async function upsertReview(profileId, businessId, rating, reviewText) {
   return rows[0];
 }
 
+async function deleteReview(profileId, businessId) {
+  const { rows } = await query(
+    'DELETE FROM business_reviews WHERE profile_id = $1 AND business_id = $2 RETURNING id',
+    [profileId, businessId]
+  );
+  return rows[0] ?? null;
+}
+
 async function getReviewsByBusiness(businessId, limit = 20, offset = 0) {
   const { rows } = await query(
     `SELECT br.id, br.rating, br.review_text, br.created_at, br.updated_at,
@@ -63,6 +71,7 @@ module.exports = {
   getBusinessRatingSummary,
   getByProfileAndBusiness,
   upsertReview,
+  deleteReview,
   getReviewsByBusiness,
   getRatingBreakdown,
 };

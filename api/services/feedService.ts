@@ -72,7 +72,8 @@ export async function getFeed(params?: {
       offset: params?.offset,
     },
   });
-  const data = res.data as FeedResponse;
+  if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to load feed');
+  const data = res.data;
   if (data.mode === 'feed') {
     return {
       mode: 'feed',

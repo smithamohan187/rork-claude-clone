@@ -104,6 +104,8 @@ async function insertRefreshToken(userId, token, expiresAt, deviceInfo, ipAddres
 
 async function findUserWithActiveProfile(identifier, identifierType) {
   const column = identifierType === 'email' ? 'u.email' : 'u.phone';
+  // LEFT JOIN businesses to include logo_url — a business profile's real avatar lives on
+  // businesses.logo_url, never on profiles.avatar_url (same fix as switchActiveProfile above).
   const { rows } = await query(
     `SELECT
        u.id AS user_id,
@@ -117,6 +119,7 @@ async function findUserWithActiveProfile(identifier, identifierType) {
        p.profile_type,
        p.display_name,
        p.avatar_url,
+       b.logo_url,
        p.bio,
        p.city,
        p.state,
@@ -127,6 +130,7 @@ async function findUserWithActiveProfile(identifier, identifierType) {
        p.is_active AS profile_is_active
      FROM users u
      JOIN profiles p ON p.id = u.active_profile_id
+     LEFT JOIN businesses b ON b.profile_id = p.id
      WHERE ${column} = $1
        AND u.is_active = TRUE
        AND p.is_active = TRUE`,
@@ -186,6 +190,24 @@ async function revokeRefreshTokenById(id, userId) {
   );
 }
 
+// Atomically claims a refresh token for rotation: revokes it only if it's still active,
+// in a single conditional UPDATE. Returns the row if this call won the race, null if another
+// concurrent request already rotated it (or it doesn't exist / already expired). This closes a
+// TOCTOU gap where two concurrent /auth/refresh calls presenting the same token could otherwise
+// both pass an earlier SELECT-based active check before either revoke landed.
+async function atomicRevokeRefreshTokenById(id) {
+  const { rows } = await query(
+    `UPDATE refresh_tokens
+     SET revoked_at = NOW()
+     WHERE id = $1
+       AND revoked_at IS NULL
+       AND expires_at > NOW()
+     RETURNING id, user_id`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
 // ── Refresh token rotation helpers ───────────────────────────────────────────
 
 // Fast lookup for SHA-256-hashed tokens (issued by /auth/refresh endpoint)
@@ -237,7 +259,9 @@ async function getUserByIdWithProfile(userId) {
 }
 
 async function getSessionByUserId(userId) {
-  // Join on active_profile_id — works for both personal and business active profiles
+  // Join on active_profile_id — works for both personal and business active profiles.
+  // LEFT JOIN businesses to include logo_url — a business profile's real avatar lives on
+  // businesses.logo_url, never on profiles.avatar_url (same fix as switchActiveProfile above).
   const { rows: activeRows } = await query(
     `SELECT
        u.id               AS user_id,
@@ -247,9 +271,11 @@ async function getSessionByUserId(userId) {
        p.id               AS profile_id,
        p.profile_type,
        p.display_name,
-       p.avatar_url
+       p.avatar_url,
+       b.logo_url
      FROM users u
      JOIN profiles p ON p.id = u.active_profile_id
+     LEFT JOIN businesses b ON b.profile_id = p.id
      WHERE u.id = $1
        AND u.is_active = TRUE
        AND p.is_active = TRUE
@@ -258,6 +284,9 @@ async function getSessionByUserId(userId) {
   );
   const activeProfile = activeRows[0] ?? null;
   if (!activeProfile) return null;
+  if (activeProfile.profile_type === 'business') {
+    activeProfile.avatar_url = activeProfile.logo_url || activeProfile.avatar_url;
+  }
 
   // Fetch all profiles so the frontend can build the profile switcher.
   // LEFT JOIN businesses to include logo_url for business profiles.
@@ -284,12 +313,16 @@ async function getSessionByUserId(userId) {
  * Validates that the profile belongs to the user before updating.
  */
 async function switchActiveProfile(userId, profileId) {
+  // LEFT JOIN businesses to include logo_url — a business profile's real avatar lives on
+  // businesses.logo_url, never on profiles.avatar_url (which is only ever copied once from
+  // the personal profile at business-creation time and never updated after a logo upload).
   const { rows } = await query(
-    `SELECT id, profile_type, display_name, avatar_url
-     FROM profiles
-     WHERE id = $1
-       AND user_id = $2
-       AND is_active = TRUE
+    `SELECT p.id, p.profile_type, p.display_name, p.avatar_url, b.logo_url
+     FROM profiles p
+     LEFT JOIN businesses b ON b.profile_id = p.id
+     WHERE p.id = $1
+       AND p.user_id = $2
+       AND p.is_active = TRUE
      LIMIT 1`,
     [profileId, userId]
   );
@@ -322,6 +355,7 @@ module.exports = {
   touchUserUpdatedAt,
   findActiveRefreshTokensByUser,
   revokeRefreshTokenById,
+  atomicRevokeRefreshTokenById,
   getActiveRefreshTokenByHash,
   getAllActiveRefreshTokens,
   getUserByIdWithProfile,

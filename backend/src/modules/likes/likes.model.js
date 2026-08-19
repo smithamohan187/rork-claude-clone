@@ -80,10 +80,31 @@ async function getContentOwnerProfileId(content_type, content_id) {
   return rows[0]?.profile_id ?? null;
 }
 
+async function deleteByContent(content_type, content_id) {
+  await query(
+    'DELETE FROM likes WHERE content_type = $1 AND content_id = $2',
+    [content_type, content_id]
+  );
+}
+
+// Comment-likes are keyed off comment ids, which have no FK to the parent
+// content — must be cleared before the comments themselves are deleted or
+// they're orphaned forever, same as deleteByContent above.
+async function deleteLikesOnCommentsOfContent(content_type, content_id) {
+  await query(
+    `DELETE FROM likes WHERE content_type = 'comment' AND content_id IN (
+       SELECT id FROM comments WHERE content_type = $1 AND content_id = $2
+     )`,
+    [content_type, content_id]
+  );
+}
+
 module.exports = {
   toggleLike,
   getLikeCount,
   getLikers,
   getUserLikedStatus,
   getContentOwnerProfileId,
+  deleteByContent,
+  deleteLikesOnCommentsOfContent,
 };

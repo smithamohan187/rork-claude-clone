@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { useMyReferrals } from '@/hooks/useMyReferrals';
 import { getMyReferrals, CombinedReferral, ReferralDirection } from '@/api/services/referralService';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ReferralType = 'app' | 'business';
 // Only 'completed' is reachable today: the backend only returns rows that have actually joined
@@ -84,10 +85,12 @@ function toTrustedFriend(row: CombinedReferral): TrustedFriend {
 // Real friend count for the TrustedFriendsBanner — no crediting exists yet, so pointsEarned is
 // always 0 (kept in the return shape so the banner's copy doesn't need to change).
 export function useTrustedFriendsSummary(): { count: number; pointsEarned: number; loading: boolean } {
+  const { authLoading, isAuthenticated } = useAuth();
   const [count, setCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     let cancelled = false;
     (async () => {
       try {
@@ -102,7 +105,7 @@ export function useTrustedFriendsSummary(): { count: number; pointsEarned: numbe
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   return { count, pointsEarned: 0, loading };
 }

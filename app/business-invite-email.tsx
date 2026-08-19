@@ -25,10 +25,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function BusinessInviteEmailScreen() {
   const router = useRouter();
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const { showSnackbar } = useSnackbar();
   const params = useLocalSearchParams<{ referralLink?: string }>();
-  const referralLink = params.referralLink ?? buildBusinessReferralLink(currentUser?.id);
+  const referralLink = params.referralLink ?? buildBusinessReferralLink(authUser?.id);
 
   const defaultBody = useMemo(
     () =>

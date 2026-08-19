@@ -12,7 +12,7 @@ const listMyOffersHandler = asyncHandler(async (req, res) => {
 
 const getOfferHandler = asyncHandler(async (req, res) => {
   try {
-    const offer = await offersService.getOffer(req.params.id);
+    const offer = await offersService.getOffer(req.params.id, req.user?.activeProfileId);
     res.json(ok({ offer }));
   } catch (err) {
     if (err.message === 'Offer not found') {

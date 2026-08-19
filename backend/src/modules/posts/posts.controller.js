@@ -12,7 +12,7 @@ const getPostsHandler = asyncHandler(async (req, res) => {
 
 const getPostByIdHandler = asyncHandler(async (req, res) => {
   try {
-    const post = await postsService.getPost(req.params.id);
+    const post = await postsService.getPost(req.params.id, req.user?.activeProfileId);
     res.json(ok({ post }));
   } catch (err) {
     if (err.message === 'Post not found') {

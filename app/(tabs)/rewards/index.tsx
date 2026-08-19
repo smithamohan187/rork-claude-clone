@@ -509,7 +509,7 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
 }) {
   const router = useRouter();
   const { addCoupon, findActiveForReward } = useCoupons();
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const { showSnackbar } = useSnackbar();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [selectedReward, setSelectedReward] = useState<RedeemableRewardItem | null>(null);
@@ -579,7 +579,7 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
         rewardType: result.rewardType,
         couponCode: result.couponCode,
         pointsDeducted: result.pointsRequired,
-        customerName: currentUser?.name,
+        customerName: authUser?.name,
         expiresAt: result.expiresAt,
       });
       onCouponGenerated({ id: created.id });
@@ -593,7 +593,7 @@ function RedeemBottomSheet({ visible, businessId, businessName, onClose, onCoupo
     } finally {
       setRedeeming(false);
     }
-  }, [selectedReward, redeeming, businessId, businessName, onCouponGenerated, onClose, router, addCoupon, findActiveForReward, currentUser, showSnackbar]);
+  }, [selectedReward, redeeming, businessId, businessName, onCouponGenerated, onClose, router, addCoupon, findActiveForReward, authUser, showSnackbar]);
 
   const handleCancelConfirm = useCallback(() => {
     console.log('[Rewards] User cancelled confirmation');

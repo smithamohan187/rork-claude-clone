@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { X, Send, CornerDownRight } from 'lucide-react-native';
+import { X, Send, CornerDownRight, ThumbsUp } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useComments } from '@/hooks/useComments';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,10 +69,11 @@ interface CommentRowProps {
   onReply: (comment: Comment) => void;
   onDelete: (commentId: string) => void;
   onLoadReplies: (commentId: string) => void;
+  onToggleLike: (commentId: string) => void;
   isReply?: boolean;
 }
 
-function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplies, isReply = false }: CommentRowProps) {
+function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplies, onToggleLike, isReply = false }: CommentRowProps) {
   const canDelete = !comment.is_deleted && currentProfileId && comment.profile_id === currentProfileId;
 
   const handleLongPress = useCallback(() => {
@@ -103,11 +104,25 @@ function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplie
           <Text style={[styles.commentText, comment.is_deleted && styles.commentDeleted]}>
             {comment.body}
           </Text>
-          {!comment.is_deleted && !isReply && (
-            <TouchableOpacity onPress={() => onReply(comment)} hitSlop={8} style={styles.replyBtn}>
-              <CornerDownRight size={12} color="#9aa0a6" />
-              <Text style={styles.replyBtnText}>Reply</Text>
-            </TouchableOpacity>
+          {!comment.is_deleted && (
+            <View style={styles.actionRow}>
+              <TouchableOpacity onPress={() => onToggleLike(comment.id)} hitSlop={8} style={styles.replyBtn}>
+                <ThumbsUp
+                  size={12}
+                  color={comment.liked_by_me ? GREEN : '#9aa0a6'}
+                  fill={comment.liked_by_me ? GREEN : 'transparent'}
+                />
+                <Text style={[styles.replyBtnText, comment.liked_by_me && styles.replyBtnTextActive]}>
+                  Like{comment.like_count ? ` (${comment.like_count})` : ''}
+                </Text>
+              </TouchableOpacity>
+              {!isReply && (
+                <TouchableOpacity onPress={() => onReply(comment)} hitSlop={8} style={styles.replyBtn}>
+                  <CornerDownRight size={12} color="#9aa0a6" />
+                  <Text style={styles.replyBtnText}>Reply</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
       </Pressable>
@@ -120,6 +135,7 @@ function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplie
           onReply={onReply}
           onDelete={onDelete}
           onLoadReplies={onLoadReplies}
+          onToggleLike={onToggleLike}
           isReply
         />
       ))}
@@ -141,7 +157,7 @@ export default function CommentSheet({ visible, contentType, contentId, initialC
   const [replyTarget, setReplyTarget] = useState<Comment | null>(null);
   const [sending, setSending] = useState(false);
 
-  const { comments, commentCount, loading, hasMore, loadMore, submitComment, removeComment, loadReplies } =
+  const { comments, commentCount, loading, hasMore, loadMore, submitComment, removeComment, loadReplies, toggleCommentLike } =
     useComments({ contentType, contentId, enabled: visible });
 
   useEffect(() => {
@@ -216,6 +232,7 @@ export default function CommentSheet({ visible, contentType, contentId, initialC
                 onReply={handleReply}
                 onDelete={removeComment}
                 onLoadReplies={loadReplies}
+                onToggleLike={toggleCommentLike}
               />
             )}
             ListEmptyComponent={
@@ -383,16 +400,24 @@ const styles = StyleSheet.create({
     color: '#9aa0a6',
     fontStyle: 'italic',
   },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 6,
+  },
   replyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 6,
   },
   replyBtnText: {
     fontSize: 12,
     color: '#9aa0a6',
     fontWeight: '600',
+  },
+  replyBtnTextActive: {
+    color: GREEN,
   },
   replyWrapper: {
     marginLeft: 44,

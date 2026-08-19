@@ -29,7 +29,7 @@ export interface OtherParty {
 // new messages every 3s while the screen is focused. All timers and state writes
 // are torn down on blur/unmount so no update fires on an unmounted component.
 export function useConversation({ conversationId: initialId, targetProfileId, type }: UseConversationParams) {
-  const { activeProfileId } = useAuth();
+  const { activeProfileId, authLoading, isAuthenticated } = useAuth();
   const [conversationId, setConversationId] = useState<string | null>(initialId ?? null);
   const [otherParty, setOtherParty] = useState<OtherParty | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -58,6 +58,7 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
 
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       activeRef.current = true;
       let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -116,14 +117,17 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
         activeRef.current = false;
         if (interval) clearInterval(interval);
       };
-    }, [targetProfileId, type, ingest]),
+    }, [targetProfileId, type, ingest, authLoading, isAuthenticated]),
   );
 
+  // Returns whether the send succeeded, so the caller (chat-detail) can restore
+  // the typed text into the input and surface a toast on failure — otherwise a
+  // failed send silently discards the user's message with no way to recover it.
   const send = useCallback(
-    async (body: string) => {
+    async (body: string): Promise<boolean> => {
       const text = body.trim();
       const cid = convIdRef.current;
-      if (!text || !cid) return;
+      if (!text || !cid) return false;
 
       const tempId = `temp-${Date.now()}`;
       const optimistic: ChatMessage = {
@@ -137,15 +141,17 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
       setSending(true);
       try {
         const saved = await sendMessageApi(cid, text);
-        if (!activeRef.current) return;
+        if (!activeRef.current) return true;
         knownIdsRef.current.add(saved.id);
         lastIdRef.current = saved.id;
         setMessages((prev) => prev.map((m) => (m.id === tempId ? saved : m)));
+        return true;
       } catch (err) {
         if (activeRef.current) {
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
           setError(err instanceof Error ? err.message : 'Failed to send message');
         }
+        return false;
       } finally {
         if (activeRef.current) setSending(false);
       }

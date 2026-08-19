@@ -17,11 +17,11 @@ async function addComment(contentType, contentId, profileId, body, parentComment
   return commentsModel.addComment(contentType, contentId, profileId, body, parentCommentId);
 }
 
-async function getComments(contentType, contentId, limit, offset) {
-  const topLevel = await commentsModel.getTopLevelComments(contentType, contentId, limit, offset);
+async function getComments(contentType, contentId, limit, offset, callerProfileId) {
+  const topLevel = await commentsModel.getTopLevelComments(contentType, contentId, limit, offset, callerProfileId);
   if (!topLevel.length) return [];
   const parentIds = topLevel.map((c) => c.id);
-  const replies = await commentsModel.getRepliesBatch(parentIds);
+  const replies = await commentsModel.getRepliesBatch(parentIds, callerProfileId);
 
   const replyMap = {};
   for (const r of replies) {
@@ -32,8 +32,8 @@ async function getComments(contentType, contentId, limit, offset) {
   return topLevel.map((c) => ({ ...c, replies: replyMap[c.id] ?? [] }));
 }
 
-async function getReplies(commentId, limit, offset) {
-  return commentsModel.getRepliesPaginated(commentId, limit, offset);
+async function getReplies(commentId, limit, offset, callerProfileId) {
+  return commentsModel.getRepliesPaginated(commentId, limit, offset, callerProfileId);
 }
 
 async function deleteComment(commentId, requesterProfileId) {

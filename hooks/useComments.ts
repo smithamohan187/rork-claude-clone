@@ -7,8 +7,54 @@ import {
   type Comment,
   type ContentType,
 } from '@/api/services/commentsService';
+import { toggleLike as apiToggleLike } from '@/api/services/likesService';
 
 const PAGE_SIZE = 20;
+
+// Flat, display-ready shape consumed by CommentSection/FullScreenFeedViewer —
+// separate from the raw `Comment` API shape so those components don't need to
+// know about profile lookups, reply nesting, etc.
+export interface CommentItem {
+  id: string;
+  author: string;
+  authorInitials: string;
+  avatarColor: string;
+  body: string;
+  createdAt: string;
+  likeCount: number;
+  hasLiked: boolean;
+  isBusinessReply: boolean;
+  parentId: string | null;
+}
+
+const AVATAR_COLORS = ['#1A5C35', '#3B82F6', '#EC4899', '#F59E0B', '#8B5CF6', '#10B981'];
+
+function colorForName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function initialsForName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
+export function mapCommentToItem(c: Comment): CommentItem {
+  const author = c.display_name ?? 'Anonymous';
+  return {
+    id: c.id,
+    author,
+    authorInitials: initialsForName(author),
+    avatarColor: colorForName(author),
+    body: c.body,
+    createdAt: c.created_at,
+    likeCount: c.like_count ?? 0,
+    hasLiked: c.liked_by_me ?? false,
+    isBusinessReply: false,
+    parentId: c.parent_comment_id,
+  };
+}
 
 interface UseCommentsOptions {
   contentType: ContentType;
@@ -25,6 +71,7 @@ interface UseCommentsResult {
   submitComment: (body: string, parentCommentId?: string) => Promise<void>;
   removeComment: (commentId: string) => Promise<void>;
   loadReplies: (commentId: string) => Promise<void>;
+  toggleCommentLike: (commentId: string) => void;
 }
 
 export function useComments({ contentType, contentId, enabled }: UseCommentsOptions): UseCommentsResult {
@@ -170,6 +217,55 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
     }
   }, [comments]);
 
+  const toggleCommentLike = useCallback((commentId: string) => {
+    const applyToggle = (list: Comment[], delta: number, liked: boolean): Comment[] =>
+      list.map((c) => {
+        if (c.id === commentId) {
+          return { ...c, liked_by_me: liked, like_count: Math.max(0, (c.like_count ?? 0) + delta) };
+        }
+        if (c.replies?.some((r) => r.id === commentId)) {
+          return {
+            ...c,
+            replies: c.replies.map((r) =>
+              r.id === commentId
+                ? { ...r, liked_by_me: liked, like_count: Math.max(0, (r.like_count ?? 0) + delta) }
+                : r
+            ),
+          };
+        }
+        return c;
+      });
+
+    const target =
+      comments.find((c) => c.id === commentId) ??
+      comments.flatMap((c) => c.replies ?? []).find((r) => r.id === commentId);
+    if (!target) return;
+    const wasLiked = target.liked_by_me ?? false;
+
+    setComments((prev) => applyToggle(prev, wasLiked ? -1 : 1, !wasLiked));
+
+    apiToggleLike('comment', commentId)
+      .then((res) => {
+        setComments((prev) =>
+          prev.map((c) => {
+            if (c.id === commentId) return { ...c, liked_by_me: res.liked, like_count: res.like_count };
+            if (c.replies?.some((r) => r.id === commentId)) {
+              return {
+                ...c,
+                replies: c.replies.map((r) =>
+                  r.id === commentId ? { ...r, liked_by_me: res.liked, like_count: res.like_count } : r
+                ),
+              };
+            }
+            return c;
+          })
+        );
+      })
+      .catch(() => {
+        setComments((prev) => applyToggle(prev, wasLiked ? 1 : -1, wasLiked));
+      });
+  }, [comments]);
+
   const loadReplies = useCallback(async (commentId: string) => {
     try {
       const existing = comments.find((c) => c.id === commentId)?.replies ?? [];
@@ -187,5 +283,5 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
     }
   }, [comments]);
 
-  return { comments, commentCount, loading, hasMore, loadMore, submitComment, removeComment, loadReplies };
+  return { comments, commentCount, loading, hasMore, loadMore, submitComment, removeComment, loadReplies, toggleCommentLike };
 }

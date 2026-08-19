@@ -109,6 +109,82 @@ async function redeemReward(userId, businessId, rewardId) {
   }
 }
 
+// Server-side validation for a business owner scanning a customer's coupon (QR or manual code
+// entry). Mirrors the states the frontend's old local-only CouponContext.redeemByPayload used to
+// compute on-device: not_found / wrong_business / already_used / expired / success. Returns a
+// result object rather than throwing for domain-level outcomes (matches redeemByPayload's shape)
+// so the frontend's existing ResultOverlay switch needs no restructuring, only a real API call.
+async function scanCoupon(userId, code) {
+  const businessId = await couponsModel.getBusinessIdByUserId(userId);
+  if (!businessId) throw Object.assign(new Error('No business found for this user'), { status: 400 });
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const coupon = await couponsModel.getCouponByCodeForScan(client, code);
+    if (!coupon) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'not_found', message: 'This QR code is not valid.' };
+    }
+
+    if (coupon.business_id !== businessId) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'wrong_business', message: 'This coupon is not valid for your business.' };
+    }
+
+    if (coupon.status === 'used') {
+      await client.query('ROLLBACK');
+      return {
+        ok: false,
+        error: 'already_used',
+        message: 'This coupon has already been redeemed.',
+        usedAt: new Date(coupon.used_at).getTime(),
+      };
+    }
+
+    const now = new Date();
+    if (coupon.status === 'expired' || new Date(coupon.expires_at) <= now) {
+      if (coupon.status !== 'expired') {
+        await couponsModel.markCouponExpiredWithClient(client, coupon.id);
+        await couponsModel.insertRefundTransactionWithClient(client, {
+          profileId: coupon.profile_id,
+          businessId: coupon.business_id,
+          couponId: coupon.id,
+          pointsCost: coupon.points_cost,
+        });
+      }
+      await client.query('COMMIT');
+      return {
+        ok: false,
+        error: 'expired',
+        message: 'This coupon expired.',
+        expiredAt: new Date(coupon.expires_at).getTime(),
+      };
+    }
+
+    await couponsModel.markCouponUsedWithClient(client, coupon.id);
+    await client.query('COMMIT');
+
+    return {
+      ok: true,
+      coupon: {
+        id: coupon.id,
+        customerName: coupon.customer_name,
+        rewardTitle: coupon.reward_name,
+        rewardType: coupon.reward_type,
+        pointsDeducted: coupon.points_cost,
+        usedAt: now.getTime(),
+      },
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function checkAndExpireCoupon(couponId) {
   const client = await getClient();
   try {
@@ -155,4 +231,4 @@ async function confirmCouponUsed(couponId) {
   return { coupon: { ...coupon, status: 'used' } };
 }
 
-module.exports = { getRedeemableRewards, redeemReward, checkAndExpireCoupon, confirmCouponUsed };
+module.exports = { getRedeemableRewards, redeemReward, scanCoupon, checkAndExpireCoupon, confirmCouponUsed };

@@ -16,6 +16,16 @@ async function submitReview(profileId, businessId, rating, reviewText) {
   return reviewModel.getBusinessRatingSummary(businessId);
 }
 
+async function deleteReview(profileId, businessId) {
+  const deleted = await reviewModel.deleteReview(profileId, businessId);
+  if (!deleted) {
+    const err = new Error('No review found to delete');
+    err.statusCode = 404;
+    throw err;
+  }
+  return reviewModel.getBusinessRatingSummary(businessId);
+}
+
 async function getRatingSummary(businessId) {
   return reviewModel.getBusinessRatingSummary(businessId);
 }
@@ -40,6 +50,7 @@ async function getRatingBreakdown(businessId) {
 
 module.exports = {
   submitReview,
+  deleteReview,
   getRatingSummary,
   getUserReview,
   getBusinessReviews,

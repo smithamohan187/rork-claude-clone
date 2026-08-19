@@ -170,31 +170,6 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
                 </TouchableOpacity>
               </>
             ) : null}
-
-            {/* Add Business prompt — shown when user has no business profile yet */}
-            {authUser?.role !== 'business' && authUser?.role !== 'owner' && (
-              <>
-                <View style={styles.rowDivider} />
-                <TouchableOpacity
-                  style={styles.createBusinessRow}
-                  onPress={() => {
-                    handleClose();
-                  }}
-                  activeOpacity={0.7}
-                  testID="switcher-create-business"
-                >
-                  <View style={styles.avatarWrap}>
-                    <View style={[styles.avatar, styles.avatarFallback, styles.avatarCreate]}>
-                      <Text style={styles.avatarCreateText}>+</Text>
-                    </View>
-                  </View>
-                  <View style={styles.info}>
-                    <Text style={styles.name}>Add Business Profile</Text>
-                    <Text style={styles.subtitle}>Register your business on TouchPoint</Text>
-                  </View>
-                </TouchableOpacity>
-              </>
-            )}
           </Animated.View>
         </View>
       </View>
@@ -291,9 +266,6 @@ const styles = StyleSheet.create({
   avatarFallbackBusiness: {
     backgroundColor: '#1A5C35',
   },
-  avatarCreate: {
-    backgroundColor: '#F3F4F6',
-  },
   avatarInitial: {
     fontSize: 18,
     fontWeight: '700',
@@ -301,11 +273,6 @@ const styles = StyleSheet.create({
   },
   avatarInitialBusiness: {
     color: '#fff',
-  },
-  avatarCreateText: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#9CA3AF',
   },
   badgeRow: {
     flexDirection: 'row',
@@ -341,12 +308,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A5C3514',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  createBusinessRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
   },
 });

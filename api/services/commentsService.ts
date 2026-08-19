@@ -24,6 +24,8 @@ export interface Comment {
   avatar_url: string | null;
   replies?: Comment[];
   reply_count?: number;
+  like_count?: number;
+  liked_by_me?: boolean;
 }
 
 function resolveComment(c: Comment): Comment {

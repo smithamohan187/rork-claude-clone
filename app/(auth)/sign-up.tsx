@@ -16,7 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { Snackbar } from 'react-native-paper';
 import { THEME } from '@/theme/tokens';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
+import { ArrowLeft, Eye, EyeOff, MapPin } from 'lucide-react-native';
 import { useSignUp } from '@/hooks/useSignUp';
 import { fetchCategories, Category } from '@/api/services/categoriesService';
 
@@ -59,7 +59,8 @@ export default function SignUpScreen() {
     showConfirm,  setShowConfirm,
     focusedField,
     strength,
-    nameError, emailError, passwordError, confirmError,
+    nameError, emailError, passwordError, confirmError, locationError,
+    locationDetecting, detectLocation,
     loading, authError, registrationSucceeded,
     postSignupRedirect,
     welcomeInfo,
@@ -187,6 +188,7 @@ export default function SignUpScreen() {
                     onFocus={inputFocus('name')}
                     onBlur={inputBlur}
                     autoCapitalize="words"
+                    maxLength={100}
                   />
                 </View>
                 {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
@@ -318,20 +320,32 @@ export default function SignUpScreen() {
               {/* Location */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>
-                  Location<Text style={styles.optionalTag}> (Optional)</Text>
+                  Location<Text style={styles.required}> *</Text>
                 </Text>
-                <View style={[styles.inputWrap, focusedField === 'location' && styles.inputWrapFocused]}>
+                <View style={[styles.inputWrap, focusedField === 'location' && styles.inputWrapFocused, !!locationError && styles.inputWrapError]}>
                   <TextInput
                     style={styles.input}
                     placeholder="City or area you're in"
                     placeholderTextColor={TEXT_TERTIARY}
                     value={location}
-                    onChangeText={setLocation}
+                    onChangeText={clearOnChange(setLocation)}
                     onFocus={inputFocus('location')}
                     onBlur={inputBlur}
                     autoCapitalize="words"
                   />
+                  <TouchableOpacity
+                    onPress={detectLocation}
+                    disabled={locationDetecting}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {locationDetecting ? (
+                      <ActivityIndicator size="small" color={PRIMARY} />
+                    ) : (
+                      <MapPin size={18} color={PRIMARY} />
+                    )}
+                  </TouchableOpacity>
                 </View>
+                {!!locationError && <Text style={styles.errorText}>{locationError}</Text>}
               </View>
 
               {/* Areas of Interest */}
@@ -379,9 +393,10 @@ export default function SignUpScreen() {
                     onBlur={inputBlur}
                     autoCapitalize="characters"
                     autoCorrect={false}
+                    testID="signup-referral-code-input"
                   />
                 </View>
-                <Text style={styles.helperText}>Earn bonus points when you sign up with a friend's code.</Text>
+                <Text style={styles.helperText}>Connect with the friend who invited you to TouchPoints.</Text>
               </View>
 
               {/* Inline auth error */}

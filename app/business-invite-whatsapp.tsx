@@ -38,10 +38,10 @@ const initialsFor = (name: string): string => {
 
 export default function BusinessInviteWhatsAppScreen() {
   const router = useRouter();
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const { showSnackbar } = useSnackbar();
   const params = useLocalSearchParams<{ referralLink?: string }>();
-  const referralLink = params.referralLink ?? buildBusinessReferralLink(currentUser?.id);
+  const referralLink = params.referralLink ?? buildBusinessReferralLink(authUser?.id);
 
   const message = useMemo(
     () =>

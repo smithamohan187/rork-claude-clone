@@ -1,12 +1,15 @@
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getSavedEvents, toggleSaveEvent, type SavedEventItem } from '@/api/services/savedEventService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useSavedEvents() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<SavedEventItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (authLoading || !isAuthenticated) return;
     setIsLoading(true);
     try {
       const data = await getSavedEvents();
@@ -16,7 +19,7 @@ export function useSavedEvents() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 

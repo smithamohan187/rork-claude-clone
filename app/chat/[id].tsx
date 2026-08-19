@@ -25,7 +25,7 @@ import type { Message } from '@/types';
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { accountType, businessProfileData, currentUser } = useAuth();
+  const { accountType, businessProfileData, authUser } = useAuth();
 
   const isMarketplaceChat = useMemo(() => (id ?? '').startsWith('mkt-'), [id]);
 
@@ -47,21 +47,21 @@ export default function ChatScreen() {
     if (!isBizMode) return null;
     const logo = businessProfileData?.businessLogo;
     const photo = businessProfileData?.businessPhoto;
-    const defaultAvatar = businessProfileData?.avatar || currentUser.avatar;
+    const defaultAvatar = businessProfileData?.avatar || authUser?.avatar;
     return logo || photo || defaultAvatar;
-  }, [isBizMode, businessProfileData, currentUser.avatar]);
+  }, [isBizMode, businessProfileData, authUser?.avatar]);
 
   const businessName = useMemo(() => {
     if (!isBizMode) return '';
-    return businessProfileData?.name || currentUser.name;
-  }, [isBizMode, businessProfileData, currentUser.name]);
+    return businessProfileData?.name || authUser?.name;
+  }, [isBizMode, businessProfileData, authUser?.name]);
 
   const isBizConv = useMemo(() => {
     if (!isBizMode) return false;
     return businessConversations.some(c => c.id === id);
   }, [isBizMode, id]);
 
-  const mySenderId = isBizConv ? 'b1' : currentUser.id;
+  const mySenderId = isBizConv ? 'b1' : (authUser?.id ?? '');
 
   const initialMessages = useMemo(() => {
     if (isBizConv && businessChatMessages[id ?? '']) {

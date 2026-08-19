@@ -232,7 +232,7 @@ export default function BusinessDirectoryScreen() {
   }, [handleSearch, handleCategorySelect]);
 
   const renderItem = useCallback(({ item }: { item: BusinessDirectoryItem }) => (
-    <BusinessCard item={item} onPress={() => handleBusinessPress(item)} />
+    <BusinessCard item={item} isSubscribed={item.is_subscribed} onPress={() => handleBusinessPress(item)} />
   ), [handleBusinessPress]);
 
   const keyExtractor = useCallback((item: BusinessDirectoryItem) => item.id, []);

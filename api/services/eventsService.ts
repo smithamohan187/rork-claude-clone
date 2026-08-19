@@ -22,6 +22,8 @@ export interface Event {
   like_count?: number;
   liked_by_me?: boolean;
   comment_count?: number;
+  is_owner?: boolean;
+  is_saved?: boolean;
 }
 
 export interface CreateEventPayload {

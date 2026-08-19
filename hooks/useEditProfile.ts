@@ -75,6 +75,21 @@ export function useEditProfile() {
         setCity(profile.city ?? '');
         setSelectedInterestIds(profile.interests.map((i) => i.id));
         setInterests(cats);
+
+        // Re-derive countryCode/stateCode from the saved names so the State/City
+        // autocomplete lookups (which need ISO codes, not names) work again after
+        // a reload — the profile row only stores names, never the codes.
+        if (profile.country) {
+          const countryMatch = Country.getAllCountries().find((c) => c.name === profile.country);
+          if (countryMatch) {
+            setCountryCode(countryMatch.isoCode);
+            if (profile.state) {
+              const stateMatch = State.getStatesOfCountry(countryMatch.isoCode)
+                .find((s) => s.name === profile.state);
+              if (stateMatch) setStateCode(stateMatch.isoCode);
+            }
+          }
+        }
       } catch {
         setError('Failed to load profile');
       } finally {

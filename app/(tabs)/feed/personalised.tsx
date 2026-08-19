@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -67,6 +68,9 @@ export default function PersonalisedFeedScreen() {
     rewardsSummary,
     loading,
     refreshing,
+    loadingMore,
+    hasMore,
+    loadMore,
     refresh,
     subscribeToDiscovery,
     toggleBookmark,
@@ -319,7 +323,14 @@ const header = useMemo(() => {
     );
   }, [feedItems.length, recommendationHeading, discoveryBusinesses.length, selectedChip, isSearching, router, scrollToDiscovery, showBusinessNudge, handleDismissNudge, handleSetUpBusiness]);
 
-  const listFooter = useMemo(() => null, [isSearching]);
+  const listFooter = useMemo(() => {
+    if (isSearching || !loadingMore) return null;
+    return (
+      <View style={styles.loadMoreFooter} testID="feed-load-more-spinner">
+        <ActivityIndicator size="small" color="#1A5C35" />
+      </View>
+    );
+  }, [isSearching, loadingMore]);
 
   const renderItem = useCallback(({ item }: { item: RenderItem }) => {
     if (item.__kind === 'post') {
@@ -440,6 +451,8 @@ const header = useMemo(() => {
           ListFooterComponent={listFooter}
           ListEmptyComponent={emptyComponent}
           contentContainerStyle={styles.listContent}
+          onEndReached={isSearching ? undefined : loadMore}
+          onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -519,6 +532,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 40,
+  },
+  loadMoreFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   emptyWrap: {
     alignItems: 'center',

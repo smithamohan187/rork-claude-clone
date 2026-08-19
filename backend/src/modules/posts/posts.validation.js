@@ -6,8 +6,9 @@ const createPostSchema = Joi.object({
 });
 
 const updatePostSchema = Joi.object({
-  title:   Joi.string().trim().min(1).max(200).optional(),
-  content: Joi.string().trim().min(1).optional(),
+  title:     Joi.string().trim().min(1).max(200).optional(),
+  content:   Joi.string().trim().min(1).optional(),
+  image_url: Joi.string().allow(null).optional(),
 });
 
 const toggleStatusSchema = Joi.object({

@@ -8,10 +8,12 @@ import { sendInviteSms } from '@/api/services/smsComposerService';
 import { sendInviteEmail } from '@/api/services/mailComposerService';
 import { useContactsPermission } from '@/hooks/useContactsPermission';
 import { useSnackbar } from '@/contexts/SnackbarContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useInviteFriends() {
   const { showSnackbar } = useSnackbar();
   const contactsPermission = useContactsPermission();
+  const { authLoading, isAuthenticated } = useAuth();
 
   const [referral, setReferral] = useState<MyReferral | null>(null);
   const [referralLoading, setReferralLoading] = useState<boolean>(true);
@@ -21,6 +23,7 @@ export function useInviteFriends() {
   const [contactsSearch, setContactsSearch] = useState<string>('');
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     let cancelled = false;
     (async () => {
       try {
@@ -35,7 +38,7 @@ export function useInviteFriends() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const importContacts = useCallback(async () => {
     try {

@@ -16,6 +16,7 @@ import { Check, Search, Send, Users, X } from 'lucide-react-native';
 import { shareOfferToFriends } from '@/api/services/sharesService';
 import { getMyReferrals } from '@/api/services/referralService';
 import type { ChatFriend } from '@/api/services/chatService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ACCENT = '#1A5C35';
 const PURPLE = '#00B246';
@@ -48,6 +49,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
   onShared,
   onError,
 }: Props) {
+  const { authLoading, isAuthenticated } = useAuth();
   const [friends, setFriends] = useState<ChatFriend[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
@@ -58,6 +60,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
   const backdropAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (visible && (authLoading || !isAuthenticated)) return;
     if (visible) {
       setSearch('');
       setSelected(new Set());
@@ -93,7 +96,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
       slideAnim.setValue(0);
       backdropAnim.setValue(0);
     }
-  }, [visible, slideAnim, backdropAnim, offer.businessId]);
+  }, [visible, slideAnim, backdropAnim, offer.businessId, authLoading, isAuthenticated]);
 
   const translateY = slideAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
 

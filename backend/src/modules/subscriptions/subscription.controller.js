@@ -18,6 +18,12 @@ const subscribeHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const scanSubscribeHandler = asyncHandler(async (req, res) => {
+  const { business_id } = req.body;
+  const result = await subscriptionService.resolveScanSubscribe(req.user.userId, business_id);
+  res.json(ok(result));
+});
+
 const unsubscribeHandler = asyncHandler(async (req, res) => {
   const { business_id } = req.body;
   if (!business_id) return res.status(400).json(fail('business_id is required'));
@@ -67,4 +73,4 @@ const removeMemberHandler = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { subscribeHandler, unsubscribeHandler, statusHandler, myBusinessesHandler, membersHandler, removeMemberHandler };
+module.exports = { subscribeHandler, scanSubscribeHandler, unsubscribeHandler, statusHandler, myBusinessesHandler, membersHandler, removeMemberHandler };

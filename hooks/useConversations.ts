@@ -5,15 +5,18 @@ import {
   Conversation,
   ConversationType,
 } from '@/api/services/chatService';
+import { useAuth } from '@/contexts/AuthContext';
 
 // List hook for the messages-page tabs. Fetches the caller's conversations of a
 // given type and refetches on screen focus — mirrors the useMyReferrals pattern.
 export function useConversations(type: ConversationType) {
+  const { authLoading, isAuthenticated } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (authLoading || !isAuthenticated) return;
     setLoading(true);
     setError(null);
     try {
@@ -24,10 +27,11 @@ export function useConversations(type: ConversationType) {
     } finally {
       setLoading(false);
     }
-  }, [type]);
+  }, [type, authLoading, isAuthenticated]);
 
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       let active = true;
       (async () => {
         try {
@@ -42,7 +46,7 @@ export function useConversations(type: ConversationType) {
       return () => {
         active = false;
       };
-    }, [type]),
+    }, [type, authLoading, isAuthenticated]),
   );
 
   return { conversations, loading, error, refetch: load };

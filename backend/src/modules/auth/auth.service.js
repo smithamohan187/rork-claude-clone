@@ -23,6 +23,7 @@ const {
   touchUserUpdatedAt,
   findActiveRefreshTokensByUser,
   revokeRefreshTokenById,
+  atomicRevokeRefreshTokenById,
   getActiveRefreshTokenByHash,
   getAllActiveRefreshTokens,
   getUserByIdWithProfile,
@@ -227,7 +228,9 @@ async function loginUser(data) {
     id: user.profile_id,
     profileType: user.profile_type,
     displayName: user.display_name,
-    avatarUrl: user.avatar_url,
+    // A business profile's real avatar is its logo (businesses.logo_url) — profiles.avatar_url
+    // is never updated after a logo upload, so prefer the logo when one exists.
+    avatarUrl: user.profile_type === 'business' ? (user.logo_url || user.avatar_url) : user.avatar_url,
     bio: user.bio,
     location: user.location,
     state: user.state,
@@ -279,11 +282,15 @@ async function refreshAccessToken(incomingToken) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
 
-  // Rotate: revoke the old token immediately before issuing a new one
-  await revokeRefreshTokenById(tokenRecord.id, tokenRecord.user_id);
+  // Rotate: atomically claim the token so concurrent requests presenting the same raw
+  // token can't both pass — only the first to land the conditional UPDATE succeeds.
+  const claimed = await atomicRevokeRefreshTokenById(tokenRecord.id);
+  if (!claimed) {
+    throw new AppError('Invalid or expired refresh token', 401);
+  }
 
   // Load user + active profile for JWT payload (same shape as loginUser)
-  const user = await getUserByIdWithProfile(tokenRecord.user_id);
+  const user = await getUserByIdWithProfile(claimed.user_id);
   if (!user) {
     throw new AppError('User not found', 401);
   }

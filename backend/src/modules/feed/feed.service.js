@@ -10,6 +10,12 @@ async function getFeed(userId, category, limit, offset) {
   if (items.length > 0) {
     return { mode: 'feed', items };
   }
+  // An empty page past offset 0 just means we've reached the end of a real subscribed
+  // feed — not that the user has no subscribed content. Only fall through to the
+  // recommendation chain when the very first page is empty.
+  if (offset > 0) {
+    return { mode: 'feed', items: [] };
+  }
 
   const byCategory = await feedModel.getRecommendedBusinesses(profileId, 10);
   if (byCategory.length > 0) {

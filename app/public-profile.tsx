@@ -18,6 +18,7 @@ import {
   PublicProfileData,
   MutualBusiness,
 } from '@/api/services/profileService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Connection {
   joinedContext: 'touchpoints' | 'business';
@@ -66,11 +67,13 @@ export default function PublicProfileScreen() {
     joinedAt?: string;
     referralCodeUsed?: string;
   }>();
+  const { authLoading, isAuthenticated } = useAuth();
   const [profile, setProfile] = useState<PublicProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState<boolean>(true);
   const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     if (!params.profileId) {
       setProfileLoading(false);
       return;
@@ -91,7 +94,7 @@ export default function PublicProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [params.profileId]);
+  }, [params.profileId, authLoading, isAuthenticated]);
 
   const displayName = (params.name as string) || profile?.display_name || '';
   const firstName = displayName.split(' ')[0];
@@ -112,6 +115,7 @@ export default function PublicProfileScreen() {
   const [connectionFromFetch, setConnectionFromFetch] = useState<Connection | null>(null);
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     if (connectionFromParams || !params.profileId) return;
     let cancelled = false;
     (async () => {
@@ -134,7 +138,7 @@ export default function PublicProfileScreen() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.profileId]);
+  }, [params.profileId, authLoading, isAuthenticated]);
 
   const connection = useMemo<Connection | null>(
     () => connectionFromParams ?? connectionFromFetch,

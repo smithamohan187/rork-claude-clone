@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { signIn, SignInPayload } from '@/api/services/authService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
+import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
 // Populated only when login was reached via a customer-invite link — lets the screen show one
 // combined "joined + welcome points" message instead of navigating straight to the feed.
@@ -64,6 +65,7 @@ export function useSignIn() {
     if (identifier.trim().length === 0) return;
     if (mode === 'email' && !isValidEmail(identifier)) return;
     if (mode === 'phone' && !isValidPhone(identifier)) return;
+    if (mode === 'unknown') return;
     if (password.length === 0) return;
 
     setAuthError('');
@@ -99,6 +101,23 @@ export function useSignIn() {
           }
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignIn] resolvePendingInvite error:', resolveErr);
+        }
+      }
+
+      // Same as the customer-invite branch above, but reached via a business QR scan — resolved
+      // by businessId directly rather than an invite code.
+      if (pending?.content_type === 'business_qr' && pending.business_id) {
+        try {
+          const resolved = await scanSubscribeToBusiness(pending.business_id);
+          setWelcomeInfo({
+            businessId: resolved.business.id,
+            businessName: resolved.business.name,
+            welcomePoints: resolved.welcomePoints,
+          });
+          await clearPendingShareReferral();
+          return;
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignIn] scanSubscribeToBusiness error:', resolveErr);
         }
       }
 

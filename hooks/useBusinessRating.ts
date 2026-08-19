@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as reviewService from '@/api/services/reviewService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface ReviewItem {
   id: string;
@@ -50,8 +51,13 @@ export function useBusinessRating({
   const [userReview, setUserReview] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const { authLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
+    // Wait for AuthContext's session-restore to finish — firing before it settles 401s the
+    // auth-required getMyReview() call and silently leaves userRating/hasRated stuck at their
+    // never-rated defaults on fresh page loads, even for a user who has actually already rated.
+    if (authLoading || !isAuthenticated) return;
     let mounted = true;
     (async () => {
       try {
@@ -89,7 +95,7 @@ export function useBusinessRating({
     return () => {
       mounted = false;
     };
-  }, [businessId]);
+  }, [businessId, authLoading, isAuthenticated]);
 
   const submitRating = useCallback(
     async (stars: number, review: string) => {
@@ -128,8 +134,37 @@ export function useBusinessRating({
     [businessId, isOwner, isSubscriber]
   );
 
-  // Delete is not yet supported on the backend — stub to satisfy the interface
-  const deleteRating = useCallback(async () => {}, []);
+  const deleteRating = useCallback(async () => {
+    if (userRating === null) return;
+    setSubmitting(true);
+    try {
+      const summary = await reviewService.deleteReview(businessId);
+      setAverageRating(Number(summary.average_rating));
+      setRatingCount(Number(summary.review_count));
+      setUserRating(null);
+      setUserReview('');
+      const [refreshedList, refreshedBreakdown] = await Promise.all([
+        reviewService.getBusinessReviews(businessId),
+        reviewService.getRatingBreakdown(businessId),
+      ]);
+      setReviews(refreshedList.map(r => ({
+        id: r.id,
+        userId: r.id,
+        authorName: r.display_name,
+        avatarUrl: r.avatar_url,
+        rating: r.rating,
+        reviewText: r.review_text ?? '',
+        updatedAt: r.updated_at,
+      })));
+      const bMap: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      for (const item of refreshedBreakdown) bMap[item.rating] = item.count;
+      setBreakdown(bMap);
+    } catch (err) {
+      if (__DEV__) console.log('[useBusinessRating] delete error', err);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [businessId, userRating]);
 
   return {
     averageRating,

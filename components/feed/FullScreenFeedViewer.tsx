@@ -30,17 +30,16 @@ import {
   MapPin,
 } from 'lucide-react-native';
 
-import type { FeedItem } from '@/hooks/usePersonalisedFeed';
-import type { BusinessPost } from '@/mocks/posts';
-import { usePosts } from '@/contexts/PostsContext';
-import { useComments, type CommentItem } from '@/hooks/useComments';
+import type { FeedItem, PostFeedItem } from '@/hooks/usePersonalisedFeed';
+import { useComments, mapCommentToItem, type CommentItem } from '@/hooks/useComments';
+import { useLike } from '@/hooks/useLike';
 import { CommentSection } from '@/components/feed/CommentSection';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 import { formatRelativeTime } from '@/mocks/posts';
 
 export type ViewerEntry =
-  | { kind: 'post'; key: string; post: BusinessPost }
+  | { kind: 'post'; key: string; post: PostFeedItem }
   | { kind: 'feed'; key: string; item: FeedItem };
 
 interface Props {
@@ -265,7 +264,7 @@ const ViewerPage = React.memo(function ViewerPage({
 });
 
 interface PostPageProps {
-  post: BusinessPost;
+  post: PostFeedItem;
   active: boolean;
   screenW: number;
   screenH: number;
@@ -284,8 +283,26 @@ function PostPage({
   onShowToast,
   currentUser,
 }: PostPageProps) {
-  const { likedIds, toggleLike, addComment } = usePosts();
-  const liked = !!likedIds[post.id];
+  const { likeCount, hasLiked: liked, toggle: toggleLike } = useLike({
+    contentType: 'post',
+    contentId: post.id,
+    initialLikeCount: post.like_count,
+    initialHasLiked: post.liked_by_me,
+    isOwner: post.is_owner,
+  });
+  const { comments: rawComments, submitComment: postComment, toggleCommentLike } = useComments({
+    contentType: 'post',
+    contentId: post.id,
+    enabled: true,
+  });
+  const comments = useMemo<CommentItem[]>(() => {
+    const flat: CommentItem[] = [];
+    for (const c of rawComments) {
+      flat.push(mapCommentToItem(c));
+      for (const r of c.replies ?? []) flat.push(mapCommentToItem(r));
+    }
+    return flat;
+  }, [rawComments]);
   const [saved, setSaved] = useState<boolean>(false);
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [shareOpen, setShareOpen] = useState<boolean>(false);
@@ -293,32 +310,28 @@ function PostPage({
   const [expanded, setExpanded] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
-
-  const commentItems = useMemo<CommentItem[]>(
-    () =>
-      post.comments.map((c) => ({
-        id: c.id,
-        author: c.user,
-        authorInitials: initialsFor(c.user),
-        avatarColor: colorFor(c.user),
-        body: c.text,
-        createdAt: c.time,
-        likeCount: 0,
-        isBusinessReply: false,
-        parentId: null,
-      })),
-    [post.comments],
-  );
+  const [replyTarget, setReplyTarget] = useState<CommentItem | null>(null);
 
   const handleSubmit = useCallback(async () => {
-    const txt = commentText.trim();
-    if (!txt) return;
+    const body = commentText.trim();
+    if (!body) return;
     setSubmitting(true);
-    addComment(post.id, txt);
-    setCommentText('');
-    await new Promise((r) => setTimeout(r, 200));
-    setSubmitting(false);
-  }, [commentText, addComment, post.id]);
+    try {
+      await postComment(body, replyTarget?.id);
+      setCommentText('');
+      setReplyTarget(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [commentText, postComment, replyTarget]);
+
+  const handleReplyToComment = useCallback((comment: CommentItem) => {
+    setReplyTarget(comment);
+  }, []);
+
+  const handleDismissReply = useCallback(() => {
+    setReplyTarget(null);
+  }, []);
 
   const handleSave = useCallback(() => {
     setSaved((p) => {
@@ -345,17 +358,17 @@ function PostPage({
       <ActionRail insetBottom={insetBottom}>
         <RailButton
           icon={<ThumbsUp size={26} color={liked ? PRIMARY : '#fff'} fill={liked ? PRIMARY : 'transparent'} />}
-          label={String(post.likes)}
+          label={String(likeCount)}
           active={liked}
           onPress={() => {
             haptic();
-            toggleLike(post.id);
+            toggleLike();
           }}
           testID="viewer-post-like"
         />
         <RailButton
           icon={<MessageCircle size={26} color="#fff" />}
-          label={String(post.comments.length)}
+          label={String(post.comment_count)}
           onPress={() => setCommentOpen(true)}
           testID="viewer-post-comment"
         />
@@ -398,11 +411,15 @@ function PostPage({
       <CommentSheet
         visible={commentOpen}
         onClose={() => setCommentOpen(false)}
-        comments={commentItems}
+        comments={comments}
         commentText={commentText}
         setCommentText={setCommentText}
         submitting={submitting}
         onSubmit={handleSubmit}
+        onLikeComment={toggleCommentLike}
+        onReply={handleReplyToComment}
+        replyingToName={replyTarget?.author ?? null}
+        onDismissReply={handleDismissReply}
         currentUser={currentUser}
       />
 
@@ -455,16 +472,50 @@ function FeedPage({
   const isOffer = item.feedType === 'offer';
   const description = isOffer ? item.description : item.venue;
 
-  const {
-    comments,
-    reactionCount,
-    hasLiked,
-    submitting,
-    commentText,
-    setCommentText,
-    toggleLike,
-    submitComment,
-  } = useComments(item.id, item.feedType);
+  const { likeCount: reactionCount, hasLiked, toggle: toggleLike } = useLike({
+    contentType: item.feedType,
+    contentId: item.id,
+    initialLikeCount: item.like_count,
+    initialHasLiked: item.liked_by_me,
+    isOwner: item.is_owner,
+  });
+  const { comments: rawComments, submitComment: postComment, toggleCommentLike } = useComments({
+    contentType: item.feedType,
+    contentId: item.id,
+    enabled: true,
+  });
+  const comments = useMemo<CommentItem[]>(() => {
+    const flat: CommentItem[] = [];
+    for (const c of rawComments) {
+      flat.push(mapCommentToItem(c));
+      for (const r of c.replies ?? []) flat.push(mapCommentToItem(r));
+    }
+    return flat;
+  }, [rawComments]);
+  const [commentText, setCommentText] = useState<string>('');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [replyTarget, setReplyTarget] = useState<CommentItem | null>(null);
+
+  const submitComment = useCallback(async () => {
+    const body = commentText.trim();
+    if (!body) return;
+    setSubmitting(true);
+    try {
+      await postComment(body, replyTarget?.id);
+      setCommentText('');
+      setReplyTarget(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [commentText, postComment, replyTarget]);
+
+  const handleReplyToComment = useCallback((comment: CommentItem) => {
+    setReplyTarget(comment);
+  }, []);
+
+  const handleDismissReply = useCallback(() => {
+    setReplyTarget(null);
+  }, []);
 
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [shareOpen, setShareOpen] = useState<boolean>(false);
@@ -490,8 +541,8 @@ function FeedPage({
   }, [isOffer, item.id, onToggleBookmark, onToggleInterested, onShowToast]);
 
   const handleSubmitComment = useCallback(() => {
-    submitComment(currentUser.name, currentUser.initials, currentUser.color).catch(() => undefined);
-  }, [submitComment, currentUser]);
+    submitComment().catch(() => undefined);
+  }, [submitComment]);
 
   const handleCTA = useCallback(() => {
     haptic();
@@ -608,6 +659,10 @@ function FeedPage({
         setCommentText={setCommentText}
         submitting={submitting}
         onSubmit={handleSubmitComment}
+        onLikeComment={toggleCommentLike}
+        onReply={handleReplyToComment}
+        replyingToName={replyTarget?.author ?? null}
+        onDismissReply={handleDismissReply}
         currentUser={currentUser}
       />
 
@@ -849,6 +904,10 @@ interface CommentSheetProps {
   setCommentText: (v: string) => void;
   submitting: boolean;
   onSubmit: () => void;
+  onLikeComment: (commentId: string) => void;
+  onReply: (comment: CommentItem) => void;
+  replyingToName?: string | null;
+  onDismissReply?: () => void;
   currentUser: { name: string; initials: string; color: string };
 }
 function CommentSheet({
@@ -859,6 +918,10 @@ function CommentSheet({
   setCommentText,
   submitting,
   onSubmit,
+  onLikeComment,
+  onReply,
+  replyingToName,
+  onDismissReply,
   currentUser,
 }: CommentSheetProps) {
   return (
@@ -883,6 +946,10 @@ function CommentSheet({
               setCommentText={setCommentText}
               submitting={submitting}
               onSubmit={onSubmit}
+              onLikeComment={onLikeComment}
+              onReply={onReply}
+              replyingToName={replyingToName}
+              onDismissReply={onDismissReply}
               currentUserInitials={currentUser.initials}
               currentUserColor={currentUser.color}
             />
@@ -950,22 +1017,6 @@ function formatDate(iso: string): string {
   } catch {
     return '';
   }
-}
-
-const PALETTE = ['#1A5C35', '#FF7043', '#0F6E56', '#B47700', '#B03A3A', '#00B246'];
-function colorFor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return PALETTE[Math.abs(h) % PALETTE.length];
-}
-function initialsFor(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 const styles = StyleSheet.create({

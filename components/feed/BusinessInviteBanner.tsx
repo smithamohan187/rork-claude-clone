@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { getMyBusinessReferralCode, MyBusinessReferral } from '@/api/services/businessInviteService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#00B246';
 const PURPLE_DEEP = '#1A5C35';
@@ -69,6 +70,7 @@ const WhatsAppGlyph = ({ size = 22 }: { size?: number }) => (
 
 export default function BusinessInviteBanner({ style }: BusinessInviteBannerProps) {
   const router = useRouter();
+  const { isAuthenticated, authLoading } = useAuth();
   const [sheetOpen, setSheetOpen] = useState<boolean>(false);
 
   // Real, backend-issued, per-inviter referral code — get-or-create, fetched once on mount (same
@@ -77,6 +79,10 @@ export default function BusinessInviteBanner({ style }: BusinessInviteBannerProp
   const [referral, setReferral] = useState<MyBusinessReferral | null>(null);
 
   useEffect(() => {
+    // Wait for session restore to finish — otherwise this fires on a cold page load
+    // before the access token is back in memory and silently 401s.
+    if (authLoading || !isAuthenticated) return;
+
     let cancelled = false;
     (async () => {
       try {
@@ -89,7 +95,7 @@ export default function BusinessInviteBanner({ style }: BusinessInviteBannerProp
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const referralCode = referral?.code ?? '';
   const referralLink = referral?.url ?? '';

@@ -33,7 +33,7 @@ import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCoupons, RedeemResult } from '@/contexts/CouponContext';
+import { scanCoupon, type ScanCouponResult } from '@/api/services/rewardsService';
 
 const PURPLE = '#1A5C35';
 const SCAN_SIZE = 240;
@@ -45,7 +45,7 @@ type ResultView =
   | { kind: 'wrong_business' }
   | { kind: 'not_found' };
 
-function mapResult(result: RedeemResult): ResultView {
+function mapResult(result: ScanCouponResult): ResultView {
   if (result.ok) {
     return {
       kind: 'success',
@@ -66,18 +66,13 @@ function mapResult(result: RedeemResult): ResultView {
   return { kind: 'not_found' };
 }
 
+// Matches the server's actual code shape (coupons.service.js: 6 hex chars + 4-digit segment,
+// e.g. TP-E5BAAD-1758) — a 2-4-4 grouping here would silently produce a string that never
+// matches any real coupon code.
 function formatManual(raw: string): string {
   const cleaned = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 10);
-  const parts: string[] = [];
-  if (cleaned.length <= 2) return cleaned;
-  parts.push(cleaned.slice(0, 2));
-  if (cleaned.length <= 6) {
-    parts.push(cleaned.slice(2));
-  } else {
-    parts.push(cleaned.slice(2, 6));
-    parts.push(cleaned.slice(6, 10));
-  }
-  return parts.join('-');
+  if (cleaned.length <= 6) return cleaned;
+  return `${cleaned.slice(0, 6)}-${cleaned.slice(6, 10)}`;
 }
 
 function ResultOverlay({
@@ -224,8 +219,7 @@ const resStyles = StyleSheet.create({
 
 export default function ScanCouponScreen() {
   const router = useRouter();
-  const { currentUser } = useAuth();
-  const { redeemByPayload } = useCoupons();
+  const { activeProfile } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState<boolean>(false);
   const [result, setResult] = useState<ResultView | null>(null);
@@ -233,8 +227,7 @@ export default function ScanCouponScreen() {
   const [manualOpen, setManualOpen] = useState<boolean>(false);
   const [manualValue, setManualValue] = useState<string>('');
 
-  const businessId = currentUser?.id ?? '';
-  const businessName = currentUser?.name ?? 'Your business';
+  const businessName = activeProfile?.displayName ?? 'Your business';
 
   const scanLineAnim = useRef(new Animated.Value(0)).current;
 
@@ -259,15 +252,20 @@ export default function ScanCouponScreen() {
   }, [scanLineAnim]);
 
   const handleValidate = useCallback(
-    (payload: string) => {
+    async (payload: string) => {
       if (processing) return;
       if (!payload || !payload.trim()) return;
       setProcessing(true);
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
       }
-      const res = redeemByPayload(payload, businessId);
-      const view = mapResult(res);
+      let view: ResultView;
+      try {
+        const res = await scanCoupon(payload.trim());
+        view = mapResult(res);
+      } catch {
+        view = { kind: 'not_found' };
+      }
       if (Platform.OS !== 'web') {
         if (view.kind === 'success') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -279,7 +277,7 @@ export default function ScanCouponScreen() {
       }
       setResult(view);
     },
-    [processing, redeemByPayload, businessId]
+    [processing]
   );
 
   const handleBarcode = useCallback(
@@ -472,11 +470,11 @@ export default function ScanCouponScreen() {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setManualOpen(false)} />
           <View style={manualStyles.sheet}>
             <Text style={manualStyles.title}>Enter coupon code</Text>
-            <Text style={manualStyles.sub}>Format: TP-XXXX-XXXX</Text>
+            <Text style={manualStyles.sub}>Format: TP-XXXXXX-XXXX</Text>
             <TextInput
               value={manualValue}
               onChangeText={(v) => setManualValue(formatManual(v))}
-              placeholder="TP-XXXX-XXXX"
+              placeholder="TP-XXXXXX-XXXX"
               placeholderTextColor="#9E9EB4"
               autoCapitalize="characters"
               autoCorrect={false}

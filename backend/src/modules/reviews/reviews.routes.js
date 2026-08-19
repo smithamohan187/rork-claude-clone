@@ -4,6 +4,7 @@ const { validateRequest } = require('../../middleware/validateRequest');
 const { submitReviewSchema } = require('./reviews.validation');
 const {
   submitReviewHandler,
+  deleteReviewHandler,
   getRatingSummaryHandler,
   getMyReviewHandler,
   getBusinessReviewsHandler,
@@ -13,6 +14,7 @@ const {
 const router = Router();
 
 router.post('/', authenticate, validateRequest(submitReviewSchema), submitReviewHandler);
+router.delete('/', authenticate, deleteReviewHandler);
 router.get('/summary', getRatingSummaryHandler);
 router.get('/me', authenticate, getMyReviewHandler);
 router.get('/list', getBusinessReviewsHandler);

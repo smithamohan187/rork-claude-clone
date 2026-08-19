@@ -143,17 +143,22 @@ async function getOffersByBusinessId(businessId, statusFilter, profileId) {
   return rows;
 }
 
-async function getOfferById(offerId) {
+async function getOfferById(offerId, profileId) {
   const { rows } = await query(
-    `SELECT *,
+    `SELECT offers.*,
        CASE
          WHEN status = 'expired' THEN 'expired'
          WHEN expires_at IS NOT NULL AND expires_at < NOW() THEN 'expired'
          ELSE status
-       END AS effective_status
+       END AS effective_status,
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'offer' AND l.content_id = offers.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'offer' AND l.content_id = offers.id AND l.profile_id = $2::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'offer' AND c.content_id = offers.id AND c.is_deleted = FALSE) AS comment_count,
+       (SELECT EXISTS(SELECT 1 FROM businesses b WHERE b.id = offers.business_id AND b.profile_id = $2::uuid)) AS is_owner,
+       (SELECT EXISTS(SELECT 1 FROM saved_offers so WHERE so.offer_id = offers.id AND so.profile_id = $2::uuid)) AS is_saved
      FROM offers
      WHERE id = $1`,
-    [offerId]
+    [offerId, profileId ?? null]
   );
   return rows[0] ?? null;
 }

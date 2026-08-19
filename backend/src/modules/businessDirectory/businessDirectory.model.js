@@ -11,9 +11,11 @@ const { query } = require('../../config/database');
  * @param {string|null} filters.category   - exact match against business_type ('goodwill' | 'incentivised')
  * @param {number}      filters.limit      - how many rows to return (default 20)
  * @param {number}      filters.offset     - how many rows to skip for pagination
+ * @param {string|null} filters.viewerProfileId - active profile of the logged-in caller, if any;
+ *                                                 used only to flag is_subscribed, never to filter
  * @returns {{ rows: Object[], total: number }}
  */
-async function getBusinessDirectory({ search, category, limit, offset }) {
+async function getBusinessDirectory({ search, category, limit, offset, viewerProfileId = null }) {
   // Normalise: empty string treated as null so the IS NULL check works correctly
   const searchParam   = search   && search.trim()   ? search.trim()   : null;
   const categoryParam = category && category.trim() ? category.trim() : null;
@@ -43,18 +45,19 @@ async function getBusinessDirectory({ search, category, limit, offset }) {
        bc.icon  AS category_icon,
        COUNT(DISTINCT s.id) FILTER (WHERE s.is_active = TRUE)  AS subscriber_count,
        ROUND(AVG(br.rating)::numeric, 1)                        AS avg_rating,
-       COUNT(DISTINCT br.id)                                    AS rating_count
+       COUNT(DISTINCT br.id)                                    AS rating_count,
+       COALESCE(bool_or(s.profile_id = $5 AND s.is_active = TRUE), FALSE) AS is_subscribed
      FROM businesses b
      LEFT JOIN business_categories bc ON bc.id = b.category_id
      LEFT JOIN subscriptions s        ON s.business_id = b.id
-     LEFT JOIN business_ratings br    ON br.business_id = b.id
+     LEFT JOIN business_reviews br    ON br.business_id = b.id
      WHERE b.is_active = TRUE
        AND ($1::text IS NULL OR b.name ILIKE '%' || $1 || '%')
        AND ($2::text IS NULL OR bc.name = $2)
      GROUP BY b.id, bc.name, bc.icon
      ORDER BY subscriber_count DESC, b.name ASC
      LIMIT $3 OFFSET $4`,
-    [searchParam, categoryParam, limit, offset]
+    [searchParam, categoryParam, limit, offset, viewerProfileId]
   );
 
   return { rows, total };

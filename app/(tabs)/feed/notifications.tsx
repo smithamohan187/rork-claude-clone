@@ -35,6 +35,7 @@ const TYPE_CONFIG: Record<NotificationType, { icon: typeof Tag; color: string; b
   points_earned:       { icon: Award,        color: '#1A5C35', bg: '#E8F5EE' },
   reward_redeemed:     { icon: Gift,         color: '#B91C1C', bg: '#FCE8E8' },
   referral_joined:     { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
+  offer_referral_subscribed: { icon: Tag,    color: '#7C3AED', bg: '#F0E9FD' },
   customer_subscribed: { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
   invited_business_joined: { icon: Building2, color: '#0D9488', bg: '#F0FDFA' },
   new_message:         { icon: MessageSquare, color: '#0D9488', bg: '#F0FDFA' },
@@ -79,6 +80,11 @@ function routeFor(item: NotificationDisplay): { pathname: string; params?: Recor
         },
       };
     }
+    case 'offer_referral_subscribed':
+      if (typeof data.offer_id === 'string') {
+        return { pathname: '/view-offer', params: { offerId: data.offer_id, businessId: businessId ?? '' } };
+      }
+      return businessId ? { pathname: `/business-profile/${businessId}` } : null;
     case 'points_earned':
     case 'referral_joined':
     case 'customer_subscribed':

@@ -20,6 +20,7 @@ import {
   setRefreshToken,
   getRefreshToken,
   clearTokens,
+  refreshAccessToken,
 } from '@/api/client';
 import { authApi, AuthTokens, SessionResponse, BackendProfile } from '@/api/auth.api';
 import type { AccountType, ProfileEntry } from '@/types';
@@ -207,21 +208,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (__DEV__) console.log('[AuthContext] restoreSession: refresh token found, attempting restore');
 
       try {
-        const result = await apiClient.post<AuthRefreshResponse>('/auth/refresh', { refreshToken });
-        const { accessToken: newAccess, refreshToken: newRefresh } = getTokens(result.data);
+        // Shared, deduped refresh — if a 401-triggered retry elsewhere (response
+        // interceptor) is also refreshing right now, both callers await the exact
+        // same in-flight request/result instead of racing the single-use rotation.
+        const result = await refreshAccessToken();
 
-        if (result.success && newAccess) {
-          // Store the new access token in client.ts (request interceptor) and
-          // in React state so components can read it reactively.
-          setAccessToken(newAccess);
-          setAccessTokenState(newAccess);
-
-          // If the backend rotated the refresh token, persist the new one.
-          if (newRefresh) await setRefreshToken(newRefresh);
+        if (result.success && result.accessToken) {
+          // api/client.ts's performRefresh already called setAccessToken() and
+          // persisted the rotated refresh token — just mirror it into React state.
+          setAccessTokenState(result.accessToken);
 
           // Prefer user data embedded in the refresh response (saves a round
           // trip). Fall back to GET /auth/session if it wasn't included.
-          const userFromRefresh = toAuthUser(result.data?.user);
+          const userFromRefresh = toAuthUser(result.user as SessionResponse | AuthUser | null | undefined);
           if (userFromRefresh) {
             if (__DEV__) console.log('[AuthContext] restoreSession: user came from refresh response, id:', userFromRefresh.id);
             setAuthUser(userFromRefresh);
@@ -236,17 +235,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           // Non-fatal — if this fails the user can still use the app.
           try { await hydrateProfiles(); } catch { /* non-fatal */ }
         } else {
-          // Refresh call succeeded HTTP-wise but returned no access token —
-          // treat this as an expired/invalid session.
-          if (__DEV__) console.log('[AuthContext] restoreSession: refresh succeeded but no access token in response, clearing');
-          await clearTokens();
+          // Refresh failed (invalid/expired token, network error, or lost the
+          // single-use race to a concurrent caller) — clearTokens() already ran
+          // inside performRefresh, just reflect the logged-out state here.
+          if (__DEV__) console.log('[AuthContext] restoreSession: refresh did not yield a valid session, clearing');
           setAuthUser(null);
         }
-      } catch (err) {
-        // Network error or 401 from the refresh endpoint — session is gone.
-        if (__DEV__) console.log('[AuthContext] restoreSession: refresh threw, clearing session:', err);
-        await clearTokens();
-        setAuthUser(null);
       } finally {
         // Always clear the loading flag so the app can render the right screen.
         setAuthLoading(false);
@@ -387,11 +381,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       const result = await authApi.switchProfile(profileId);
       if (result.success && result.data) {
-        const { active_profile_type, active_profile_id } = result.data;
+        const { active_profile_type, active_profile_id, display_name, avatar_url } = result.data;
         setAccountType(active_profile_type);
         setActiveProfileId(active_profile_id);
         await AsyncStorage.setItem(ACCOUNT_TYPE_KEY, active_profile_type);
         await AsyncStorage.setItem(ACTIVE_PROFILE_ID_KEY, active_profile_id);
+        // Keep authUser's name/avatar in sync with the newly active profile — components like
+        // ActiveProfileBadge and user-profile.tsx read authUser directly rather than
+        // activeProfile, so without this they keep showing the previous profile after a switch.
+        setAuthUser(prev => prev ? { ...prev, name: display_name, avatar: resolveUrl(avatar_url) } : prev);
         if (__DEV__) console.log('[AuthContext] switchProfile: switched to', active_profile_type);
       }
     } catch (err) {

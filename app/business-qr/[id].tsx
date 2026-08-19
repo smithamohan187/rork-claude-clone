@@ -30,7 +30,7 @@ const TEXT_SECONDARY = '#5C5F72';
 export default function BusinessQRScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { authUser } = useAuth();
+  const { authUser, authLoading } = useAuth();
   const [copied, setCopied] = useState<boolean>(false);
 
   const { business, loading: profileLoading } = useBusinessProfile(id ?? '');
@@ -54,12 +54,14 @@ export default function BusinessQRScreen() {
     return () => { cancelled = true; };
   }, [id, isOwner]);
 
-  // Non-owners are bounced — they must never see the large QR view.
+  // Non-owners are bounced — they must never see the large QR view. Gated on authLoading so a
+  // cold/direct navigation (session restore still in flight) doesn't misread the real owner as a
+  // non-owner and bounce them before authUser has loaded.
   useEffect(() => {
-    if (!profileLoading && business && !isOwner) {
+    if (!authLoading && !profileLoading && business && !isOwner) {
       router.replace({ pathname: '/business-profile/[id]', params: { id: id ?? business.id } } as never);
     }
-  }, [profileLoading, business, isOwner, id, router]);
+  }, [authLoading, profileLoading, business, isOwner, id, router]);
 
   useEffect(() => {
     let prev: number | null = null;

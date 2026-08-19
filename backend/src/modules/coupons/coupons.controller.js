@@ -23,6 +23,15 @@ async function redeemHandler(req, res, next) {
   }
 }
 
+async function scanHandler(req, res, next) {
+  try {
+    const result = await couponsService.scanCoupon(req.user.userId, req.body.code);
+    res.json(ok(result));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function expireCheckHandler(req, res, next) {
   try {
     const result = await couponsService.checkAndExpireCoupon(req.params.id);
@@ -41,4 +50,4 @@ async function markUsedHandler(req, res, next) {
   }
 }
 
-module.exports = { getRewardsHandler, redeemHandler, expireCheckHandler, markUsedHandler };
+module.exports = { getRewardsHandler, redeemHandler, scanHandler, expireCheckHandler, markUsedHandler };

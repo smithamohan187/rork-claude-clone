@@ -32,6 +32,22 @@ export function parseReferralFromUrl(url: string | null | undefined): string | n
   return null;
 }
 
+// Extracts a businessId from a business "Scan to subscribe" QR deep link
+// (https://<domain>/b/<businessId>, built by GET /businesses/:id/scan-code). Kept separate from
+// parseReferralFromUrl — different URL shape (/b/ not /s/), different downstream resolution
+// (a raw businessId, not a referral code to look up).
+export function parseBusinessScanFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const { path } = Linking.parse(url);
+    const match = (path ?? '').match(/(?:^|\/)b\/([^/?#]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  } catch {
+    // Malformed URL — ignore, no business scan.
+  }
+  return null;
+}
+
 export async function setPendingShareReferral(pending: PendingShareReferral): Promise<void> {
   try {
     await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending));

@@ -75,6 +75,7 @@ export const FeedActionBar = React.memo(function FeedActionBar({
         borderless
         rippleColor="rgba(83,52,183,0.08)"
         accessibilityLabel={isOwner ? 'View likes' : 'Like'}
+        testID="feed-like-btn"
       >
         <View style={styles.inner}>
           <Animated.View style={{ transform: [{ scale }] }}>

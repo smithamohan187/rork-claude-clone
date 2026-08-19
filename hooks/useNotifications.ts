@@ -8,6 +8,7 @@ import {
   type AppNotification,
   type NotificationType,
 } from '@/api/services/notificationService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type { NotificationType, AppNotification };
 
@@ -65,12 +66,14 @@ function toDisplay(notif: AppNotification): NotificationDisplay {
 }
 
 export function useNotifications() {
+  const { authLoading, isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
 
   const load = useCallback(async () => {
+    if (authLoading || !isAuthenticated) return;
     setIsLoading(true);
     setIsError(false);
     try {
@@ -82,7 +85,7 @@ export function useNotifications() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   useFocusEffect(
     useCallback(() => {
@@ -124,12 +127,14 @@ export function useNotifications() {
 }
 
 export function useUnreadNotificationCount(): number {
+  const { authLoading, isAuthenticated } = useAuth();
   const [count, setCount] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       fetchUnreadCount().then(setCount).catch(() => {});
-    }, []),
+    }, [authLoading, isAuthenticated]),
   );
 
   return count;

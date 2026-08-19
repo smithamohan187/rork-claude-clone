@@ -45,6 +45,7 @@ import {
   type RewardItem,
 } from '@/api/services/rewardConfigService';
 import { fetchMyBusinessId } from '@/api/services/businessDashboardService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SOFT = '#E8F5EE';
@@ -65,6 +66,7 @@ const PRIZE_TYPE_META: Record<PrizeType, { label: string; color: string; icon: R
 
 export default function RewardConfigurationScreen() {
   const router = useRouter();
+  const { authLoading, isAuthenticated } = useAuth();
 
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [loading, setLoading]   = useState<boolean>(true);
@@ -116,10 +118,13 @@ export default function RewardConfigurationScreen() {
     setShowPrizeModal(true);
   }, []);
 
-  // Resolve the businessId once on mount
+  // Resolve the businessId once auth has finished restoring — firing this before authLoading
+  // settles hits /businesses/me with no access token yet, 401s, and silently leaves businessId
+  // null forever (fetchMyBusinessId swallows the error), so the screen never loads.
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     fetchMyBusinessId().then(id => setBusinessId(id));
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const loadConfig = useCallback(async () => {
     if (!businessId) return;
@@ -131,7 +136,11 @@ export default function RewardConfigurationScreen() {
         setReferralPoints(String(data.config.referral_bonus_points ?? ''));
         setSharingPoints(String(data.config.share_points ?? ''));
         setPurchaseEnabled(data.config.purchase_enabled ?? true);
-        setPointsPerUnit(String(data.config.points_per_rupee ?? ''));
+        // points_per_rupee comes back as a fixed-precision DECIMAL string (e.g. "2.5000") —
+        // normalize it so the field shows "2.5" instead of the raw DB precision.
+        setPointsPerUnit(
+          data.config.points_per_rupee != null ? String(parseFloat(String(data.config.points_per_rupee))) : ''
+        );
       }
       setPrizes(data.rewards);
     } catch (err) {
@@ -140,6 +149,13 @@ export default function RewardConfigurationScreen() {
       setLoading(false);
     }
   }, [businessId]);
+
+  // Fires whenever businessId resolves (loadConfig's identity changes with it) — useFocusEffect
+  // alone isn't enough because it only re-runs on focus events, not on businessId settling after
+  // its async fetch, which left the screen stuck on the loading spinner on first mount.
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   useFocusEffect(useCallback(() => {
     loadConfig();

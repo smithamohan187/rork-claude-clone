@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useSubscribedBusinesses, SubscribedBusinessItem } from '@/hooks/useSubscribedBusinesses';
-import TierBadge from '@/components/TierBadge';
+import TierBadge, { getTierGradient } from '@/components/TierBadge';
 
 
 interface ChatMessage {
@@ -265,8 +265,8 @@ function BusinessCard({
           <View style={styles.statDivider} />
           <View style={styles.statCol}>
             <View style={styles.tierInline}>
-              <View style={[styles.tierDot, { backgroundColor: tier.dot }]} />
-              <Text style={[styles.statValue, { color: tier.text }]}>{item.tier}</Text>
+              <View style={[styles.tierDot, { backgroundColor: getTierGradient(item.tier)[0] }]} />
+              <Text style={[styles.statValue, { color: getTierGradient(item.tier)[0] }]}>{item.tier}</Text>
             </View>
             <Text style={styles.statLabel}>Tier</Text>
           </View>
@@ -330,8 +330,9 @@ function UnsubscribeSheet({
           </View>
           <Text style={styles.sheetTitle}>Unsubscribe?</Text>
           <Text style={styles.sheetBody}>
-            You&apos;ll lose your {target?.points.toLocaleString() ?? 0} points and all rewards with{' '}
-            {target?.name ?? 'this business'}. This can&apos;t be undone.
+            You&apos;ll stop receiving offers and updates from{' '}
+            {target?.name ?? 'this business'}. Your {target?.points.toLocaleString() ?? 0} points
+            will stay in your account, and you can resubscribe anytime.
           </Text>
           <View style={styles.sheetActions}>
             <TouchableOpacity style={[styles.sheetBtn, styles.sheetBtnGrey]} onPress={onClose} testID="unsub-keep">

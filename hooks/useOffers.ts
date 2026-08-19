@@ -9,8 +9,10 @@ import {
   type Offer,
   type CreateOfferPayload,
 } from '@/api/services/offersService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useOffers(initialFilter?: 'active' | 'expired' | 'disabled') {
+  const { authLoading, isAuthenticated } = useAuth();
   const [offers, setOffers]   = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -28,7 +30,12 @@ export function useOffers(initialFilter?: 'active' | 'expired' | 'disabled') {
     }
   }, [initialFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  // Wait for AuthContext's session-restore to finish — firing before it settles hits the API
+  // with no access token yet, 401s, and silently leaves the list empty on fresh page loads.
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    load();
+  }, [load, authLoading, isAuthenticated]);
 
   const addOffer = useCallback(async (payload: CreateOfferPayload): Promise<Offer> => {
     const offer = await createOffer(payload);

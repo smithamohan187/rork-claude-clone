@@ -19,6 +19,7 @@ import type { ChatMessage } from '@/api/services/chatService';
 import type { ConversationType } from '@/api/services/chatService';
 import { resolveShareReferral } from '@/api/services/sharesService';
 import { parseReferralFromUrl } from '@/utils/shareReferral';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 
 const ACCENT = '#1A5C35';
 const BG = '#F8F7FF';
@@ -115,6 +116,7 @@ export default function ChatDetailScreen() {
       .join('')
       .toUpperCase()) || 'C';
 
+  const { showSnackbar } = useSnackbar();
   const [inputText, setInputText] = useState<string>('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
@@ -134,10 +136,17 @@ export default function ChatDetailScreen() {
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text) return;
-    send(text);
     setInputText('');
     scrollToEnd(true);
-  }, [inputText, send, scrollToEnd]);
+    send(text).then((ok) => {
+      if (!ok) {
+        // Restore the text so a failed send doesn't just silently vanish — the
+        // optimistic message was already removed by useConversation's send().
+        setInputText(text);
+        showSnackbar("Couldn't send your message. Please try again.");
+      }
+    });
+  }, [inputText, send, scrollToEnd, showSnackbar]);
 
   // Resolves a tapped share-link in-app (code -> route) rather than Linking.openURL, since
   // Universal/App Links aren't configured — see invite-friends.md's documented gap.

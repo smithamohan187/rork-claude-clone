@@ -10,6 +10,10 @@ interface Props {
   submitting: boolean;
   onSubmit: () => void;
   onViewAll?: () => void;
+  onLikeComment: (commentId: string) => void;
+  onReply: (comment: CommentItem) => void;
+  replyingToName?: string | null;
+  onDismissReply?: () => void;
   currentUserInitials: string;
   currentUserColor: string;
 }
@@ -23,6 +27,10 @@ export const CommentSection = React.memo(function CommentSection({
   submitting,
   onSubmit,
   onViewAll,
+  onLikeComment,
+  onReply,
+  replyingToName,
+  onDismissReply,
   currentUserInitials,
   currentUserColor,
 }: Props) {
@@ -58,12 +66,16 @@ export const CommentSection = React.memo(function CommentSection({
             </View>
             <Text style={styles.body}>{c.body}</Text>
             <View style={styles.microRow}>
-              <Pressable hitSlop={6}>
-                <Text style={styles.microAction}>👍 Like{c.likeCount > 0 ? ` (${c.likeCount})` : ''}</Text>
+              <Pressable hitSlop={6} onPress={() => onLikeComment(c.id)}>
+                <Text style={[styles.microAction, c.hasLiked && styles.microActionActive]}>
+                  {c.hasLiked ? '👍 Liked' : '👍 Like'}{c.likeCount > 0 ? ` (${c.likeCount})` : ''}
+                </Text>
               </Pressable>
-              <Pressable hitSlop={6}>
-                <Text style={styles.microAction}>↩ Reply</Text>
-              </Pressable>
+              {!c.parentId && (
+                <Pressable hitSlop={6} onPress={() => onReply(c)}>
+                  <Text style={styles.microAction}>↩ Reply</Text>
+                </Pressable>
+              )}
               <Text style={styles.timestamp}>{c.createdAt}</Text>
             </View>
           </View>
@@ -76,6 +88,17 @@ export const CommentSection = React.memo(function CommentSection({
         </Pressable>
       ) : null}
 
+      {replyingToName ? (
+        <View style={styles.replyBanner}>
+          <Text style={styles.replyBannerText} numberOfLines={1}>
+            Replying to <Text style={styles.replyBannerName}>{replyingToName}</Text>
+          </Text>
+          <Pressable onPress={onDismissReply} hitSlop={8}>
+            <Text style={styles.replyBannerDismiss}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.inputRow}>
         <View style={[styles.avatar, { backgroundColor: currentUserColor }]}>
           <Text style={styles.avatarText}>{currentUserInitials}</Text>
@@ -85,7 +108,7 @@ export const CommentSection = React.memo(function CommentSection({
             ref={inputRef}
             value={commentText}
             onChangeText={setCommentText}
-            placeholder="Add a comment…"
+            placeholder={replyingToName ? `Reply to ${replyingToName}…` : 'Add a comment…'}
             placeholderTextColor="#1A5C35"
             style={styles.input}
             returnKeyType="send"
@@ -93,7 +116,7 @@ export const CommentSection = React.memo(function CommentSection({
             editable={!submitting}
             testID="comment-input"
           />
-          <Pressable onPress={onSubmit} style={styles.sendBtn} disabled={submitting || !commentText.trim()} hitSlop={6}>
+          <Pressable onPress={onSubmit} style={styles.sendBtn} disabled={submitting || !commentText.trim()} hitSlop={6} testID="comment-send-btn">
             {submitting ? (
               <ActivityIndicator size="small" color={PRIMARY} />
             ) : (
@@ -183,6 +206,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#1A5C35',
     fontWeight: '600',
+  },
+  microActionActive: {
+    color: '#0F3D22',
+    fontWeight: '800',
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  replyBannerText: {
+    fontSize: 11,
+    color: '#1A5C35',
+    flex: 1,
+    marginRight: 8,
+  },
+  replyBannerName: {
+    fontWeight: '800',
+  },
+  replyBannerDismiss: {
+    fontSize: 12,
+    color: '#1A5C35',
+    fontWeight: '700',
   },
   timestamp: {
     fontSize: 10,

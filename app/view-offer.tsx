@@ -13,13 +13,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
+  Bookmark,
   Calendar,
   ChevronDown,
   ChevronUp,
   Clock,
   MapPin,
+  MessageCircle,
   Share2,
 } from 'lucide-react-native';
+import LikeButton from '@/components/feed/LikeButton';
+import CommentSheet from '@/components/feed/CommentSheet';
+import { toggleSaveOffer } from '@/api/services/savedOfferService';
 import {
   ActivityIndicator,
   Button,
@@ -48,6 +53,11 @@ type Offer = {
   expires_at: string | null;
   is_active: boolean;
   terms_conditions?: string | null;
+  like_count: number;
+  liked_by_me: boolean;
+  comment_count: number;
+  is_owner: boolean;
+  is_saved: boolean;
 };
 
 type Business = {
@@ -128,6 +138,9 @@ export default function ViewOfferScreen() {
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarText, setSnackbarText] = useState<string>('');
   const [sharing, setSharing] = useState<boolean>(false);
+  const [commentOpen, setCommentOpen] = useState<boolean>(false);
+  const [saved, setSaved] = useState<boolean>(false);
+  const [savingBookmark, setSavingBookmark] = useState<boolean>(false);
   const subscribing = false;
 
   const fetchData = useCallback(async () => {
@@ -154,7 +167,13 @@ export default function ViewOfferScreen() {
         expires_at:       offerData.expires_at,
         is_active:        offerData.effective_status === 'active',
         terms_conditions: offerData.terms,
+        like_count:       offerData.like_count ?? 0,
+        liked_by_me:      offerData.liked_by_me ?? false,
+        comment_count:    offerData.comment_count ?? 0,
+        is_owner:         offerData.is_owner ?? false,
+        is_saved:         offerData.is_saved ?? false,
       });
+      setSaved(offerData.is_saved ?? false);
 
       if (bizData) {
         setBusiness({
@@ -198,6 +217,22 @@ export default function ViewOfferScreen() {
       setSharing(false);
     }
   }, [sharing, offer, business]);
+
+  const handleToggleSave = useCallback(async () => {
+    if (savingBookmark || !offer) return;
+    setSavingBookmark(true);
+    const next = !saved;
+    setSaved(next);
+    try {
+      const result = await toggleSaveOffer(offer.id);
+      setSaved(result.saved);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewOffer] toggle save error', e);
+      setSaved(!next);
+    } finally {
+      setSavingBookmark(false);
+    }
+  }, [savingBookmark, saved, offer]);
 
   const handleSubscribe = useCallback(async () => {
     // Subscriptions module not yet built
@@ -375,6 +410,39 @@ export default function ViewOfferScreen() {
           {offer.description ? (
             <Text style={styles.description}>{offer.description}</Text>
           ) : null}
+
+          <View style={styles.engagementRow}>
+            <LikeButton
+              contentType="offer"
+              contentId={offer.id}
+              initialLikeCount={offer.like_count}
+              initialHasLiked={offer.liked_by_me}
+              isOwner={offer.is_owner}
+            />
+            <TouchableOpacity style={styles.commentBtn} onPress={() => setCommentOpen(true)} hitSlop={8} testID="view-offer-comment-btn">
+              <MessageCircle size={18} color="#6B7280" />
+              <Text style={styles.commentCount}>{offer.comment_count}</Text>
+            </TouchableOpacity>
+            <CommentSheet
+              visible={commentOpen}
+              contentType="offer"
+              contentId={offer.id}
+              initialCommentCount={offer.comment_count}
+              onClose={() => setCommentOpen(false)}
+            />
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleToggleSave}
+              hitSlop={8}
+              disabled={savingBookmark}
+              testID="view-offer-save-btn"
+            >
+              <Bookmark size={18} color={saved ? '#DC2626' : '#6B7280'} fill={saved ? '#DC2626' : 'transparent'} />
+              <Text style={[styles.saveBtnText, saved && styles.saveBtnTextActive]}>
+                {saved ? 'Saved' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={styles.termsToggle}
@@ -580,6 +648,36 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 16,
+  },
+  engagementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 16,
+  },
+  commentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  commentCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto',
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  saveBtnTextActive: {
+    color: '#DC2626',
   },
   termsToggle: {
     marginTop: 20,

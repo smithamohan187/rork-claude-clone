@@ -20,7 +20,7 @@ interface Props {
 }
 
 const HeaderAvatarTrigger = React.memo(function HeaderAvatarTrigger({ size = 36, testID }: Props) {
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const { open } = useSideDrawer();
 
   const handlePress = useCallback(() => {
@@ -28,7 +28,7 @@ const HeaderAvatarTrigger = React.memo(function HeaderAvatarTrigger({ size = 36,
     open();
   }, [open]);
 
-  const hasAvatar = !!currentUser?.avatar;
+  const hasAvatar = !!authUser?.avatar;
 
   return (
     <Pressable
@@ -51,7 +51,7 @@ const HeaderAvatarTrigger = React.memo(function HeaderAvatarTrigger({ size = 36,
       >
         {hasAvatar ? (
           <Image
-            source={{ uri: currentUser.avatar }}
+            source={{ uri: authUser.avatar }}
             style={{ width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }}
             contentFit="cover"
           />
@@ -62,7 +62,7 @@ const HeaderAvatarTrigger = React.memo(function HeaderAvatarTrigger({ size = 36,
               { width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 },
             ]}
           >
-            <Text style={styles.initials}>{getInitials(currentUser?.name ?? 'U')}</Text>
+            <Text style={styles.initials}>{getInitials(authUser?.name ?? 'U')}</Text>
           </View>
         )}
       </View>

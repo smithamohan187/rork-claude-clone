@@ -74,9 +74,23 @@ axiosInstance.interceptors.request.use(config => {
 });
 
 // ── Silent token refresh ──────────────────────────────────────────────────────
-async function tryRefreshAccessToken(): Promise<boolean> {
+// Refresh tokens are single-use (server-side atomic rotation) — if two callers each
+// fire their own /auth/refresh with the same token, only one can win and the other's
+// clearTokens()-on-failure would wipe out the valid tokens the winner just set. This
+// in-flight promise cache means every concurrent caller (AuthContext's restoreSession
+// on mount, and any 401-triggered retry from the response interceptor below) shares
+// the exact same network call and result instead of racing independently.
+export interface RefreshResult {
+  success: boolean;
+  accessToken: string | null;
+  user: unknown;
+}
+
+let inFlightRefresh: Promise<RefreshResult> | null = null;
+
+async function performRefresh(): Promise<RefreshResult> {
   const refreshToken = await getRefreshToken();
-  if (!refreshToken) return false;
+  if (!refreshToken) return { success: false, accessToken: null, user: null };
   try {
     const res  = await axiosInstance.post('/auth/refresh', { refreshToken });
     const data = res.data?.data ?? res.data;
@@ -86,13 +100,30 @@ async function tryRefreshAccessToken(): Promise<boolean> {
       setAccessToken(accessToken);
       if (nextRefreshToken) await setRefreshToken(nextRefreshToken);
       if (__DEV__) console.log('[apiClient] access token refreshed silently');
-      return true;
+      return { success: true, accessToken, user: data?.user ?? null };
     }
     await clearTokens();
-    return false;
+    return { success: false, accessToken: null, user: null };
   } catch {
-    return false;
+    // /auth/refresh itself failed (network error, or the refresh token is expired/revoked/
+    // invalid) — clear it here too, otherwise a stale token is left in storage and every
+    // subsequent 401'd request keeps retrying the same doomed refresh instead of prompting
+    // a real re-login.
+    await clearTokens();
+    return { success: false, accessToken: null, user: null };
   }
+}
+
+export async function refreshAccessToken(): Promise<RefreshResult> {
+  if (!inFlightRefresh) {
+    inFlightRefresh = performRefresh().finally(() => { inFlightRefresh = null; });
+  }
+  return inFlightRefresh;
+}
+
+async function tryRefreshAccessToken(): Promise<boolean> {
+  const result = await refreshAccessToken();
+  return result.success;
 }
 
 // ── Response interceptor — handle 401 with one silent refresh retry ───────────

@@ -60,6 +60,7 @@ export default function EditPostScreen() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [discardVisible, setDiscardVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -76,9 +77,10 @@ export default function EditPostScreen() {
     return (
       draft.title !== original.title ||
       draft.content !== original.content ||
-      localImageUri !== null
+      localImageUri !== null ||
+      imageRemoved
     );
-  }, [draft, original, localImageUri]);
+  }, [draft, original, localImageUri, imageRemoved]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
@@ -108,11 +110,13 @@ export default function EditPostScreen() {
     if (!result.canceled && result.assets?.[0]) {
       const stable = await toDisplayUri(result.assets[0].uri);
       setLocalImageUri(stable);
+      setImageRemoved(false);
     }
   }, []);
 
   const handleRemovePhoto = useCallback(() => {
     setLocalImageUri(null);
+    setImageRemoved(true);
   }, []);
 
   if (loading) {
@@ -149,7 +153,7 @@ export default function EditPostScreen() {
     );
   }
 
-  const currentImageUri = localImageUri ?? original.image_url;
+  const currentImageUri = localImageUri ?? (imageRemoved ? null : original.image_url);
 
   const handleBack = () => {
     if (hasChanges) setDiscardVisible(true);
@@ -163,7 +167,12 @@ export default function EditPostScreen() {
     }
     try {
       setSaving(true);
-      await updatePost(id, { title: draft.title.trim(), content: draft.content.trim() });
+      const payload: { title: string; content: string; image_url?: null } = {
+        title: draft.title.trim(),
+        content: draft.content.trim(),
+      };
+      if (imageRemoved && !localImageUri) payload.image_url = null;
+      await updatePost(id, payload);
       if (localImageUri) await uploadPostImage(id, localImageUri);
       router.back();
     } catch (err: unknown) {

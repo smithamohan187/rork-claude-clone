@@ -3,8 +3,9 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { resolveShareReferral } from '@/api/services/sharesService';
-import { parseReferralFromUrl, setPendingShareReferral } from '@/utils/shareReferral';
+import { parseReferralFromUrl, parseBusinessScanFromUrl, setPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
+import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
 // Handles inbound content-share deep links (expo-linking). Mounted once at the app root.
 //
@@ -21,6 +22,43 @@ export function useShareDeepLink(): void {
 
   const handleUrl = async (url: string | null) => {
     if (!url || handledUrls.current.has(url)) return;
+
+    // Business "Scan to subscribe" QR link (/b/<businessId>) — a different URL shape from content
+    // shares (/s/<code>), resolved via a raw businessId rather than a code lookup.
+    const scanBusinessId = parseBusinessScanFromUrl(url);
+    if (scanBusinessId) {
+      if (authLoading) {
+        pendingUrl.current = url;
+        return;
+      }
+      handledUrls.current.add(url);
+
+      if (isAuthenticated) {
+        let welcomePoints = 0;
+        try {
+          const result = await scanSubscribeToBusiness(scanBusinessId);
+          welcomePoints = result.welcomePoints;
+        } catch (err) {
+          if (__DEV__) console.error('[useShareDeepLink] scanSubscribeToBusiness error:', err);
+        }
+        router.push({
+          pathname: '/business-profile/[id]' as never,
+          params: { id: scanBusinessId, businessId: scanBusinessId, welcomePoints: String(welcomePoints) } as never,
+        });
+      } else {
+        await setPendingShareReferral({
+          referral_code: scanBusinessId,
+          content_type: 'business_qr',
+          route: '/business-profile/[id]',
+          id_param: 'id',
+          content_id: scanBusinessId,
+          business_id: scanBusinessId,
+        });
+        router.push('/(auth)/sign-up' as never);
+      }
+      return;
+    }
+
     const code = parseReferralFromUrl(url);
     if (!code) return;
 

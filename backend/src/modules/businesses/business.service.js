@@ -227,6 +227,76 @@ async function fetchDashboardSummary(userId) {
   return getDashboardSummary(business.id);
 }
 
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function truncate(str, max) {
+  const s = String(str ?? '');
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function resolveAbsoluteImageUrl(imageUrl, requestOrigin) {
+  if (!imageUrl) return '';
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  return `${requestOrigin}${imageUrl}`;
+}
+
+const DEFAULT_SCAN_OG = {
+  title: 'TouchPoints',
+  description: 'Discover local businesses, earn rewards, and get exclusive offers.',
+  image_url: '',
+};
+
+function buildScanPreviewHtml({ title, description, image_url, url }) {
+  const safeTitle = escapeHtml(title);
+  const safeDescription = escapeHtml(truncate(description, 200));
+  const safeUrl = escapeHtml(url);
+  const imageTag = image_url ? `<meta property="og:image" content="${escapeHtml(image_url)}">\n` : '';
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${safeTitle}</title>
+<meta property="og:title" content="${safeTitle}">
+<meta property="og:description" content="${safeDescription}">
+<meta property="og:url" content="${safeUrl}">
+<meta property="og:type" content="website">
+${imageTag}<meta name="description" content="${safeDescription}">
+</head>
+<body>
+<h1>${safeTitle}</h1>
+<p>${safeDescription}</p>
+<p>Open this in the TouchPoints app to see more, or subscribe to earn rewards.</p>
+</body>
+</html>`;
+}
+
+// Public HTML page for GET /b/:id — the target of a business's "Scan to subscribe" QR code
+// (built by getBusinessScanCode above). Mirrors shareReferrals.service.js's renderSharePreviewHtml
+// for /s/:code (same OG-page-for-scrapers/browsers pattern, deliberately duplicated per this repo's
+// convention of not sharing small helpers across modules — see analytics.md's getBusinessIdByUserId
+// note). Always 200s with a valid HTML/OG page, even for an unknown/deleted business, so a stale
+// printed QR code never shows a bare "Cannot GET" error to whoever scans it.
+async function renderBusinessScanPageHtml(businessId, requestOrigin) {
+  const url = `${SHARE_BASE_URL}/b/${businessId}`;
+  const business = await getBusinessById(businessId);
+  if (!business) {
+    return buildScanPreviewHtml({ ...DEFAULT_SCAN_OG, url });
+  }
+  return buildScanPreviewHtml({
+    title: business.name || DEFAULT_SCAN_OG.title,
+    description: business.description || DEFAULT_SCAN_OG.description,
+    image_url: resolveAbsoluteImageUrl(business.logo_url, requestOrigin),
+    url,
+  });
+}
+
 module.exports = {
   registerBusiness,
   uploadBusinessLogo,
@@ -235,5 +305,6 @@ module.exports = {
   fetchMyBusiness,
   getPublicBusinessProfile,
   getBusinessScanCode,
+  renderBusinessScanPageHtml,
   fetchDashboardSummary,
 };

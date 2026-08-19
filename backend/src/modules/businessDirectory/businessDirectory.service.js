@@ -5,7 +5,7 @@ const { getBusinessDirectory, getBusinessCategories } = require('./businessDirec
  * Fetch a page of the business directory with optional search/category filters.
  * Passes filters straight to the model; no transformation needed at this stage.
  *
- * @param {{ search: string|null, category: string|null, limit: number, offset: number }} filters
+ * @param {{ search: string|null, category: string|null, limit: number, offset: number, viewerProfileId: string|null }} filters
  * @returns {{ rows: Object[], total: number }}
  */
 async function listBusinesses(filters) {

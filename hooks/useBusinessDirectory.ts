@@ -7,8 +7,16 @@ import {
   BusinessDirectoryItem,
   BusinessCategory,
 } from '@/api/services/businessDirectoryService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const useBusinessDirectory = () => {
+  // This endpoint works fine logged-out, so we don't gate on isAuthenticated — only on
+  // authLoading, so that when the user IS logged in, the initial fetch waits for session
+  // restore to finish setting the in-memory access token first. Otherwise, on a fresh page
+  // load, this fires before the token is set, silently loses is_subscribed for every card
+  // (no 401 to trigger a retry, since the route itself doesn't require auth), and never
+  // recovers until the next manual refresh/filter change.
+  const { authLoading } = useAuth();
   const [businesses, setBusinesses]       = useState<BusinessDirectoryItem[]>([]);
   const [categories, setCategories]       = useState<BusinessCategory[]>([]);
   const [search, setSearch]               = useState<string>('');
@@ -76,6 +84,7 @@ export const useBusinessDirectory = () => {
 
   // --- Initial load — fetch categories and first page of businesses in parallel ---
   useEffect(() => {
+    if (authLoading) return;
     const init = async () => {
       setLoading(true);
       setError(null);
@@ -95,7 +104,7 @@ export const useBusinessDirectory = () => {
       }
     };
     init();
-  }, []);
+  }, [authLoading]);
 
   // --- Handlers ---
 

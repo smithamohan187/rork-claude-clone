@@ -1,11 +1,14 @@
 const likesModel = require('./likes.model');
 
 async function toggleLike(content_type, content_id, callerProfileId) {
-  const ownerProfileId = await likesModel.getContentOwnerProfileId(content_type, content_id);
-  if (ownerProfileId && ownerProfileId === callerProfileId) {
-    const err = new Error('Content owner cannot like their own content');
-    err.status = 403;
-    throw err;
+  // Comments aren't owned by a business, so the self-like block doesn't apply to them.
+  if (content_type !== 'comment') {
+    const ownerProfileId = await likesModel.getContentOwnerProfileId(content_type, content_id);
+    if (ownerProfileId && ownerProfileId === callerProfileId) {
+      const err = new Error('Content owner cannot like their own content');
+      err.status = 403;
+      throw err;
+    }
   }
   return likesModel.toggleLike(content_type, content_id, callerProfileId);
 }

@@ -132,11 +132,17 @@ const switchProfileHandler = asyncHandler(async (req, res) => {
     return res.status(400).json(fail('profile_id is required'));
   }
   const profile = await authModel.switchActiveProfile(req.user.userId, profile_id);
+  // A business profile's real avatar is its logo (businesses.logo_url) — profiles.avatar_url
+  // is only ever copied once from the personal profile at business-creation time and never
+  // updated after a logo upload, so prefer the logo when one exists.
+  const avatarUrl = profile.profile_type === 'business'
+    ? (profile.logo_url || profile.avatar_url)
+    : profile.avatar_url;
   return res.json(ok({
     active_profile_id:   profile.id,
     active_profile_type: profile.profile_type,
     display_name:        profile.display_name,
-    avatar_url:          profile.avatar_url,
+    avatar_url:          avatarUrl,
   }));
 });
 

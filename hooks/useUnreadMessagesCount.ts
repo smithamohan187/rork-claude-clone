@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getConversations } from '@/api/services/chatService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -7,9 +8,15 @@ const POLL_INTERVAL_MS = 15000;
 // across both business and friend conversations. Polls at a slower cadence than the
 // in-chat message poll (useConversation.ts) since this only drives a tab-bar badge.
 export function useUnreadMessagesCount(): number {
+  const { isAuthenticated, authLoading } = useAuth();
   const [count, setCount] = useState<number>(0);
 
   useEffect(() => {
+    // Wait for session restore to finish and a token to actually be in memory —
+    // otherwise this fires on a cold page load before the access token is
+    // restored and silently 401s (see BusinessInviteBanner for the same fix).
+    if (authLoading || !isAuthenticated) return;
+
     let active = true;
 
     const load = async () => {
@@ -35,7 +42,7 @@ export function useUnreadMessagesCount(): number {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   return count;
 }

@@ -38,11 +38,11 @@ const initialsFor = (name: string): string => {
 
 export default function BusinessInviteSmsScreen() {
   const router = useRouter();
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const { showSnackbar } = useSnackbar();
   const params = useLocalSearchParams<{ referralLink?: string; referralCode?: string }>();
 
-  const referralLink = params.referralLink ?? buildBusinessReferralLink(currentUser?.id);
+  const referralLink = params.referralLink ?? buildBusinessReferralLink(authUser?.id);
 
   const defaultMsg = useMemo(
     () =>

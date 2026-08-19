@@ -47,7 +47,7 @@ export default function LikeButton({
 
   return (
     <View style={styles.row}>
-      <Pressable onPress={handleHeartPress} hitSlop={6} style={styles.heartBtn}>
+      <Pressable onPress={handleHeartPress} hitSlop={6} style={styles.heartBtn} testID={`like-heart-${contentType}-${contentId}`}>
         <MaterialCommunityIcons
           name={hasLiked ? 'heart' : 'heart-outline'}
           size={20}

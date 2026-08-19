@@ -8,9 +8,13 @@ const unsubscribeBodySchema = Joi.object({
   business_id: Joi.string().uuid().required(),
 });
 
+const scanSubscribeBodySchema = Joi.object({
+  business_id: Joi.string().uuid().required(),
+});
+
 const removeMemberSchema = Joi.object({
   business_id:       Joi.string().uuid().optional(),
   member_profile_id: Joi.string().uuid().required(),
 });
 
-module.exports = { subscribeBodySchema, unsubscribeBodySchema, removeMemberSchema };
+module.exports = { subscribeBodySchema, unsubscribeBodySchema, scanSubscribeBodySchema, removeMemberSchema };

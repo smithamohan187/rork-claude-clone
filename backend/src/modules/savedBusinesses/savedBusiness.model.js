@@ -60,7 +60,7 @@ async function getSavedBusinesses(profileId) {
      INNER JOIN businesses b          ON b.id = sb.business_id
      LEFT  JOIN business_categories bc ON bc.id = b.category_id
      LEFT  JOIN subscriptions s        ON s.business_id = b.id
-     LEFT  JOIN business_ratings br    ON br.business_id = b.id
+     LEFT  JOIN business_reviews br    ON br.business_id = b.id
      WHERE sb.profile_id = $1
      GROUP BY b.id, bc.name, sb.created_at
      ORDER BY sb.created_at DESC`,

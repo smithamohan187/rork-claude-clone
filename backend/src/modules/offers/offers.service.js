@@ -1,5 +1,7 @@
 const offersModel = require('./offers.model');
 const notificationsService = require('../notifications/notifications.service');
+const likesModel = require('../likes/likes.model');
+const commentsModel = require('../comments/comments.model');
 const { getClient } = require('../../config/database');
 
 async function verifyOfferOwnership(userId, offerId) {
@@ -59,8 +61,8 @@ async function listMyOffers(userId, filter) {
   return offersModel.getOffersByBusinessId(businessId, filter, null);
 }
 
-async function getOffer(offerId) {
-  const offer = await offersModel.getOfferById(offerId);
+async function getOffer(offerId, profileId) {
+  const offer = await offersModel.getOfferById(offerId, profileId);
   if (!offer) throw new Error('Offer not found');
   return offer;
 }
@@ -69,6 +71,13 @@ async function deleteOffer(userId, offerId) {
   await verifyOfferOwnership(userId, offerId);
   const deleted = await offersModel.deleteOffer(offerId);
   if (!deleted) throw new Error('Offer not found');
+  // Redemptions cascade-delete via FK, but likes/comments are generic polymorphic tables
+  // (content_type/content_id, no FK) — clean them up explicitly or they're orphaned forever.
+  await likesModel.deleteLikesOnCommentsOfContent('offer', offerId);
+  await Promise.all([
+    likesModel.deleteByContent('offer', offerId),
+    commentsModel.deleteByContent('offer', offerId),
+  ]);
 }
 
 async function getActiveOffersForBusiness(businessId) {

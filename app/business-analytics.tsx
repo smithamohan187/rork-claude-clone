@@ -145,6 +145,16 @@ export default function BusinessAnalyticsScreen() {
   const chartAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // On web, RefreshControl wrapping this ScrollView freezes JS-driven Animated timings
+    // started on mount/prop-change (they report {finished:false} within a frame and never
+    // advance), which would otherwise leave the whole screen permanently invisible at its
+    // initial opacity:0/translateY:12 values. Skip the animation on web and render at rest.
+    if (Platform.OS === 'web') {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      chartAnim.setValue(1);
+      return;
+    }
     fadeAnim.setValue(0);
     slideAnim.setValue(12);
     chartAnim.setValue(0);
@@ -205,6 +215,12 @@ export default function BusinessAnalyticsScreen() {
     }
     await refresh();
     setRefreshing(false);
+    if (Platform.OS === 'web') {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      chartAnim.setValue(1);
+      return;
+    }
     fadeAnim.setValue(0);
     slideAnim.setValue(12);
     chartAnim.setValue(0);
@@ -461,7 +477,7 @@ function BarChart({ data, progress }: { data: { date: string; count: number }[];
   const barSpacing = 3;
   const barWidth = Math.max(4, (chartWidth - barSpacing * (bars.length - 1)) / Math.max(1, bars.length));
 
-  const [animValue, setAnimValue] = useState<number>(0);
+  const [animValue, setAnimValue] = useState<number>(() => (progress as unknown as { __getValue(): number }).__getValue());
   useEffect(() => {
     const id = progress.addListener(({ value }) => setAnimValue(value));
     return () => progress.removeListener(id);
@@ -545,7 +561,7 @@ function DonutChart({
   const circumference = 2 * Math.PI * radius;
   const total = data.reduce((a, b) => a + b.value, 0);
 
-  const [animValue, setAnimValue] = useState<number>(0);
+  const [animValue, setAnimValue] = useState<number>(() => (progress as unknown as { __getValue(): number }).__getValue());
   useEffect(() => {
     const id = progress.addListener(({ value }) => setAnimValue(value));
     return () => progress.removeListener(id);
@@ -625,7 +641,7 @@ function LineChart({ data, progress }: { data: { date: string; count: number }[]
   const step = Math.max(1, Math.ceil(data.length / maxPoints));
   const points = data.filter((_, i) => i % step === 0);
 
-  const [animValue, setAnimValue] = useState<number>(0);
+  const [animValue, setAnimValue] = useState<number>(() => (progress as unknown as { __getValue(): number }).__getValue());
   useEffect(() => {
     const id = progress.addListener(({ value }) => setAnimValue(value));
     return () => progress.removeListener(id);

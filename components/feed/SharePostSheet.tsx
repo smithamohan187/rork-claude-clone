@@ -434,11 +434,17 @@ export const SharePostSheet = React.memo(function SharePostSheet({
           sent = true;
         }
       }
+      // The share_recipients row (attribution/referral link) is already created above regardless
+      // of delivery mechanism, so a share genuinely happened either way — log it unconditionally,
+      // same as every other channel in this file. Previously this only fired in the `sent` branch,
+      // so every web share (Platform.OS==='web' skips both SMS paths above) and every native share
+      // on a device without SMS capability silently never logged to /shares, undercounting the
+      // "contacts" channel in share-count analytics.
+      logShareSilently('contacts');
       if (!sent) {
         await Clipboard.setStringAsync(outgoingMessage);
         onToast('Message copied to clipboard');
       } else {
-        logShareSilently('contacts');
         onToast('🎉 Shared successfully!');
       }
       onClose();

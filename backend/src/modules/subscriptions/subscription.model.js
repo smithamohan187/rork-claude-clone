@@ -79,7 +79,11 @@ async function getSubscribedBusinesses(profileId) {
           WHERE business_id = b.id
             AND status = 'active'
             AND (expires_at IS NULL OR expires_at > NOW())), 0
-       ) AS active_offer_count
+       ) AS active_offer_count,
+       COALESCE(
+         (SELECT SUM(points)::int FROM points_transactions
+          WHERE profile_id = s.profile_id AND business_id = b.id), 0
+       ) AS points
      FROM subscriptions s
      JOIN businesses b ON b.id = s.business_id
      LEFT JOIN business_categories bc ON bc.id = b.category_id

@@ -10,9 +10,18 @@ async function subscribeToBusiness(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
   if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
 
-  const { rows } = await query('SELECT id, name FROM businesses WHERE id = $1', [businessId]);
+  const { rows } = await query(
+    `SELECT businesses.id, businesses.name, p.user_id AS owner_user_id
+     FROM businesses
+     JOIN profiles p ON p.id = businesses.profile_id
+     WHERE businesses.id = $1`,
+    [businessId],
+  );
   if (!rows[0]) throw Object.assign(new Error('Business not found'), { status: 404 });
   const business = rows[0];
+  if (business.owner_user_id === userId) {
+    throw Object.assign(new Error('You cannot subscribe to your own business'), { status: 400 });
+  }
 
   // Wrap subscription upsert + welcome-bonus award in a single transaction so
   // both succeed or both roll back. ON CONFLICT DO NOTHING on the unique partial
@@ -112,6 +121,39 @@ async function maybeLinkTrustedFriend(subscriberProfileId, businessId, businessN
   }
 }
 
+// Resolves a business "Scan to subscribe" QR (GET /businesses/:id/scan-code → GET /b/:id →
+// deep-linked back into the app). Unlike a per-customer invite code, there's no code-matching
+// step here — the businessId comes straight from the URL — so this only needs to guard against
+// re-invoking subscribeToBusiness for someone already subscribed (same idempotency shape as
+// customerInvite.service.js's resolvePendingCustomerInvite: subscribeToBusiness itself always
+// (re)fires a notification when welcomePoints > 0, even though the points insert below it is a
+// no-op on conflict — checking first avoids sending a duplicate notification on every re-scan).
+async function resolveScanSubscribe(userId, businessId) {
+  const profileId = await subscriptionModel.getActiveProfileId(userId);
+  if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
+
+  const existing = await subscriptionModel.getSubscription(profileId, businessId);
+  if (existing?.is_active) {
+    const { rows } = await query('SELECT id, name FROM businesses WHERE id = $1', [businessId]);
+    if (!rows[0]) throw Object.assign(new Error('Business not found'), { status: 404 });
+    return { alreadySubscribed: true, isOwner: false, business: { id: rows[0].id, name: rows[0].name }, welcomePoints: 0 };
+  }
+
+  try {
+    const result = await subscribeToBusiness(userId, businessId);
+    return { alreadySubscribed: false, isOwner: false, business: result.business, welcomePoints: result.welcomePoints };
+  } catch (err) {
+    // The owner scanning their own QR — subscribeToBusiness rejects this by design. Not an error
+    // from the scanner's point of view; just land them on their own business page, no points.
+    if (err.status === 400 && /cannot subscribe to your own business/i.test(err.message)) {
+      const { rows } = await query('SELECT id, name FROM businesses WHERE id = $1', [businessId]);
+      if (!rows[0]) throw Object.assign(new Error('Business not found'), { status: 404 });
+      return { alreadySubscribed: false, isOwner: true, business: { id: rows[0].id, name: rows[0].name }, welcomePoints: 0 };
+    }
+    throw err;
+  }
+}
+
 async function unsubscribeFromBusiness(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
   if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
@@ -150,6 +192,7 @@ async function removeBusinessMember(userId, businessId = null, memberProfileId) 
 
 module.exports = {
   subscribeToBusiness,
+  resolveScanSubscribe,
   unsubscribeFromBusiness,
   getSubscriptionStatus,
   getSubscribedBusinesses,

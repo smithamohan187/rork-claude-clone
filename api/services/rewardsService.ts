@@ -49,3 +49,19 @@ export async function checkCouponExpiry(couponId: string): Promise<{ expired: bo
   const res = await apiClient.post<{ expired: boolean }>(`/coupons/${couponId}/expire-check`, {});
   return res.data as { expired: boolean };
 }
+
+export type ScanCouponResult =
+  | { ok: true; coupon: { id: string; customerName: string; rewardTitle: string; rewardType: 'discount' | 'free_item' | 'voucher'; pointsDeducted: number; usedAt: number } }
+  | { ok: false; error: 'not_found'; message: string }
+  | { ok: false; error: 'already_used'; message: string; usedAt: number }
+  | { ok: false; error: 'expired'; message: string; expiredAt: number }
+  | { ok: false; error: 'wrong_business'; message: string };
+
+export async function scanCoupon(code: string): Promise<ScanCouponResult> {
+  const res = await apiClient.post<ScanCouponResult>('/coupons/scan', { code });
+  const raw = res.data as ScanCouponResult;
+  if (raw.ok && (raw.coupon.rewardType as string) === 'perk') {
+    return { ...raw, coupon: { ...raw.coupon, rewardType: 'voucher' } };
+  }
+  return raw;
+}

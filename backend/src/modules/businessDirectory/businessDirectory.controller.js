@@ -18,11 +18,16 @@ const listBusinessesHandler = asyncHandler(async (req, res) => {
   const limit  = 20;
   const offset = (Number(page) - 1) * limit;
 
+  // req.user is only set when optionalAuthenticate found a valid token — anonymous
+  // browsing still works, it just won't have per-business subscribed flags.
+  const viewerProfileId = req.user?.activeProfileId ?? null;
+
   const { rows: businesses, total } = await listBusinesses({
     search:   search   || null,
     category: category || null,
     limit,
     offset,
+    viewerProfileId,
   });
 
   // Return businesses alongside pagination metadata so the client knows when to stop loading more

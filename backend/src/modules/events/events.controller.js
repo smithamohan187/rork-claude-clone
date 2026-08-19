@@ -13,7 +13,7 @@ const listMyEventsHandler = asyncHandler(async (req, res) => {
 
 const getEventHandler = asyncHandler(async (req, res) => {
   try {
-    const event = await eventsService.getEvent(req.params.id);
+    const event = await eventsService.getEvent(req.params.id, req.user?.activeProfileId);
     res.json(ok({ event }));
   } catch (err) {
     if (err.message === 'Event not found') {

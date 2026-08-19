@@ -705,7 +705,7 @@ CREATE INDEX idx_saved_posts_profile_id ON saved_posts(profile_id);
 
 CREATE TABLE likes (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  content_type TEXT        NOT NULL CHECK (content_type IN ('offer', 'event', 'post')),
+  content_type TEXT        NOT NULL CHECK (content_type IN ('offer', 'event', 'post', 'comment')),
   content_id   UUID        NOT NULL,
   profile_id   UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),

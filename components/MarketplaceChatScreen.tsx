@@ -40,7 +40,7 @@ interface Props {
 /* ───────── main ───────── */
 export default function MarketplaceChatScreen({ chatId }: Props) {
   const router = useRouter();
-  const { currentUser } = useAuth();
+  const { authUser } = useAuth();
   const flatListRef = useRef<FlatList>(null);
 
   /* lookup conversation + participant */
@@ -50,7 +50,7 @@ export default function MarketplaceChatScreen({ chatId }: Props) {
   /* find the marketplace member for avatar fallback */
   const member = useMemo(() => marketplaceMembers.find(m => m.name === participant?.name), [participant?.name]);
 
-  const mySenderId = currentUser.id;
+  const mySenderId = authUser?.id ?? '';
 
   const initialMessages = useMemo(() => chatMessages[chatId] || [], [chatId]);
 

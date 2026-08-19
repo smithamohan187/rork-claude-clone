@@ -24,12 +24,26 @@ async function insertPost(businessId, { title, content, image_url }) {
   return rows[0];
 }
 
-async function getPostById(id) {
+async function getPostById(id, profileId) {
   const { rows } = await query(
-    `SELECT * FROM posts WHERE id = $1`,
-    [id]
+    `SELECT posts.*,
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id AND l.profile_id = $2::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'post' AND c.content_id = posts.id AND c.is_deleted = FALSE) AS comment_count,
+       (SELECT EXISTS(SELECT 1 FROM businesses b WHERE b.id = posts.business_id AND b.profile_id = $2::uuid)) AS is_owner
+     FROM posts WHERE id = $1`,
+    [id, profileId ?? null]
   );
   return rows[0] ?? null;
+}
+
+async function isBusinessOwnedByProfile(businessId, profileId) {
+  if (!profileId) return false;
+  const { rows } = await query(
+    'SELECT 1 FROM businesses WHERE id = $1 AND profile_id = $2',
+    [businessId, profileId]
+  );
+  return rows.length > 0;
 }
 
 async function getPostsByBusinessId(businessId, isActive, profileId) {
@@ -53,20 +67,21 @@ async function getPostsByBusinessId(businessId, isActive, profileId) {
   return rows;
 }
 
-async function updatePost(id, { title, content, image_url, is_active }) {
+async function updatePost(id, { title, content, image_url, is_active }, hasImageUrl = false) {
   const { rows } = await query(
     `UPDATE posts SET
        title      = COALESCE($1, title),
        content    = COALESCE($2, content),
-       image_url  = $3,
-       is_active  = COALESCE($4, is_active),
+       image_url  = CASE WHEN $3 THEN $4 ELSE image_url END,
+       is_active  = COALESCE($5, is_active),
        updated_at = NOW()
-     WHERE id = $5
+     WHERE id = $6
      RETURNING *`,
     [
       title    ?? null,
       content  ?? null,
-      image_url !== undefined ? (image_url ?? null) : undefined,
+      hasImageUrl,
+      image_url ?? null,
       is_active !== undefined ? is_active : null,
       id,
     ]
@@ -92,6 +107,7 @@ async function deletePost(id) {
 
 module.exports = {
   getBusinessIdByUserId,
+  isBusinessOwnedByProfile,
   insertPost,
   getPostById,
   getPostsByBusinessId,

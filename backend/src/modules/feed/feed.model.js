@@ -41,6 +41,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
         AND so.profile_id = $1
        WHERE o.status = 'active'
          AND (o.expires_at IS NULL OR o.expires_at > NOW())
+         AND b.is_active = TRUE
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
 
        UNION ALL
@@ -72,6 +73,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
         AND se.profile_id = $1
        WHERE e.status != 'cancelled'
          AND e.starts_at > NOW()
+         AND b.is_active = TRUE
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
 
        UNION ALL
@@ -102,6 +104,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          ON sp.post_id = p.id
         AND sp.profile_id = $1
        WHERE p.is_active = true
+         AND b.is_active = TRUE
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
      ) feed
      ORDER BY created_at DESC

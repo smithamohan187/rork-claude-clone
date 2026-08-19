@@ -5,10 +5,12 @@ import {
   toggleOfferStatus,
   type Offer,
 } from '@/api/services/offersService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type OfferFilter = 'all' | 'active' | 'expired' | 'disabled';
 
 export function useBusinessOffers(businessId: string, filter: OfferFilter) {
+  const { authLoading, isAuthenticated } = useAuth();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,9 +28,12 @@ export function useBusinessOffers(businessId: string, filter: OfferFilter) {
     }
   }, [businessId, filter]);
 
+  // Wait for AuthContext's session-restore to finish — firing before it settles hits the API
+  // with no access token yet, 401s, and silently leaves the list empty on fresh page loads.
   useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
     refresh();
-  }, [refresh]);
+  }, [refresh, authLoading, isAuthenticated]);
 
   const toggleDisable = useCallback(
     async (offerId: string, currentStatus: 'active' | 'disabled' | 'expired') => {

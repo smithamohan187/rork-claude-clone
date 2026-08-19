@@ -2,7 +2,7 @@ const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, optionalAuthenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
 const { createPostSchema, updatePostSchema, toggleStatusSchema } = require('./posts.validation');
 const {
@@ -30,7 +30,7 @@ const router = Router();
 // /my and /business/:id must come before /:id — static routes precede dynamic params
 router.get('/my', authenticate, getPostsHandler);
 router.get('/business/:businessId', authenticate, getBusinessPostsHandler);
-router.get('/:id', getPostByIdHandler);
+router.get('/:id', optionalAuthenticate, getPostByIdHandler);
 
 router.post('/',           authenticate, validateRequest(createPostSchema), createPostHandler);
 router.put('/:id',         authenticate, validateRequest(updatePostSchema), updatePostHandler);

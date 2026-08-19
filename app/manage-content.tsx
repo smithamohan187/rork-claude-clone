@@ -36,6 +36,7 @@ import {
 } from '@/contexts/ManageContentContext';
 import { useOffers } from '@/hooks/useOffers';
 import { type Offer } from '@/api/services/offersService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -116,11 +117,15 @@ export default function ManageContentScreen() {
   const router = useRouter();
   const { events, posts, updateStatus, removeItem } = useManageContent();
   const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers();
+  const { authLoading, isAuthenticated } = useAuth();
 
+  // Guard against firing before AuthContext's session-restore finishes on a fresh page load —
+  // otherwise this 401s and leaves the list empty (same race as useOffers' internal auto-load).
   useFocusEffect(
     useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
       refreshOffers();
-    }, [refreshOffers])
+    }, [refreshOffers, authLoading, isAuthenticated])
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>('offers');

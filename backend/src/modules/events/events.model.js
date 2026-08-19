@@ -84,12 +84,17 @@ async function getEventsByBusiness(businessId, filter, profileId) {
   return rows;
 }
 
-async function getEventById(eventId) {
+async function getEventById(eventId, profileId) {
   const { rows } = await query(
-    `SELECT *, ${EFFECTIVE_STATUS_CASE}
+    `SELECT events.*, ${EFFECTIVE_STATUS_CASE},
+       (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'event' AND l.content_id = events.id) AS like_count,
+       (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'event' AND l.content_id = events.id AND l.profile_id = $2::uuid)) AS liked_by_me,
+       (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'event' AND c.content_id = events.id AND c.is_deleted = FALSE) AS comment_count,
+       (SELECT EXISTS(SELECT 1 FROM businesses b WHERE b.id = events.business_id AND b.profile_id = $2::uuid)) AS is_owner,
+       (SELECT EXISTS(SELECT 1 FROM saved_events se WHERE se.event_id = events.id AND se.profile_id = $2::uuid)) AS is_saved
      FROM events
      WHERE id = $1`,
-    [eventId]
+    [eventId, profileId ?? null]
   );
   return rows[0] ?? null;
 }

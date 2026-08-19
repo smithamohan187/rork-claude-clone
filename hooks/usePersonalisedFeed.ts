@@ -6,6 +6,7 @@ import { toggleSaveOffer } from '@/api/services/savedOfferService';
 import { toggleSaveEvent } from '@/api/services/savedEventService';
 import { toggleSavePost } from '@/api/services/savedPostService';
 import { toggleLike as apiToggleLike } from '@/api/services/likesService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface SubscribedBusiness {
   id: string;
@@ -171,6 +172,8 @@ function mapToDiscovery(biz: RecommendedBusiness): SubscribedBusiness {
   };
 }
 
+const FEED_PAGE_SIZE = 30;
+
 export interface UsePersonalisedFeedResult {
   subscribedBusinesses: SubscribedBusiness[];
   feedItems: FeedItem[];
@@ -181,6 +184,9 @@ export interface UsePersonalisedFeedResult {
   rewardsSummary: RewardSummary | null;
   loading: boolean;
   refreshing: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   subscribeToDiscovery: (businessId: string) => Promise<void>;
   toggleBookmark: (offerId: string) => void;
@@ -192,6 +198,7 @@ export interface UsePersonalisedFeedResult {
 }
 
 export function usePersonalisedFeed(): UsePersonalisedFeedResult {
+  const { authLoading, isAuthenticated } = useAuth();
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [postItems, setPostItems] = useState<PostFeedItem[]>([]);
   const [subscribedBusinesses] = useState<SubscribedBusiness[]>([]);
@@ -200,15 +207,19 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
   const [selectedCategory, setSelectedCategoryState] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(false);
   const mountedRef = useRef<boolean>(true);
   const selectedCategoryRef = useRef<string | null>(null);
+  const offsetRef = useRef<number>(0);
 
   const load = useCallback(async (isRefresh: boolean, category: string | null) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    offsetRef.current = 0;
 
     try {
-      const data = await getFeed({ category: category ?? undefined, limit: 30, offset: 0 });
+      const data = await getFeed({ category: category ?? undefined, limit: FEED_PAGE_SIZE, offset: 0 });
       if (!mountedRef.current) return;
 
       setMode(data.mode);
@@ -226,11 +237,14 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
         setFeedItems([...offers, ...events]);
         setPostItems(posts);
         setDiscoveryBusinesses([]);
+        offsetRef.current = rawItems.length;
+        setHasMore(rawItems.length === FEED_PAGE_SIZE);
       } else {
         setFeedItems([]);
         setPostItems([]);
         const recs = data.items as import('@/api/services/feedService').RecommendedBusiness[];
         setDiscoveryBusinesses(recs.map(mapToDiscovery));
+        setHasMore(false);
       }
     } catch (err) {
       if (__DEV__) console.log('[usePersonalisedFeed] load error', err);
@@ -242,14 +256,51 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
     }
   }, []);
 
+  const loadMore = useCallback(async () => {
+    // Pagination only applies to the real subscribed feed — the recommendation fallback
+    // modes return a fixed discovery list, not a paged one.
+    if (loadingMore || loading || refreshing || !hasMore || mode !== 'feed') return;
+    setLoadingMore(true);
+    try {
+      const data = await getFeed({
+        category: selectedCategoryRef.current ?? undefined,
+        limit: FEED_PAGE_SIZE,
+        offset: offsetRef.current,
+      });
+      if (!mountedRef.current) return;
+      if (data.mode === 'feed') {
+        const rawItems = data.items as import('@/api/services/feedService').FeedApiItem[];
+        const offers: OfferFeedItem[] = [];
+        const events: EventFeedItem[] = [];
+        const posts: PostFeedItem[] = [];
+        for (const item of rawItems) {
+          if (item.item_type === 'offer') offers.push(mapToOffer(item));
+          else if (item.item_type === 'event') events.push(mapToEvent(item));
+          else if (item.item_type === 'post') posts.push(mapToPost(item));
+        }
+        setFeedItems((prev) => [...prev, ...offers, ...events]);
+        setPostItems((prev) => [...prev, ...posts]);
+        offsetRef.current += rawItems.length;
+        setHasMore(rawItems.length === FEED_PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      if (__DEV__) console.log('[usePersonalisedFeed] loadMore error', err);
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }, [loadingMore, loading, refreshing, hasMore, mode]);
+
   useFocusEffect(
     useCallback(() => {
       mountedRef.current = true;
+      if (authLoading || !isAuthenticated) return;
       load(false, selectedCategoryRef.current);
       return () => {
         mountedRef.current = false;
       };
-    }, [load])
+    }, [load, authLoading, isAuthenticated])
   );
 
   const refresh = useCallback(async () => {
@@ -409,6 +460,9 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
     rewardsSummary: null,
     loading,
     refreshing,
+    loadingMore,
+    hasMore,
+    loadMore,
     refresh,
     subscribeToDiscovery,
     toggleBookmark,

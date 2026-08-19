@@ -48,8 +48,8 @@ async function listMyEvents(userId, filter) {
   return eventsModel.getEventsByBusiness(businessId, filter, null);
 }
 
-async function getEvent(eventId) {
-  const event = await eventsModel.getEventById(eventId);
+async function getEvent(eventId, profileId) {
+  const event = await eventsModel.getEventById(eventId, profileId);
   if (!event) throw new Error('Event not found');
   return event;
 }

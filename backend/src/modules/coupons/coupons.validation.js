@@ -5,5 +5,6 @@ const uuid = Joi.string().uuid({ version: 'uuidv4' });
 const businessIdParam = Joi.object({ businessId: uuid.required() });
 const redeemParams    = Joi.object({ businessId: uuid.required(), rewardId: uuid.required() });
 const couponIdParam   = Joi.object({ id: uuid.required() });
+const scanSchema      = Joi.object({ code: Joi.string().trim().min(1).max(20).required() });
 
-module.exports = { businessIdParam, redeemParams, couponIdParam };
+module.exports = { businessIdParam, redeemParams, couponIdParam, scanSchema };

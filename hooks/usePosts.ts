@@ -9,8 +9,10 @@ import {
   type Post,
   type CreatePostPayload,
 } from '@/api/services/postsService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function usePosts(initialFilter?: 'active' | 'disabled') {
+  const { authLoading, isAuthenticated } = useAuth();
   const [posts, setPosts]   = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
@@ -28,7 +30,12 @@ export function usePosts(initialFilter?: 'active' | 'disabled') {
     }
   }, [initialFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  // Wait for AuthContext's session-restore to finish — firing before it settles hits the API
+  // with no access token yet, 401s, and silently leaves the list empty on fresh page loads.
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    load();
+  }, [load, authLoading, isAuthenticated]);
 
   const addPost = useCallback(async (payload: CreatePostPayload): Promise<Post> => {
     const post = await createPost(payload);

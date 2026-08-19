@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
+import * as Location from 'expo-location';
 import { useAuth } from '@/contexts/AuthContext';
 import { signUp, SignupPayload } from '@/api/services/authService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
+import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
 // Where to land the user after signup: the shared detail screen when they arrived via a share
 // deep link, otherwise null (screen falls back to its default landing).
@@ -51,6 +53,10 @@ export function useSignUp() {
   const [interests, setInterests]             = useState<string[]>([]);
   const [referralCode, setReferralCode]       = useState('');
 
+  // ── Location detection state ──────────────────────────────────────────────
+  const [locationDetecting, setLocationDetecting] = useState(false);
+  const [locationDetectError, setLocationDetectError] = useState('');
+
   // ── UI toggles ────────────────────────────────────────────────────────────
   const [showPassword, setShowPassword]   = useState(false);
   const [showConfirm, setShowConfirm]     = useState(false);
@@ -78,8 +84,38 @@ export function useSignUp() {
    
 
   const confirmError = submitted && confirmPassword !== password ? 'Passwords do not match' : '';
+  const locationError = submitted && location.trim().length === 0
+    ? 'Location is required'
+    : locationDetectError;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  const detectLocation = useCallback(async () => {
+    setLocationDetectError('');
+    setLocationDetecting(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationDetectError('Location permission denied — please enter your city manually');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({});
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+      const city = place?.city || place?.subregion || place?.region;
+      if (!city) {
+        setLocationDetectError('Could not determine your city — please enter it manually');
+        return;
+      }
+      setLocation(city);
+    } catch {
+      setLocationDetectError('Location detection is unavailable — please enter your city manually');
+    } finally {
+      setLocationDetecting(false);
+    }
+  }, []);
+
   const toggleInterest = useCallback((cat: string) => {
     setInterests(prev =>
       prev.includes(cat) ? prev.filter(i => i !== cat) : [...prev, cat],
@@ -116,6 +152,7 @@ export function useSignUp() {
       !SPECIAL_CHAR_RE.test(password)
     ) return;
     if (confirmPassword !== password) return;
+    if (location.trim().length === 0) return;
 
     setLoading(true);
 
@@ -131,6 +168,9 @@ export function useSignUp() {
       // nothing to submit here. The pending referral is deliberately NOT cleared below so it
       // survives until the user goes through Create Business.
       const isBusinessInvite = pending?.content_type === 'business_invite';
+      // Business QR scan — resolved via businessId directly (scanSubscribeToBusiness below), not a
+      // referral code the signup endpoint knows about.
+      const isBusinessQrScan = pending?.content_type === 'business_qr';
 
       const payload: SignupPayload = {
         email:         email.trim().toLowerCase(),
@@ -140,7 +180,7 @@ export function useSignUp() {
         location:      location.trim()   || undefined,
         interests:     interests.length  ? interests : undefined,
         referral_code: isAppReferral ? pending?.referral_code : (referralCode.trim().toUpperCase() || undefined),
-        share_referral_code: isCustomerInvite || isAppReferral || isBusinessInvite ? undefined : pending?.referral_code,
+        share_referral_code: isCustomerInvite || isAppReferral || isBusinessInvite || isBusinessQrScan ? undefined : pending?.referral_code,
         customer_invite_code: isCustomerInvite ? pending?.referral_code : undefined,
       };
 
@@ -168,6 +208,17 @@ export function useSignUp() {
           }
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignUp] resolvePendingInvite error:', resolveErr);
+        }
+      }
+
+      // Business-QR-scan signup: same auto-subscribe + welcome-points + combined confirmation as
+      // the customer-invite branch above, just keyed by a raw businessId instead of an invite code.
+      if (isBusinessQrScan && pending?.business_id) {
+        try {
+          const resolved = await scanSubscribeToBusiness(pending.business_id);
+          setWelcomeInfo({ businessName: resolved.business.name, welcomePoints: resolved.welcomePoints });
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignUp] scanSubscribeToBusiness error:', resolveErr);
         }
       }
 
@@ -204,7 +255,11 @@ export function useSignUp() {
 
     // Computed
     strength,
-    nameError, emailError, passwordError, confirmError,
+    nameError, emailError, passwordError, confirmError, locationError,
+
+    // Location detection
+    locationDetecting,
+    detectLocation,
 
     // Submission state
     loading, authError, registrationSucceeded,

@@ -8,7 +8,7 @@ function resolveUrl(url: string | null | undefined): string | null {
   return `${BASE_URL}${url}`;
 }
 
-export type ContentType = 'offer' | 'event' | 'post';
+export type ContentType = 'offer' | 'event' | 'post' | 'comment';
 
 export interface ToggleLikeResult {
   liked: boolean;

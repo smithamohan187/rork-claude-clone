@@ -29,6 +29,14 @@ export async function submitReview(
   return result.data;
 }
 
+export async function deleteReview(businessId: string): Promise<RatingSummary> {
+  const result = await apiClient.delete<RatingSummary>('/reviews', {
+    query: { business_id: businessId },
+  });
+  if (!result.success || !result.data) throw new Error(result.error ?? 'Delete review failed');
+  return result.data;
+}
+
 export async function getRatingSummary(businessId: string): Promise<RatingSummary> {
   const result = await apiClient.get<RatingSummary>(`/reviews/summary?business_id=${businessId}`);
   if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to fetch rating summary');
