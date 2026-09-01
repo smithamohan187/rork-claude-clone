@@ -21,12 +21,13 @@ export interface ProfileData {
   is_active: boolean;
   created_at: string;
   interests: InterestCategory[];
+  subscribed_count: number;
+  redeemed_count: number;
 }
 
 export interface UpdateProfilePayload {
   display_name?: string;
   phone?: string;
-  bio?: string;
   city?: string;
   state?: string;
   country?: string;

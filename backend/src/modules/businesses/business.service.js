@@ -1,11 +1,9 @@
 const {
-  getFreePlanId,
   insertBusiness,
   updateBusiness,
   insertBusinessHours,
   deleteBusinessHours,
   getBusinessHours,
-  insertBusinessSubscription,
   updateBusinessLogo,
   updateBusinessCoverPhoto,
   setOnboardingComplete,
@@ -77,10 +75,9 @@ async function registerBusiness(userId, payload) {
           await insertBusinessHours(client, existingBusiness.id, hours);
         }
       } else {
-        // Edge case: business profile exists but business row is missing — create it
-        const freePlanId = await getFreePlanId();
-        if (!freePlanId) throw new Error('No free subscription plan found');
-
+        // Edge case: business profile exists but business row is missing — create it.
+        // Plan assignment (free or paid) now happens via the billing module's plan-selection
+        // step, not here — see .claude/modules/billing.md.
         const slug = slugify(business_name);
         business = await insertBusiness(client, {
           profile_id: businessProfileId,
@@ -101,7 +98,6 @@ async function registerBusiness(userId, payload) {
         if (hours && hours.length > 0) {
           await insertBusinessHours(client, business.id, hours);
         }
-        await insertBusinessSubscription(client, business.id, freePlanId);
       }
     } else {
       // ── Create path: no business profile exists yet ──
@@ -116,9 +112,6 @@ async function registerBusiness(userId, payload) {
         country: country ?? personalProfile.country,
       });
       businessProfileId = newBusinessProfile.id;
-
-      const freePlanId = await getFreePlanId();
-      if (!freePlanId) throw new Error('No free subscription plan found');
 
       // Step 2: Insert business linked to the new business profile (not the personal one)
       const slug = slugify(business_name);
@@ -141,7 +134,8 @@ async function registerBusiness(userId, payload) {
       if (hours && hours.length > 0) {
         await insertBusinessHours(client, business.id, hours);
       }
-      await insertBusinessSubscription(client, business.id, freePlanId);
+      // Plan assignment (free or paid) happens via the billing module's plan-selection
+      // step after this transaction commits — see .claude/modules/billing.md.
 
       // Resolve a business-invite referral code, if this business was created via one — subscribes
       // the inviter as a member, notifies them, and logs a pending points entry. No-op for

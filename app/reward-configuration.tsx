@@ -28,7 +28,6 @@ import {
   Coins,
   Users,
   Share2,
-  ShoppingBag,
   X,
   Percent,
   Package,
@@ -76,8 +75,6 @@ export default function RewardConfigurationScreen() {
   const [welcomePoints,  setWelcomePoints]  = useState<string>('');
   const [referralPoints, setReferralPoints] = useState<string>('');
   const [sharingPoints,  setSharingPoints]  = useState<string>('');
-  const [purchaseEnabled, setPurchaseEnabled] = useState<boolean>(true);
-  const [pointsPerUnit,  setPointsPerUnit]  = useState<string>('');
 
   // Collections
   const [prizes, setPrizes] = useState<RewardItem[]>([]);
@@ -135,12 +132,6 @@ export default function RewardConfigurationScreen() {
         setWelcomePoints(String(data.config.welcome_bonus_points ?? ''));
         setReferralPoints(String(data.config.referral_bonus_points ?? ''));
         setSharingPoints(String(data.config.share_points ?? ''));
-        setPurchaseEnabled(data.config.purchase_enabled ?? true);
-        // points_per_rupee comes back as a fixed-precision DECIMAL string (e.g. "2.5000") —
-        // normalize it so the field shows "2.5" instead of the raw DB precision.
-        setPointsPerUnit(
-          data.config.points_per_rupee != null ? String(parseFloat(String(data.config.points_per_rupee))) : ''
-        );
       }
       setPrizes(data.rewards);
     } catch (err) {
@@ -169,8 +160,6 @@ export default function RewardConfigurationScreen() {
         welcome_bonus_points:  parseInt(welcomePoints  || '0', 10),
         referral_bonus_points: parseInt(referralPoints || '0', 10),
         share_points:          parseInt(sharingPoints  || '0', 10),
-        purchase_enabled:      purchaseEnabled,
-        points_per_rupee:      parseFloat(pointsPerUnit || '0'),
       });
       Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.');
     } catch (err) {
@@ -178,7 +167,7 @@ export default function RewardConfigurationScreen() {
     } finally {
       setSaving(false);
     }
-  }, [businessId, welcomePoints, referralPoints, sharingPoints, purchaseEnabled, pointsPerUnit]);
+  }, [businessId, welcomePoints, referralPoints, sharingPoints]);
 
   const handleSavePrize = useCallback(async () => {
     if (!prizeName.trim()) {
@@ -342,43 +331,6 @@ export default function RewardConfigurationScreen() {
                 testID="sharing-points"
               />
             </View>
-
-            <View style={styles.switchCard}>
-              <View style={styles.switchCardLeft}>
-                <View style={[styles.switchIcon, { backgroundColor: PURPLE_SOFT }]}>
-                  <ShoppingBag size={16} color={PURPLE} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.switchTitle}>Purchase Points</Text>
-                  <Text style={styles.switchSub}>Reward members on every purchase</Text>
-                </View>
-              </View>
-              <Switch
-                value={purchaseEnabled}
-                onValueChange={setPurchaseEnabled}
-                color={PURPLE}
-                testID="purchase-toggle"
-              />
-            </View>
-
-            {purchaseEnabled && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Points per unit</Text>
-                <Text style={styles.fieldHint}>Points earned per £1 spent</Text>
-                <TextInput
-                  mode="outlined"
-                  value={pointsPerUnit}
-                  onChangeText={(t) => setPointsPerUnit(t.replace(/[^0-9.]/g, ''))}
-                  keyboardType="decimal-pad"
-                  right={<TextInput.Affix text="pts / £" />}
-                  theme={paperTheme}
-                  outlineColor={BORDER}
-                  activeOutlineColor={PURPLE}
-                  style={styles.input}
-                  testID="points-per-unit"
-                />
-              </View>
-            )}
           </Surface>
 
           {/* ── Rewards Catalog ───────────────────────────────────── */}
@@ -700,39 +652,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 4,
     fontSize: 14,
-  },
-  switchCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: BG,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 14,
-    gap: 12,
-  },
-  switchCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  switchIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  switchTitle: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: TEXT,
-  },
-  switchSub: {
-    fontSize: 11,
-    color: MUTED,
-    marginTop: 2,
   },
   prizesList: {
     gap: 10,

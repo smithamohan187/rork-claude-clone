@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.refer-process-v10"
+      "bundleIdentifier": "app.rork.refer-process-v10",
+      "infoPlist": {
+        "NSContactsUsageDescription": "TouchPoints uses your contacts to help you invite customers to your business. We only access contacts you choose to invite."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,6 +35,13 @@
         "expo-router",
         {
           "origin": "https://rork.com/"
+        }
+      ],
+      "expo-contacts",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TouchPoints uses your location to show you nearby businesses and pre-fill your city during sign up."
         }
       ]
     ],

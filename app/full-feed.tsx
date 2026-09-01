@@ -24,8 +24,7 @@ import type { FeedItem } from '@/hooks/usePersonalisedFeed';
 import { getFullFeedPayload } from '@/services/fullFeedStore';
 import { pickFeedImage } from '@/constants/feedImages';
 import { BrandedShareGrid } from '@/components/feed/BrandedShareGrid';
-import { ReferralPickerModal, type ReferralPickerSendResult } from '@/components/ReferralPickerModal';
-import type { OfferSharePayload } from '@/contexts/ReferralChatContext';
+import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 
 interface MockComment {
   id: string;
@@ -199,25 +198,18 @@ export default function FullScreenFeedScreen() {
 
   const handleRefer = useCallback(() => {
     if (!activeItem) return;
-    if (activeItem.feedType === 'offer') {
-      setReferOpen(true);
-      return;
-    }
-    const query = `?businessId=${encodeURIComponent(activeItem.businessId)}&postId=${encodeURIComponent(activeItem.id)}`;
-    router.push(`/my-referrals${query}` as never);
-  }, [activeItem, router]);
+    setReferOpen(true);
+  }, [activeItem]);
 
-  const handleReferSent = useCallback(
-    (result: ReferralPickerSendResult) => {
-      setReferOpen(false);
-      if (result.recipientCount === 1 && result.firstRecipientName) {
-        showToast(`Offer sent to ${result.firstRecipientName}!`);
-      } else {
-        showToast(`Offer shared with ${result.recipientCount} people!`);
-      }
+  const handleReferShared = useCallback(
+    (recipientCount: number) => {
+      const noun = activeItem?.feedType === 'offer' ? 'Offer' : 'Event';
+      showToast(recipientCount === 1 ? `${noun} shared with 1 friend!` : `${noun} shared with ${recipientCount} friends!`);
     },
-    [showToast],
+    [showToast, activeItem],
   );
+
+  const handleReferError = useCallback((msg: string) => showToast(msg), [showToast]);
 
   const shareMeta = useMemo(() => {
     if (!activeItem) {
@@ -232,18 +224,16 @@ export default function FullScreenFeedScreen() {
     };
   }, [activeItem]);
 
-  const referOffer: OfferSharePayload | null = useMemo(() => {
-    if (!activeItem || activeItem.feedType !== 'offer') return null;
+  const referOffer = useMemo(() => {
+    if (!activeItem) return null;
     return {
       offerId: activeItem.id,
       businessId: activeItem.businessId,
       businessName: activeItem.businessName,
       businessLogoUrl: activeItem.businessLogo,
-      offerTitle: activeItem.title,
-      offerDescription: activeItem.description,
-      validUntil: activeItem.expiryDate,
-      deepLink: `https://touchpoint.app/offer/${activeItem.id}`,
-    };
+      title: activeItem.title,
+      contentType: activeItem.feedType,
+    } as const;
   }, [activeItem]);
 
   const handleSubmitComment = useCallback(() => {
@@ -557,11 +547,12 @@ export default function FullScreenFeedScreen() {
       </Portal>
 
       {referOffer ? (
-        <ReferralPickerModal
+        <ReferOfferSheet
           visible={referOpen}
           onClose={() => setReferOpen(false)}
           offer={referOffer}
-          onSent={handleReferSent}
+          onShared={handleReferShared}
+          onError={handleReferError}
         />
       ) : null}
 

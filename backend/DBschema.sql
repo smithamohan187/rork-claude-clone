@@ -918,3 +918,33 @@ INSERT INTO global_reward_tiers (tier_name, min_points, badge_icon, sort_order, 
   ('Gold',     1500, 'crown',   3, TRUE),
   ('Platinum', 3000, 'gem',     4, TRUE),
   ('Diamond',  5000, 'diamond', 5, TRUE);
+
+-- Migration 014: extend the existing platform-billing tables (DOMAIN 4 above) with Stripe
+-- fields, rather than forking parallel tables. See .claude/modules/billing.md.
+ALTER TABLE subscription_plans
+  ADD COLUMN IF NOT EXISTS stripe_price_id  VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS price_cents      INT,
+  ADD COLUMN IF NOT EXISTS max_subscribers  INT;
+
+-- Backfill price_cents from the existing price_monthly column instead of re-seeding
+-- duplicate plan rows.
+UPDATE subscription_plans
+SET price_cents = ROUND(price_monthly * 100)
+WHERE price_cents IS NULL;
+
+ALTER TABLE business_subscriptions
+  ADD COLUMN IF NOT EXISTS stripe_customer_id      VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS stripe_subscription_id  VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS current_period_end      TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_biz_subs_stripe_subscription_id
+  ON business_subscriptions(stripe_subscription_id);
+
+-- Idempotency ledger for Stripe webhook delivery — insert the event id first
+-- (ON CONFLICT DO NOTHING) before acting on an event, so retried/duplicate
+-- deliveries are no-ops.
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  stripe_event_id  VARCHAR(255) UNIQUE NOT NULL,
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);

@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
-import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, MapPin } from 'lucide-react-native';
@@ -11,6 +10,7 @@ import { FeedActionBar } from '@/components/feed/FeedActionBar';
 import LikersSheet from '@/components/feed/LikersSheet';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
+import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -46,13 +46,13 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   onOpenPanel,
   currentUser,
 }: Props) {
-  const router = useRouter();
   const dateParts = useMemo(() => {
     const d = new Date(event.startDate);
     return { day: d.getDate(), month: MONTHS[d.getMonth()] };
   }, [event.startDate]);
 
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
+  const [referOpen, setReferOpen] = useState<boolean>(false);
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
@@ -94,9 +94,22 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   }, [activePanel, onOpenPanel, event.businessId, onShowToast]);
 
   const handleRefer = useCallback(() => {
-    const query = `?businessId=${encodeURIComponent(event.businessId)}&postId=${encodeURIComponent(event.id)}`;
-    router.push(`/my-referrals${query}` as never);
-  }, [router, event.businessId, event.id]);
+    setReferOpen(true);
+  }, []);
+
+  const handleReferShared = useCallback(
+    (recipientCount: number) => {
+      onShowToast(recipientCount === 1 ? 'Event shared with 1 friend!' : `Event shared with ${recipientCount} friends!`);
+    },
+    [onShowToast],
+  );
+
+  const handleReferError = useCallback(
+    (msg: string) => {
+      onShowToast(msg);
+    },
+    [onShowToast],
+  );
 
   const showShare = activePanel === 'share';
 
@@ -220,6 +233,21 @@ export const EventFeedCard = React.memo(function EventFeedCard({
         businessId={event.businessId}
         authorName={event.businessName}
         contentPreview={`${event.title}${event.venue ? ` · ${event.venue}` : ''}`}
+      />
+
+      <ReferOfferSheet
+        visible={referOpen}
+        onClose={() => setReferOpen(false)}
+        offer={{
+          offerId: event.id,
+          businessId: event.businessId,
+          businessName: event.businessName,
+          businessLogoUrl: event.businessLogo,
+          title: event.title,
+          contentType: 'event',
+        }}
+        onShared={handleReferShared}
+        onError={handleReferError}
       />
     </View>
   );

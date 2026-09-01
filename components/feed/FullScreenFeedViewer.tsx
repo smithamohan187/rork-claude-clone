@@ -24,6 +24,7 @@ import {
   MessageCircle,
   Share2,
   Bookmark,
+  UserPlus,
   MoreHorizontal,
   Tag,
   Calendar,
@@ -35,6 +36,7 @@ import { useComments, mapCommentToItem, type CommentItem } from '@/hooks/useComm
 import { useLike } from '@/hooks/useLike';
 import { CommentSection } from '@/components/feed/CommentSection';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
+import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 import { formatRelativeTime } from '@/mocks/posts';
 
@@ -306,11 +308,20 @@ function PostPage({
   const [saved, setSaved] = useState<boolean>(false);
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [shareOpen, setShareOpen] = useState<boolean>(false);
+  const [referOpen, setReferOpen] = useState<boolean>(false);
   const [moreOpen, setMoreOpen] = useState<boolean>(false);
   const [expanded, setExpanded] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [replyTarget, setReplyTarget] = useState<CommentItem | null>(null);
+
+  const handleReferShared = useCallback(
+    (recipientCount: number) => {
+      onShowToast(recipientCount === 1 ? 'Post shared with 1 friend!' : `Post shared with ${recipientCount} friends!`);
+    },
+    [onShowToast],
+  );
+  const handleReferError = useCallback((msg: string) => onShowToast(msg), [onShowToast]);
 
   const handleSubmit = useCallback(async () => {
     const body = commentText.trim();
@@ -379,6 +390,12 @@ function PostPage({
           testID="viewer-post-share"
         />
         <RailButton
+          icon={<UserPlus size={26} color="#fff" />}
+          label="Refer"
+          onPress={() => setReferOpen(true)}
+          testID="viewer-post-refer"
+        />
+        <RailButton
           icon={<Bookmark size={26} color={saved ? PRIMARY : '#fff'} fill={saved ? PRIMARY : 'transparent'} />}
           label={saved ? 'Saved' : 'Save'}
           active={saved}
@@ -434,6 +451,21 @@ function PostPage({
         authorName={post.business_name}
         authorAvatarUrl={post.business_logo}
         contentPreview={post.text ?? ''}
+      />
+
+      <ReferOfferSheet
+        visible={referOpen}
+        onClose={() => setReferOpen(false)}
+        offer={{
+          offerId: post.id,
+          businessId: post.business_id,
+          businessName: post.business_name,
+          businessLogoUrl: post.business_logo,
+          title: post.title || post.text || post.business_name,
+          contentType: 'post',
+        }}
+        onShared={handleReferShared}
+        onError={handleReferError}
       />
 
       <MoreSheet
@@ -519,8 +551,18 @@ function FeedPage({
 
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [shareOpen, setShareOpen] = useState<boolean>(false);
+  const [referOpen, setReferOpen] = useState<boolean>(false);
   const [moreOpen, setMoreOpen] = useState<boolean>(false);
   const [expanded, setExpanded] = useState<boolean>(false);
+
+  const handleReferShared = useCallback(
+    (recipientCount: number) => {
+      const noun = isOffer ? 'Offer' : 'Event';
+      onShowToast(recipientCount === 1 ? `${noun} shared with 1 friend!` : `${noun} shared with ${recipientCount} friends!`);
+    },
+    [onShowToast, isOffer],
+  );
+  const handleReferError = useCallback((msg: string) => onShowToast(msg), [onShowToast]);
 
   const coverUri = useMemo(
     () => item.image_url || pickFeedImage(item.id, [item.title, description, item.businessName]),
@@ -620,6 +662,12 @@ function FeedPage({
           testID="viewer-feed-share"
         />
         <RailButton
+          icon={<UserPlus size={26} color="#fff" />}
+          label="Refer"
+          onPress={() => setReferOpen(true)}
+          testID="viewer-feed-refer"
+        />
+        <RailButton
           icon={<Bookmark size={26} color={saved ? PRIMARY : '#fff'} fill={saved ? PRIMARY : 'transparent'} />}
           label={saved ? 'Saved' : 'Save'}
           active={saved}
@@ -676,6 +724,21 @@ function FeedPage({
         authorName={item.businessName}
         authorAvatarUrl={item.businessLogo}
         contentPreview={`${item.title}${description ? ` — ${description}` : ''}`}
+      />
+
+      <ReferOfferSheet
+        visible={referOpen}
+        onClose={() => setReferOpen(false)}
+        offer={{
+          offerId: item.id,
+          businessId: item.businessId,
+          businessName: item.businessName,
+          businessLogoUrl: item.businessLogo,
+          title: item.title,
+          contentType: item.feedType,
+        }}
+        onShared={handleReferShared}
+        onError={handleReferError}
       />
 
       <MoreSheet

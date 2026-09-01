@@ -27,7 +27,6 @@ import {
   Briefcase,
   Users,
   FileText,
-  DollarSign,
   MessageSquare,
   Users2,
   BarChart3,
@@ -45,6 +44,10 @@ import { Snackbar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGlobalRewardTier } from '@/hooks/useGlobalRewardTier';
+import { useMemberSince } from '@/hooks/useMemberSince';
+import { useProfileStats } from '@/hooks/useProfileStats';
+import { useBusinessDashboard } from '@/hooks/useBusinessDashboard';
+import { usePosts } from '@/hooks/usePosts';
 import TierBadge, { getTierGradient, getTierIconComponent } from '@/components/TierBadge';
 import TierDetailModal from '@/components/TierDetailModal';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
@@ -69,6 +72,10 @@ export default function UserProfileScreen() {
   })();
   const { authUser, accountType, logout } = useAuth();
   const { status: tierStatus } = useGlobalRewardTier();
+  const { memberSince } = useMemberSince();
+  const { subscribedCount, redeemedCount } = useProfileStats();
+  const { summary } = useBusinessDashboard();
+  const { posts } = usePosts();
   const totalPoints = tierStatus.netBalance;
 
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
@@ -89,23 +96,21 @@ export default function UserProfileScreen() {
   const currentName = authUser?.name ?? authUser?.email ?? '';
   const currentEmail = authUser?.email ?? '';
 
-  const memberSince = isBusinessActive ? 'Business since March 2025' : 'Member since January 2025';
-
   const currentTier = tierStatus.tier;
   const personalBadgeIcon = currentTier ? getTierIconComponent(currentTier.tier_name) : Shield;
   const personalBadgeColor = currentTier ? getTierGradient(currentTier.tier_name)[0] : '#A8B0BA';
 
   const personalStats = [
     { label: 'Total Points', value: totalPoints.toLocaleString(), icon: Star, color: '#F59E0B' },
-    { label: 'Subscribed', value: '7', icon: Store, color: '#0D9488' },
-    { label: 'Redeemed', value: '12', icon: Gift, color: '#EC4899' },
+    { label: 'Subscribed', value: subscribedCount.toLocaleString(), icon: Store, color: '#0D9488' },
+    { label: 'Redeemed', value: redeemedCount.toLocaleString(), icon: Gift, color: '#EC4899' },
     { label: 'Badge', value: currentTier ? currentTier.tier_name : '—', icon: personalBadgeIcon, color: personalBadgeColor },
   ];
 
   const businessStats = [
-    { label: 'Subscribers', value: '248', icon: Users, color: '#3B82F6' },
-    { label: 'Posts', value: '36', icon: FileText, color: '#00B246' },
-    { label: 'Revenue', value: '$4.2k', icon: DollarSign, color: '#22C55E' },
+    { label: 'Subscribers', value: (summary?.subscriber_count ?? 0).toLocaleString(), icon: Users, color: '#3B82F6' },
+    { label: 'Posts', value: posts.length.toLocaleString(), icon: FileText, color: '#00B246' },
+    { label: 'Redemptions', value: (summary?.total_redemption_count ?? 0).toLocaleString(), icon: Gift, color: '#22C55E' },
   ];
 
   const stats = isBusinessActive ? businessStats : personalStats;
@@ -347,6 +352,22 @@ export default function UserProfileScreen() {
                 titleStyle={styles.listItemTitle}
                 descriptionStyle={styles.listItemDesc}
                 testID="settings-manage-subscription"
+              />
+              <Divider style={styles.divider} />
+              <List.Item
+                title="Plan & Billing"
+                description="View and change your subscription plan"
+                left={() => (
+                  <View style={[styles.settingsIcon, { backgroundColor: '#22C55E' + '12' }]}>
+                    <CreditCard size={18} color="#22C55E" />
+                  </View>
+                )}
+                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
+                onPress={() => router.push('/billing-settings' as any)}
+                style={styles.listItem}
+                titleStyle={styles.listItemTitle}
+                descriptionStyle={styles.listItemDesc}
+                testID="settings-billing"
               />
               <Divider style={styles.divider} />
               <List.Item

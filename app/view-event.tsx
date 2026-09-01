@@ -247,16 +247,22 @@ export default function ViewEventScreen() {
       >
         {/* HERO */}
         <View style={styles.hero}>
-          <View style={styles.heroGlow} />
-          <View style={styles.heroGlow2} />
+          {event.image_url ? (
+            <Image source={{ uri: event.image_url }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <>
+              <View style={styles.heroGlow} />
+              <View style={styles.heroGlow2} />
 
-          <View style={styles.calendarIllustration}>
-            <View style={styles.circleOuter}>
-              <View style={styles.circleInner}>
-                <Text style={styles.calendarEmoji}>📅</Text>
+              <View style={styles.calendarIllustration}>
+                <View style={styles.circleOuter}>
+                  <View style={styles.circleInner}>
+                    <Text style={styles.calendarEmoji}>📅</Text>
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
+            </>
+          )}
 
           <TouchableOpacity
             style={[styles.iconCircle, styles.backBtn]}
@@ -477,6 +483,15 @@ const styles = StyleSheet.create({
     backgroundColor: PURPLE,
     position: 'relative',
     overflow: 'hidden',
+  },
+  heroImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
   heroGlow: {
     position: 'absolute',

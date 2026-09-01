@@ -67,14 +67,17 @@ export interface ShareOfferToFriendsResultItem {
   error?: string;
 }
 
-export async function shareOfferToFriends(
-  offerId: string,
+export type ReferContentType = 'offer' | 'event' | 'post';
+
+export async function shareContentToFriends(
+  contentType: ReferContentType,
+  contentId: string,
   targetProfileIds: string[],
 ): Promise<ShareOfferToFriendsResultItem[]> {
   const result = await apiClient.post<{ results: ShareOfferToFriendsResultItem[] }>(
     '/feed/share/offer-to-friends',
-    { offerId, targetProfileIds },
+    { content_type: contentType, content_id: contentId, targetProfileIds },
   );
-  if (!result.success) throw new Error(result.error ?? 'Failed to share offer');
+  if (!result.success) throw new Error(result.error ?? 'Failed to share');
   return result.data!.results ?? [];
 }

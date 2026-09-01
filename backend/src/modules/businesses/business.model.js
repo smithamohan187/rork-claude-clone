@@ -16,13 +16,6 @@ async function getBusinessByProfileId(profileId) {
   return rows[0] ?? null;
 }
 
-async function getFreePlanId() {
-  const { rows } = await query(
-    'SELECT id FROM subscription_plans WHERE price_monthly = 0 LIMIT 1'
-  );
-  return rows[0]?.id ?? null;
-}
-
 async function insertBusiness(client, data) {
   const {
     profile_id, category_id, name, slug, description,
@@ -88,17 +81,6 @@ async function getBusinessHours(businessId) {
     [businessId]
   );
   return rows;
-}
-
-async function insertBusinessSubscription(client, businessId, planId) {
-  const { rows } = await client.query(
-    `INSERT INTO business_subscriptions (business_id, plan_id, status)
-     VALUES ($1, $2, 'active')
-     ON CONFLICT (business_id) DO NOTHING
-     RETURNING *`,
-    [businessId, planId]
-  );
-  return rows[0] ?? null;
 }
 
 async function findBusinessByUserId(userId) {
@@ -285,13 +267,11 @@ async function getDashboardSummary(businessId) {
 
 module.exports = {
   getActiveProfileId,
-  getFreePlanId,
   insertBusiness,
   updateBusiness,
   insertBusinessHours,
   deleteBusinessHours,
   getBusinessHours,
-  insertBusinessSubscription,
   findBusinessByUserId,
   updateBusinessLogo,
   updateBusinessCoverPhoto,

@@ -66,6 +66,20 @@ async function getPointsSplitByProfile(profileId) {
   return rows;
 }
 
+async function getRecentTransactionsByProfile(profileId, limit, offset) {
+  const { rows } = await query(
+    `SELECT pt.id, pt.type, pt.points, pt.created_at, pt.reference_id, pt.reference_type,
+            b.id AS business_id, b.name AS business_name, b.logo_url
+     FROM points_transactions pt
+     JOIN businesses b ON b.id = pt.business_id
+     WHERE pt.profile_id = $1
+     ORDER BY pt.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [profileId, limit, offset]
+  );
+  return rows;
+}
+
 module.exports = {
   getWelcomeBonusWithClient,
   insertJoinBonusWithClient,
@@ -73,4 +87,5 @@ module.exports = {
   referralBonusAlreadyCredited,
   getTotalPointsByProfile,
   getPointsSplitByProfile,
+  getRecentTransactionsByProfile,
 };

@@ -19,10 +19,8 @@ import {
   Ticket,
   Tag,
   UserPlus,
-  Share2,
   Star,
   Zap,
-  Trophy,
   Clock,
   X,
   Check,
@@ -32,10 +30,10 @@ import { useCoupons } from '@/contexts/CouponContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePointsSummary } from '@/hooks/usePointsSummary';
 import { useGlobalRewardTier } from '@/hooks/useGlobalRewardTier';
-import type { PointsBreakdownItem } from '@/api/services/pointsService';
+import { usePointsHistory } from '@/hooks/usePointsHistory';
+import type { PointsBreakdownItem, PointsHistoryItem, PointsHistoryType } from '@/api/services/pointsService';
 import type { GlobalTierInfo } from '@/api/services/globalRewardTierService';
-import { activityEvents } from '@/mocks/rewardsData';
-import type { ActivityEvent } from '@/mocks/rewardsData';
+import { format } from 'date-fns';
 import { getRedeemableRewards, redeemReward, type RedeemableRewardItem } from '@/api/services/rewardsService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
@@ -47,17 +45,48 @@ const PURPLE_DARK = '#1A5C35';
 const PURPLE_LIGHT = '#EDE9F6';
 const PURPLE_FAINT = '#F7F5FC';
 
-function getActivityIcon(type: ActivityEvent['type'], color: string) {
+function getActivityIcon(type: PointsHistoryType, color: string) {
   switch (type) {
-    case 'subscribe': return <Zap size={16} color={color} />;
-    case 'referral': return <UserPlus size={16} color={color} />;
-    case 'share': return <Share2 size={16} color={color} />;
-    case 'review': return <Star size={16} color={color} />;
-    case 'welcome': return <Gift size={16} color={color} />;
-    case 'redeem': return <Ticket size={16} color={color} />;
-    case 'milestone': return <Trophy size={16} color={color} />;
+    case 'earn_welcome': return <Gift size={16} color={color} />;
+    case 'earn_referral': return <UserPlus size={16} color={color} />;
+    case 'earn_visit': return <Zap size={16} color={color} />;
+    case 'earn_purchase': return <Tag size={16} color={color} />;
+    case 'earn_event': return <Star size={16} color={color} />;
+    case 'redeem_reward': return <Ticket size={16} color={color} />;
+    case 'redemption_refund': return <Ticket size={16} color={color} />;
+    case 'expire': return <Clock size={16} color={color} />;
+    case 'adjust': return <Zap size={16} color={color} />;
     default: return <Zap size={16} color={color} />;
   }
+}
+
+function getActivityColor(type: PointsHistoryType): string {
+  switch (type) {
+    case 'earn_welcome': return '#00B246';
+    case 'earn_referral': return '#1A5C35';
+    case 'earn_visit': return '#0EA5E9';
+    case 'earn_purchase': return '#10B981';
+    case 'earn_event': return '#EF4444';
+    case 'redeem_reward': return '#7C3AED';
+    case 'redemption_refund': return '#7C3AED';
+    case 'expire': return '#B0AEBC';
+    case 'adjust': return '#8E8E9A';
+    default: return PURPLE;
+  }
+}
+
+function timeAgo(timestamp: string): string {
+  const then = new Date(timestamp).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffMs = Date.now() - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+  return format(new Date(then), 'dd MMM');
 }
 
 function getRewardTypeIcon(type: RedeemableRewardItem['type']) {
@@ -436,11 +465,12 @@ const bizStyles = StyleSheet.create({
   },
 });
 
-function ActivityItem({ event }: { event: ActivityEvent }) {
+function ActivityItem({ event }: { event: PointsHistoryItem }) {
+  const accentColor = getActivityColor(event.type);
   return (
     <View style={actStyles.item}>
-      <View style={[actStyles.iconCircle, { backgroundColor: event.accentColor + '15' }]}>
-        {getActivityIcon(event.type, event.accentColor)}
+      <View style={[actStyles.iconCircle, { backgroundColor: accentColor + '15' }]}>
+        {getActivityIcon(event.type, accentColor)}
       </View>
       <View style={actStyles.info}>
         <Text style={actStyles.title} numberOfLines={1}>{event.title}</Text>
@@ -448,15 +478,21 @@ function ActivityItem({ event }: { event: ActivityEvent }) {
       </View>
       <View style={actStyles.right}>
         <Text style={[actStyles.points, { color: event.points > 0 ? '#16A34A' : '#EF4444' }]}>
-          +{event.points}
+          {event.points > 0 ? '+' : ''}{event.points}
         </Text>
-        <Text style={actStyles.time}>{event.timestamp}</Text>
+        <Text style={actStyles.time}>{timeAgo(event.timestamp)}</Text>
       </View>
     </View>
   );
 }
 
 const actStyles = StyleSheet.create({
+  emptyText: {
+    fontSize: 13,
+    color: '#8E8E9A',
+    textAlign: 'center' as const,
+    paddingVertical: 20,
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1017,6 +1053,7 @@ export default function RewardsDashboard() {
   const { coupons } = useCoupons();
   const { summary } = usePointsSummary();
   const { status: tierStatus } = useGlobalRewardTier();
+  const { items: activityItems, loading: activityLoading } = usePointsHistory();
   const [redeemSheet, setRedeemSheet] = useState<{ visible: boolean; businessId: string; businessName: string }>({
     visible: false, businessId: '', businessName: '',
   });
@@ -1100,12 +1137,16 @@ export default function RewardsDashboard() {
             <Text style={styles.sectionTitle}>Recent Activity</Text>
           </View>
           <View style={styles.activityCard}>
-            {activityEvents.map((event, idx) => (
-              <React.Fragment key={event.id}>
-                <ActivityItem event={event} />
-                {idx < activityEvents.length - 1 && <View style={styles.divider} />}
-              </React.Fragment>
-            ))}
+            {!activityLoading && activityItems.length === 0 ? (
+              <Text style={actStyles.emptyText}>No activity yet</Text>
+            ) : (
+              activityItems.map((event, idx) => (
+                <React.Fragment key={event.id}>
+                  <ActivityItem event={event} />
+                  {idx < activityItems.length - 1 && <View style={styles.divider} />}
+                </React.Fragment>
+              ))
+            )}
           </View>
         </View>
       </ScrollView>

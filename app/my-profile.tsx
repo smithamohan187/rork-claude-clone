@@ -33,7 +33,6 @@ export default function MyProfileScreen() {
   const {
     fullName,   setFullName,
     phone,      setPhone,
-    bio,        setBio,
     country,    state,  city,
     onCountryChange,  onCountrySelect,  countrySuggestions,
     onStateChange,    onStateSelect,    stateSuggestions,
@@ -156,19 +155,6 @@ export default function MyProfileScreen() {
               activeOutlineColor={PURPLE}
               keyboardType="phone-pad"
               testID="my-profile-phone"
-            />
-
-            <TextInput
-              label="Bio"
-              value={bio}
-              onChangeText={setBio}
-              mode="outlined"
-              style={styles.input}
-              outlineColor="#D4D9E1"
-              activeOutlineColor={PURPLE}
-              multiline
-              numberOfLines={3}
-              testID="my-profile-bio"
             />
           </Surface>
 

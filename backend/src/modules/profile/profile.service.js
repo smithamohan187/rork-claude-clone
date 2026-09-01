@@ -18,8 +18,17 @@ const subscriptionModel = require('../subscriptions/subscription.model');
 async function fetchProfile(userId) {
   const profile = await getProfileByUserId(userId);
   if (!profile) return null;
-  const interests = await getProfileInterests(profile.profile_id);
-  return { ...profile, interests };
+  const [interests, subscribedCount, redeemedCount] = await Promise.all([
+    getProfileInterests(profile.profile_id),
+    getSubscribedBusinessCount(profile.profile_id),
+    getRedeemedRewardCount(profile.profile_id),
+  ]);
+  return {
+    ...profile,
+    interests,
+    subscribed_count: subscribedCount,
+    redeemed_count: redeemedCount,
+  };
 }
 
 async function fetchInterestCategories() {

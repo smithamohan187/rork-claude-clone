@@ -127,6 +127,7 @@ export function useBusinessRating({
         setBreakdown(bMap);
       } catch (err) {
         if (__DEV__) console.log('[useBusinessRating] submit error', err);
+        throw err;
       } finally {
         setSubmitting(false);
       }
@@ -161,6 +162,7 @@ export function useBusinessRating({
       setBreakdown(bMap);
     } catch (err) {
       if (__DEV__) console.log('[useBusinessRating] delete error', err);
+      throw err;
     } finally {
       setSubmitting(false);
     }

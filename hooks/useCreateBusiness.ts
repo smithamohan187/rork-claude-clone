@@ -14,6 +14,8 @@ import {
 } from '@/api/services/businessService';
 import { fetchBusinessCategories, type Category } from '@/api/services/categoriesService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
+import { fetchPlans, selectFreePlan, fetchMySubscription, type SubscriptionPlan, type BusinessSubscription } from '@/api/services/billingService';
+import { useSubscriptionCheckout } from './useSubscriptionCheckout';
 
 export type { BusinessHour };
 
@@ -71,6 +73,20 @@ export function useCreateBusiness() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [businessCategories, setBusinessCategories] = useState<Category[]>([]);
 
+  // Step 6 — Choose a Plan
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [existingSubscription, setExistingSubscription] = useState<BusinessSubscription | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { checkout } = useSubscriptionCheckout();
+
+  // A resolved subscription (active/trial) means this is a normal revisit/edit — the plan is
+  // managed from app/billing-settings.tsx, not re-selectable here. Unresolved (cancelled/expired/
+  // missing) is the "resume interrupted Stripe Checkout" case, which still needs a selection.
+  const isPlanLocked = !!existingSubscription &&
+    (existingSubscription.status === 'active' || existingSubscription.status === 'trial');
+
   // Existing business id — set on mount if user already has one
   const [businessId, setBusinessId] = useState<string | null>(null);
 
@@ -116,6 +132,14 @@ export function useCreateBusiness() {
   }, []);
 
   useEffect(() => {
+    setPlansLoading(true);
+    fetchPlans()
+      .then(setPlans)
+      .catch(() => {})
+      .finally(() => setPlansLoading(false));
+  }, []);
+
+  useEffect(() => {
     getPendingShareReferral()
       .then((pending) => {
         if (pending?.content_type === 'business_invite') {
@@ -131,7 +155,7 @@ export function useCreateBusiness() {
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
     fetchMyBusiness()
-      .then((biz) => {
+      .then(async (biz) => {
         if (!biz) return;
         setBusinessId(biz.id);
         setBusinessName(biz.name ?? '');
@@ -149,6 +173,20 @@ export function useCreateBusiness() {
         setLogoUri(biz.logo_url ?? null);
         setCoverUri(biz.cover_url ?? null);
         if (biz.hours && biz.hours.length > 0) setHours(biz.hours);
+
+        // onboarding_complete flips true the moment step 1-5 submission succeeds and stays
+        // true forever after — it does NOT mean billing is still unresolved (a returning user
+        // who already has an active plan would have onboarding_complete=true too). Only jump
+        // straight to Plan when billing is genuinely unresolved: no subscription row at all, or
+        // one that's cancelled/expired (e.g. the user cancelled Stripe Checkout on web, which
+        // fully remounts this screen) — active/trial means it's a normal revisit/edit and should
+        // start at Step 1 like before.
+        if (biz.onboarding_complete) {
+          const subscription = await fetchMySubscription().catch(() => null);
+          setExistingSubscription(subscription);
+          const unresolved = !subscription || subscription.status === 'cancelled' || subscription.status === 'expired';
+          if (unresolved) setCurrentStep(6);
+        }
 
         // Re-derive countryCode/stateCode from the saved names so the State/City
         // autocomplete lookups (which need ISO codes, not names) work again after
@@ -257,13 +295,17 @@ export function useCreateBusiness() {
       }
     }
 
+    if (step === 6 && !isPlanLocked) {
+      if (!selectedPlanId) errs.selectedPlanId = 'Please select a plan';
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [businessName, businessType, categoryId, phone, website, inhouseReferral, inhouseReferralUrl]);
+  }, [businessName, businessType, categoryId, phone, website, inhouseReferral, inhouseReferralUrl, selectedPlanId, isPlanLocked]);
 
   const goNext = useCallback(() => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 5));
+      setCurrentStep(prev => Math.min(prev + 1, 6));
     }
   }, [currentStep, validateStep]);
 
@@ -301,8 +343,15 @@ export function useCreateBusiness() {
     }
   }, []);
 
+  const finishAndNavigate = useCallback(async () => {
+    updateAuthUser({ role: 'business' });
+    // Refresh profiles so the business pill appears in ProfileSwitcherPill
+    try { await refreshProfiles(); } catch { /* non-fatal */ }
+    router.replace('/(tabs)/feed' as never);
+  }, [updateAuthUser, refreshProfiles, router]);
+
   const submit = useCallback(async () => {
-    if (!validateStep(5)) return;
+    if (!validateStep(6)) return;
     setLoading(true);
     setApiError(null);
 
@@ -341,10 +390,27 @@ export function useCreateBusiness() {
 
       await completeOnboarding(id);
 
-      updateAuthUser({ role: 'business' });
-      // Refresh profiles so the business pill appears in ProfileSwitcherPill
-      try { await refreshProfiles(); } catch { /* non-fatal */ }
-      router.replace('/(tabs)/feed' as never);
+      if (isPlanLocked) {
+        // Plan is already resolved and managed from billing-settings — this submit is just a
+        // profile-info edit, no plan action.
+        await finishAndNavigate();
+      } else {
+        const selectedPlan = plans.find(p => p.id === selectedPlanId);
+
+        if (!selectedPlan || selectedPlan.price_monthly === 0) {
+          await selectFreePlan();
+          setSuccessMessage('Business created successfully!');
+        } else {
+          const { outcome } = await checkout(selectedPlan.id);
+          if (outcome === 'success') {
+            setSuccessMessage('Payment completed and business created successfully!');
+          } else if (outcome !== 'redirected') {
+            // 'redirected' (web) means the page is navigating away to Stripe — not a failure.
+            // The checkout-success/checkout-cancel screens take over from here.
+            setApiError('Checkout was not completed. Select a plan and try again.');
+          }
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
       setApiError(msg);
@@ -355,7 +421,7 @@ export function useCreateBusiness() {
     businessName, businessType, categoryId, description,
     phone, website, address, city, state, country,
     inhouseReferral, inhouseReferralUrl, hours, logoUri, coverUri,
-    validateStep, updateAuthUser, refreshProfiles, router,
+    validateStep, plans, selectedPlanId, checkout, finishAndNavigate, isPlanLocked,
   ]);
 
   return {
@@ -385,9 +451,14 @@ export function useCreateBusiness() {
     // Step 5
     logoUri, coverUri,
     pickLogo, pickCover,
+    // Step 6
+    plans, plansLoading, selectedPlanId, existingSubscription, isPlanLocked,
+    setSelectedPlanId: (v: string) => { setSelectedPlanId(v); clearFieldError('selectedPlanId'); },
     // Categories
     businessCategories,
+    // Success message (business creation complete — free plan or paid checkout)
+    successMessage,
     // Navigation
-    goNext, goBack, submit,
+    goNext, goBack, submit, finishAndNavigate,
   };
 }

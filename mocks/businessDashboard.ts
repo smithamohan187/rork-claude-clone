@@ -61,7 +61,7 @@ export const dashboardStats: DashboardStat[] = [
 export const quickActions: QuickAction[] = [
   { id: 'add-content', label: 'Add Post / Event / Offer', icon: 'PlusCircle', route: '/(tabs)/content' },
   { id: 'view-members', label: 'Members', icon: 'UsersRound', route: '/(tabs)/marketplace' },
-  { id: 'messages', label: 'Messages', icon: 'MessageSquare', route: '/business-inbox' },
+  { id: 'messages', label: 'Messages', icon: 'MessageSquare', route: '/(tabs)/messages' },
 ];
 
 export const currentPlan: SubscriptionPlan = {

@@ -28,7 +28,6 @@ export function useEditProfile() {
 
   const [fullName, setFullName]       = useState('');
   const [phone, setPhone]             = useState('');
-  const [bio, setBio]                 = useState('');
   const [country, setCountry]         = useState('');
   const [countryCode, setCountryCode] = useState('');
   const [state, setState]             = useState('');
@@ -68,7 +67,6 @@ export function useEditProfile() {
         ]);
         setFullName(profile.display_name ?? '');
         setPhone(profile.phone ?? '');
-        setBio(profile.bio ?? '');
         setAvatarUri(resolveAvatarUrl(profile.avatar_url) ?? authUser?.avatar ?? null);
         setCountry(profile.country ?? '');
         setState(profile.state ?? '');
@@ -204,7 +202,6 @@ export function useEditProfile() {
       await updateMyProfile({
         display_name:  fullName.trim() || undefined,
         phone:         phone.trim() || undefined,
-        bio:           bio.trim() || undefined,
         city:          city.trim() || undefined,
         state:         state.trim() || undefined,
         country:       country.trim() || undefined,
@@ -224,13 +221,12 @@ export function useEditProfile() {
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, bio, city, state, country, selectedInterestIds,
+  }, [fullName, phone, city, state, country, selectedInterestIds,
       pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser]);
 
   return {
     fullName,   setFullName,
     phone,      setPhone,
-    bio,        setBio,
     country,    state,  city,
     onCountryChange,  onCountrySelect,  countrySuggestions,
     onStateChange,    onStateSelect,    stateSuggestions,

@@ -22,8 +22,7 @@ import { FeedActionBar } from '@/components/feed/FeedActionBar';
 import LikersSheet from '@/components/feed/LikersSheet';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
-import { ReferralPickerModal, type ReferralPickerSendResult } from '@/components/ReferralPickerModal';
-import type { OfferSharePayload } from '@/contexts/ReferralChatContext';
+import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 
 const PURPLE = '#1A5C35';
 
@@ -126,14 +125,16 @@ export default function PostFeedCard({
     setReferOpen(true);
   }, []);
 
-  const handleReferSent = useCallback(
-    (result: ReferralPickerSendResult) => {
-      setReferOpen(false);
-      if (result.recipientCount === 1 && result.firstRecipientName) {
-        onShowToast?.(`Post sent to ${result.firstRecipientName}!`);
-      } else {
-        onShowToast?.(`Post shared with ${result.recipientCount} people!`);
-      }
+  const handleReferShared = useCallback(
+    (recipientCount: number) => {
+      onShowToast?.(recipientCount === 1 ? 'Post shared with 1 friend!' : `Post shared with ${recipientCount} friends!`);
+    },
+    [onShowToast],
+  );
+
+  const handleReferError = useCallback(
+    (msg: string) => {
+      onShowToast?.(msg);
     },
     [onShowToast],
   );
@@ -282,7 +283,7 @@ export default function PostFeedCard({
         contentPreview={post.text ?? ''}
       />
 
-      <ReferralPickerModal
+      <ReferOfferSheet
         visible={referOpen}
         onClose={() => setReferOpen(false)}
         offer={{
@@ -290,13 +291,11 @@ export default function PostFeedCard({
           businessId: post.business_id,
           businessName: post.business_name,
           businessLogoUrl: post.business_logo,
-          offerTitle: post.business_name,
-          offerDescription: post.text,
-          offerImageUrl: post.image_url ?? undefined,
-          validUntil: post.created_at,
-          deepLink: `https://touchpoint.app/post/${post.id}`,
-        } as OfferSharePayload}
-        onSent={handleReferSent}
+          title: post.text || post.business_name,
+          contentType: 'post',
+        }}
+        onShared={handleReferShared}
+        onError={handleReferError}
       />
 
       {/* Owner action menu */}

@@ -6,9 +6,8 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 const submitReviewHandler = asyncHandler(async (req, res) => {
   const { business_id, rating, review_text } = req.body;
-  const profileId = req.user.activeProfileId;
   try {
-    const summary = await reviewsService.submitReview(profileId, business_id, rating, review_text);
+    const summary = await reviewsService.submitReview(req.user.userId, business_id, rating, review_text);
     res.status(201).json(ok(summary));
   } catch (err) {
     if (err.statusCode === 403) {
@@ -24,7 +23,7 @@ const deleteReviewHandler = asyncHandler(async (req, res) => {
     return res.status(400).json(fail('business_id query param is required'));
   }
   try {
-    const summary = await reviewsService.deleteReview(req.user.activeProfileId, business_id);
+    const summary = await reviewsService.deleteReview(req.user.userId, business_id);
     res.json(ok(summary));
   } catch (err) {
     if (err.statusCode === 404) {
@@ -48,7 +47,7 @@ const getMyReviewHandler = asyncHandler(async (req, res) => {
   if (!business_id) {
     return res.status(400).json(fail('business_id query param is required'));
   }
-  const review = await reviewsService.getUserReview(req.user.activeProfileId, business_id);
+  const review = await reviewsService.getUserReview(req.user.userId, business_id);
   res.json(ok({ review }));
 });
 

@@ -379,19 +379,31 @@ export default function BusinessProfileScreen() {
 
   const handleSubmitRating = useCallback(
     async (stars: number, review: string) => {
-      await rating.submitRating(stars, review);
-      setRatingSheetVisible(false);
-      setSnackMsg(rating.hasRated ? 'Your rating was updated' : 'Thanks for rating!');
-      setSnackVisible(true);
+      try {
+        await rating.submitRating(stars, review);
+        setRatingSheetVisible(false);
+        setSnackMsg(rating.hasRated ? 'Your rating was updated' : 'Thanks for rating!');
+        setSnackVisible(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to submit rating. Please try again.';
+        setSnackMsg(msg);
+        setSnackVisible(true);
+      }
     },
     [rating],
   );
 
   const handleDeleteRating = useCallback(async () => {
-    await rating.deleteRating();
-    setRatingSheetVisible(false);
-    setSnackMsg('Your rating was removed');
-    setSnackVisible(true);
+    try {
+      await rating.deleteRating();
+      setRatingSheetVisible(false);
+      setSnackMsg('Your rating was removed');
+      setSnackVisible(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to remove rating. Please try again.';
+      setSnackMsg(msg);
+      setSnackVisible(true);
+    }
   }, [rating]);
   const { offers: businessOffers, isLoading: offersLoading, toggleDisable: toggleOfferDisable } =
     useBusinessOffers(id ?? '', offerFilter);
@@ -1121,6 +1133,7 @@ export default function BusinessProfileScreen() {
         onDelete={handleDeleteRating}
         submitting={rating.submitting}
         isSubscriber={isSubscribed}
+        onSubscribePress={subscribe}
       />
       <Snackbar
         visible={snackVisible}
@@ -1242,6 +1255,9 @@ function OffersTab({
               onPress={() => onOpen(offer)}
               testID={`offer-${offer.id}`}
             >
+              {offer.image_url ? (
+                <Image source={{ uri: offer.image_url }} style={styles.offerImage} contentFit="cover" />
+              ) : null}
               <View style={styles.offerCardTop}>
                 <View style={styles.discountBadge}>
                   <Text style={styles.discountText}>{formatDiscount(offer)}</Text>
@@ -1468,6 +1484,9 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                 <Text style={styles.eventDateMonth}>{getMonth(event.starts_at)}</Text>
                 <Text style={styles.eventDateDay}>{getDay(event.starts_at)}</Text>
               </View>
+              {event.image_url ? (
+                <Image source={{ uri: event.image_url }} style={styles.eventImage} contentFit="cover" />
+              ) : null}
               <View style={styles.eventInfo}>
                 <View style={styles.eventTitleRow}>
                   <Text style={[styles.eventTitle, dimmed && styles.offerTitleDimmed, { flex: 1 }]} numberOfLines={2}>
@@ -3940,6 +3959,19 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     marginTop: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  offerImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  eventImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
     backgroundColor: '#F3F4F6',
   },
   postFooter: {

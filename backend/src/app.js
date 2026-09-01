@@ -38,12 +38,17 @@ const dashboardFeedRoutes     = require('./modules/dashboardFeed/dashboardFeed.r
 const analyticsRoutes         = require('./modules/analytics/analytics.routes');
 const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modules/coupons/coupons.routes');
 const { getScanLandingPageHandler } = require('./modules/businesses/business.controller');
+const billingRoutes = require('./modules/billing/billing.routes');
+const { stripeWebhookHandler } = require('./modules/billing/billing.controller');
 
 const app = express();
 
 app.use(helmet());
 app.use(cors());
 app.use(morgan('dev'));
+// Stripe webhook needs the raw request body for signature verification — must be
+// registered before express.json() below, or the body would already be parsed to JSON.
+app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', (req, res, next) => {
@@ -95,6 +100,7 @@ app.use('/dashboard/feed',    dashboardFeedRoutes);
 app.use('/analytics',         analyticsRoutes);
 app.use('/businesses',        couponsBusinessRouter);
 app.use('/coupons',           couponRouter);
+app.use('/billing',           billingRoutes);
 app.use('/',                  rewardConfigRoutes);
 
 app.use('/api/v1', api);

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Check, Search, Send, Users, X } from 'lucide-react-native';
-import { shareOfferToFriends } from '@/api/services/sharesService';
+import { shareContentToFriends, ReferContentType } from '@/api/services/sharesService';
 import { getMyReferrals } from '@/api/services/referralService';
 import type { ChatFriend } from '@/api/services/chatService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,6 +27,7 @@ interface OfferPreview {
   businessName: string;
   businessLogoUrl?: string;
   title: string;
+  contentType?: ReferContentType;
 }
 
 interface Props {
@@ -120,7 +121,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
     setSending(true);
     try {
       const targetProfileIds = Array.from(selected);
-      const results = await shareOfferToFriends(offer.offerId, targetProfileIds);
+      const results = await shareContentToFriends(offer.contentType ?? 'offer', offer.offerId, targetProfileIds);
       const successCount = results.filter((r) => r.ok).length;
       setSending(false);
       onClose();
@@ -132,7 +133,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
       setSending(false);
       onError(e instanceof Error ? e.message : 'Failed to share offer');
     }
-  }, [selected, sending, offer.offerId, onClose, onShared, onError]);
+  }, [selected, sending, offer.offerId, offer.contentType, onClose, onShared, onError]);
 
   const sendLabel = selected.size === 0 ? 'Select friends' : `Send to ${selected.size} friend${selected.size === 1 ? '' : 's'}`;
 

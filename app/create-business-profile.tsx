@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
@@ -17,6 +17,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Snackbar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -45,6 +46,7 @@ import {
   Trophy,
   Info,
   Link2,
+  CreditCard,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useCreateBusiness, type BusinessType } from '@/hooks/useCreateBusiness';
@@ -55,6 +57,7 @@ const STEPS = [
   { title: 'Hours', icon: Clock },
   { title: 'Referral', icon: Gift },
   { title: 'Media', icon: ImagePlus },
+  { title: 'Plan', icon: CreditCard },
 ];
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -130,11 +133,39 @@ export default function CreateBusinessProfileScreen() {
     // Step 5
     logoUri, coverUri,
     pickLogo, pickCover,
+    // Step 6
+    plans, plansLoading, selectedPlanId, setSelectedPlanId, existingSubscription, isPlanLocked,
+    successMessage, finishAndNavigate,
     // Navigation
     goNext: hookGoNext,
     goBack: hookGoBack,
     submit,
   } = useCreateBusiness();
+
+  // The hook only ever advances currentStep past its default of 1 on mount when resuming a
+  // cancelled Stripe Checkout (business already exists, onboarding done, no plan resolved yet
+  // — see useCreateBusiness.ts's prefill effect). Normal step-by-step progression only changes
+  // currentStep once creationMethod is already 'manual', so this is a safe, narrow trigger to
+  // skip the landing page and land directly on the resumed step.
+  useEffect(() => {
+    if (currentStep > 1) setCreationMethod('manual');
+  }, [currentStep]);
+
+  // Business creation actually completed (free plan or native paid checkout) — show a brief
+  // confirmation before navigating, same pattern as sign-in.tsx's welcomeInfo Snackbar.
+  const [successSnackVisible, setSuccessSnackVisible] = useState(false);
+  useEffect(() => {
+    if (successMessage) setSuccessSnackVisible(true);
+  }, [successMessage]);
+  const handleSuccessSnackDismiss = useCallback(() => {
+    setSuccessSnackVisible(false);
+    if (successMessage) finishAndNavigate();
+  }, [successMessage, finishAndNavigate]);
+
+  const step6SelectedPlan = plans.find(p => p.id === selectedPlanId);
+  const step6Label = isPlanLocked
+    ? 'Save Changes'
+    : (step6SelectedPlan && step6SelectedPlan.price_monthly > 0 ? 'Pay Now' : 'Create Business');
 
   const onSlideViewableChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length === 0) return;
@@ -713,6 +744,83 @@ export default function CreateBusinessProfileScreen() {
     </Animated.View>
   );
 
+  const renderStep6 = () => (
+    <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+      <View style={styles.stepHeader}>
+        <CreditCard size={28} color={Colors.navyDark} />
+        <Text style={styles.stepTitle}>{isPlanLocked ? 'Your Plan' : 'Choose a Plan'}</Text>
+        <Text style={styles.stepSubtitle}>
+          {isPlanLocked
+            ? 'Your plan is managed separately — head to Plan & Billing to change it'
+            : 'Pick the plan that fits your business — you can change this later'}
+        </Text>
+      </View>
+
+      {isPlanLocked && existingSubscription ? (
+        <View>
+          <View style={styles.currentPlanCard}>
+            <View style={styles.currentPlanIcon}>
+              <CreditCard size={22} color={Colors.navyDark} />
+            </View>
+            <View style={styles.currentPlanInfo}>
+              <Text style={styles.currentPlanLabel}>Current plan</Text>
+              <Text style={styles.currentPlanName}>{existingSubscription.plan_name}</Text>
+              {existingSubscription.current_period_end && (
+                <Text style={styles.currentPlanMeta}>
+                  Renews {new Date(existingSubscription.current_period_end).toLocaleDateString()}
+                </Text>
+              )}
+            </View>
+            <View style={styles.currentPlanStatusBadge}>
+              <Text style={styles.currentPlanStatusText}>{existingSubscription.status}</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.managePlanLink}
+            onPress={() => router.push('/billing-settings' as never)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.managePlanLinkText}>Manage Plan</Text>
+            <ChevronRight size={16} color={Colors.navyDark} />
+          </TouchableOpacity>
+        </View>
+      ) : plansLoading ? (
+        <ActivityIndicator size="small" color={Colors.navyDark} />
+      ) : (
+        <View style={styles.planList}>
+          {plans.map((plan) => {
+            const isSelected = plan.id === selectedPlanId;
+            const priceLabel = plan.price_monthly === 0 ? 'Free' : `$${plan.price_monthly}/mo`;
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                style={[styles.planCard, isSelected && styles.planCardSelected]}
+                onPress={() => setSelectedPlanId(plan.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.planCardHeader}>
+                  <Text style={styles.planCardName}>{plan.name}</Text>
+                  <Text style={styles.planCardPrice}>{priceLabel}</Text>
+                </View>
+                {isSelected && <Check size={18} color={Colors.navyDark} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+      {!!errors.selectedPlanId && <Text style={styles.errorText}>{errors.selectedPlanId}</Text>}
+
+      {!!apiError && (
+        <View style={styles.apiErrorBanner}>
+          <Text style={styles.apiErrorText}>{apiError}</Text>
+          <TouchableOpacity onPress={() => setApiError(null)}>
+            <X size={16} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </Animated.View>
+  );
+
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1: return renderStep1();
@@ -720,6 +828,7 @@ export default function CreateBusinessProfileScreen() {
       case 3: return renderStep3();
       case 4: return renderStep4();
       case 5: return renderStep5();
+      case 6: return renderStep6();
       default: return null;
     }
   };
@@ -815,7 +924,7 @@ export default function CreateBusinessProfileScreen() {
             <View style={styles.methodInfoBanner}>
               <Sparkles size={16} color={Colors.navyLight} />
               <Text style={styles.methodInfoText}>
-                Complete your profile in 5 quick steps — business details, contact info, hours, referral settings, and media.
+                Complete your profile in 6 quick steps — business details, contact info, hours, referral settings, media, and plan.
               </Text>
             </View>
           </Animated.View>
@@ -858,7 +967,7 @@ export default function CreateBusinessProfileScreen() {
           )}
           <TouchableOpacity
             style={[styles.nextBtn, currentStep === 1 && { flex: 1 }, loading && { opacity: 0.7 }]}
-            onPress={currentStep === 5 ? submit : goNext}
+            onPress={currentStep === 6 ? submit : goNext}
             activeOpacity={0.8}
             disabled={loading}
           >
@@ -866,14 +975,22 @@ export default function CreateBusinessProfileScreen() {
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
-                <Text style={styles.nextBtnText}>{currentStep === 5 ? 'Create Business' : 'Continue'}</Text>
-                {currentStep < 5 && <ChevronRight size={18} color="#fff" />}
-                {currentStep === 5 && <Check size={18} color="#fff" />}
+                <Text style={styles.nextBtnText}>{currentStep === 6 ? step6Label : 'Continue'}</Text>
+                {currentStep < 6 && <ChevronRight size={18} color="#fff" />}
+                {currentStep === 6 && <Check size={18} color="#fff" />}
               </>
             )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      <Snackbar
+        visible={successSnackVisible}
+        onDismiss={handleSuccessSnackDismiss}
+        duration={3000}
+      >
+        {successMessage ?? ''}
+      </Snackbar>
     </View>
   );
 }
@@ -1637,6 +1754,101 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
     color: '#fff',
+  },
+  planList: {
+    gap: 12,
+  },
+  planCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.borderLight,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  planCardSelected: {
+    borderColor: Colors.navyDark,
+    backgroundColor: Colors.navyDark + '08',
+  },
+  planCardHeader: {
+    gap: 4,
+  },
+  planCardName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  planCardPrice: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.textSecondary,
+  },
+  currentPlanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 16,
+    padding: 16,
+  },
+  currentPlanIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.navyDark + '10',
+  },
+  currentPlanInfo: {
+    flex: 1,
+  },
+  currentPlanLabel: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: Colors.textTertiary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  currentPlanName: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginTop: 2,
+  },
+  currentPlanMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  currentPlanStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.navyDark + '10',
+  },
+  currentPlanStatusText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.navyDark,
+    textTransform: 'capitalize' as const,
+  },
+  managePlanLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 14,
+    paddingVertical: 10,
+  },
+  managePlanLinkText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.navyDark,
   },
   apiErrorBanner: {
     flexDirection: 'row',

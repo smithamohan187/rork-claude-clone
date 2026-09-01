@@ -4,7 +4,16 @@ const customerInviteModel = require('../customerInvites/customerInvite.model');
 const referralModel = require('../referrals/referral.model');
 const marketplaceModel = require('../marketplace/marketplace.model');
 const offersModel = require('../offers/offers.model');
+const eventsModel = require('../events/events.model');
+const postsModel = require('../posts/posts.model');
 const chatService = require('../chat/chat.service');
+
+// Maps a Refer content_type to its model getter + the noun used in the chat message body.
+const REFER_CONTENT_LOOKUP = {
+  offer: { getById: (id) => offersModel.getOfferById(id, null), noun: 'offer' },
+  event: { getById: (id) => eventsModel.getEventById(id, null), noun: 'event' },
+  post:  { getById: (id) => postsModel.getPostById(id, null), noun: 'post' },
+};
 const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 // Maps a content type to its in-app detail route + the id param name that route expects.
@@ -205,16 +214,20 @@ async function renderSharePreviewHtml(referral_code, requestOrigin) {
   }
 }
 
-// Shares an offer to one or more of the sender's trusted friends via the existing chat infra.
-// Per-recipient, best-effort: a failure for one target (e.g. not a trusted friend, so
-// getOrCreateConversation 403s) never blocks the others. No separate friendship check is
-// performed here — getOrCreateConversation already enforces trusted_friends for type='friend'.
-async function shareOfferToFriends(userId, offerId, targetProfileIds) {
+// Shares a piece of content (offer/event/post) to one or more of the sender's trusted friends via
+// the existing chat infra. Per-recipient, best-effort: a failure for one target (e.g. not a
+// trusted friend, so getOrCreateConversation 403s) never blocks the others. No separate
+// friendship check is performed here — getOrCreateConversation already enforces trusted_friends
+// for type='friend'.
+async function shareContentToFriends(userId, contentType, contentId, targetProfileIds) {
+  const lookup = REFER_CONTENT_LOOKUP[contentType];
+  if (!lookup) throw Object.assign(new Error('Unsupported content type'), { status: 400 });
+
   const senderProfileId = await resolveProfileId(userId);
 
-  const offer = await offersModel.getOfferById(offerId);
-  if (!offer) throw Object.assign(new Error('Offer not found'), { status: 404 });
-  const businessName = await offersModel.getBusinessNameById(null, offer.business_id);
+  const content = await lookup.getById(contentId);
+  if (!content) throw Object.assign(new Error(`${lookup.noun[0].toUpperCase()}${lookup.noun.slice(1)} not found`), { status: 404 });
+  const businessName = await offersModel.getBusinessNameById(null, content.business_id);
 
   const results = [];
   for (const targetProfileId of targetProfileIds) {
@@ -223,21 +236,21 @@ async function shareOfferToFriends(userId, offerId, targetProfileIds) {
 
       const existing = await shareReferralsModel.findRecipientForShare({
         sharer_profile_id: senderProfileId,
-        business_id: offer.business_id,
-        content_type: 'offer',
-        content_id: offerId,
+        business_id: content.business_id,
+        content_type: contentType,
+        content_id: contentId,
         registered_profile_id: targetProfileId,
       });
       const recipient = existing ?? await shareReferralsModel.insertRegisteredRecipient({
         referral_code: generateReferralCode(),
-        content_type: 'offer',
-        content_id: offerId,
-        business_id: offer.business_id,
+        content_type: contentType,
+        content_id: contentId,
+        business_id: content.business_id,
         sharer_profile_id: senderProfileId,
         registered_profile_id: targetProfileId,
       });
 
-      const body = `Check out this offer from ${businessName ?? 'a business'}: ${offer.title}\n${buildShareUrl(recipient.referral_code)}`;
+      const body = `Check out this ${lookup.noun} from ${businessName ?? 'a business'}: ${content.title}\n${buildShareUrl(recipient.referral_code)}`;
       const message = await chatService.sendMessage(userId, conversation.id, body);
 
       results.push({ targetProfileId, conversationId: conversation.id, messageId: message.id, ok: true });
@@ -248,4 +261,4 @@ async function shareOfferToFriends(userId, offerId, targetProfileIds) {
   return results;
 }
 
-module.exports = { createShareRecipients, resolveReferral, shareOfferToFriends, renderSharePreviewHtml };
+module.exports = { createShareRecipients, resolveReferral, shareContentToFriends, renderSharePreviewHtml };

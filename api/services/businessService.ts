@@ -83,6 +83,7 @@ export interface BusinessFullData {
   cover_url?: string | null
   onboarding_complete: boolean
   hours?: BusinessHour[]
+  created_at: string
 }
 
 export async function fetchMyBusiness(): Promise<BusinessFullData | null> {

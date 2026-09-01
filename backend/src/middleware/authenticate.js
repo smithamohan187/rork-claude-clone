@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const { fail } = require('../utils/apiResponse');
 const { logger } = require('../utils/logger');
 
-function authenticate(req, res, next) {
+function authenticate(req, res, next) { 
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) {

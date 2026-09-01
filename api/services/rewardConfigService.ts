@@ -36,8 +36,6 @@ export interface UpsertConfigPayload {
   welcome_bonus_points?: number;
   referral_bonus_points?: number;
   share_points?: number;
-  purchase_enabled?: boolean;
-  points_per_rupee?: number;
 }
 
 export interface CreateRewardPayload {

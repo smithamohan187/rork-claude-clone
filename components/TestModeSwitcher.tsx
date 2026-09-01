@@ -15,7 +15,19 @@ import { useAuth } from '@/contexts/AuthContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function TestModeSwitcher() {
-  const { switchTestUser, testUserIndex, testUsers, resetAllData } = useAuth();
+  // `switchTestUser`/`testUserIndex`/`testUsers`/`resetAllData` only ever existed on the legacy
+  // AuthContext1 — this component was never migrated when the app moved to the real AuthContext,
+  // so useAuth() here always returns them undefined. Left unguarded, testUsers.map(...) below
+  // crashed the entire app's render tree (not just this widget) every time this mounted. Guarding
+  // to a no-op render rather than attempting to rewire it to real data, since none of the calling
+  // code (switchTestUser/resetAllData) exists on the real AuthContext either.
+  const auth = useAuth() as ReturnType<typeof useAuth> & {
+    switchTestUser?: (index: number) => void;
+    testUserIndex?: number;
+    testUsers?: { id: string; name: string; username: string; avatar: string }[];
+    resetAllData?: () => void;
+  };
+  const { switchTestUser, testUserIndex, testUsers, resetAllData } = auth;
   const [expanded, setExpanded] = useState<boolean>(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -51,7 +63,7 @@ export default function TestModeSwitcher() {
   };
 
   const handleSelectUser = (index: number) => {
-    switchTestUser(index);
+    switchTestUser?.(index);
     setTimeout(() => {
       Animated.spring(expandAnim, {
         toValue: 0,
@@ -77,6 +89,8 @@ export default function TestModeSwitcher() {
     inputRange: [0, 0.6, 1],
     outputRange: [0, 0, 1],
   });
+
+  if (!testUsers) return null;
 
   return (
     <View style={styles.container} pointerEvents="box-none">
@@ -156,7 +170,7 @@ export default function TestModeSwitcher() {
                       text: 'Reset',
                       style: 'destructive',
                       onPress: () => {
-                        resetAllData();
+                        resetAllData?.();
                         toggleExpanded();
                       },
                     },
