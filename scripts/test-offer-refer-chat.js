@@ -108,7 +108,7 @@ async function run() {
 
     // ── T1: share offer with B and C ────────────────────────────────────────────────────────
     const t1 = await api('POST', '/feed/share/offer-to-friends', {
-      token: A.token, body: { offerId, targetProfileIds: [B.profileId, C.profileId] },
+      token: A.token, body: { content_type: 'offer', content_id: offerId, targetProfileIds: [B.profileId, C.profileId] },
     });
     const t1Results = t1.data?.data?.results ?? [];
     t1Results.forEach((r) => r.conversationId && createdConversationIds.push(r.conversationId));
@@ -178,7 +178,7 @@ async function run() {
 
     // ── T7: idempotency — re-share the same offer to B again ───────────────────────────────
     const t7 = await api('POST', '/feed/share/offer-to-friends', {
-      token: A.token, body: { offerId, targetProfileIds: [B.profileId] },
+      token: A.token, body: { content_type: 'offer', content_id: offerId, targetProfileIds: [B.profileId] },
     });
     const t7Result = t7.data?.data?.results?.[0];
     assert('T7-IDEMPOTENT-CONVERSATION', t7.status === 201 && t7Result?.ok && t7Result.conversationId === bConvId,
@@ -189,6 +189,47 @@ async function run() {
       [A.profileId, businessId, offerId, B.profileId],
     )).rows[0].c;
     assert('T7-NO-DUPLICATE-RECIPIENT-ROW', recipientCount === 1, 'Only one share_recipients row exists for (A, B, offer) despite re-sharing', { recipientCount });
+
+    // ── T8/T9: generalized shareContentToFriends also works for event/post content types ────
+    // (module-by-module bug-hunt pass: shareOfferToFriends was hardcoded to offers; generalized
+    // to accept content_type — these two steps close the gap in this script's own coverage that
+    // let that go untested for event/post.)
+    const event = (await db.query(
+      `INSERT INTO events (business_id, title, description, location, starts_at)
+       VALUES ($1, 'Test Event', 'A fun event', 'Test Venue', NOW() + interval '7 days')
+       RETURNING id, title`,
+      [businessId],
+    )).rows[0];
+    // Reuse C (already trusted with A, but hasn't received an event/post share yet — B already has
+    // 2 messages from T1/T7 which would make message-count assertions ambiguous).
+    const t8 = await api('POST', '/feed/share/offer-to-friends', {
+      token: A.token, body: { content_type: 'event', content_id: event.id, targetProfileIds: [C.profileId] },
+    });
+    const t8Result = t8.data?.data?.results?.[0];
+    const cConvId = t8Result?.conversationId;
+    if (cConvId && !createdConversationIds.includes(cConvId)) createdConversationIds.push(cConvId);
+    const cMsgs = cConvId ? await api('GET', `/conversations/${cConvId}/messages`, { token: C.token }) : null;
+    const cLinkMsg = (cMsgs?.data?.data?.messages ?? []).find((m) => m.body.includes('/s/'));
+    assert('T8-EVENT-REFER', t8.status === 201 && !!t8Result?.ok && !!cLinkMsg,
+      'Sharing an EVENT via the same endpoint creates a real conversation + message', { t8Result, cLinkMsg });
+
+    const post = (await db.query(
+      `INSERT INTO posts (business_id, title, content)
+       VALUES ($1, 'Test Post', 'A great update from the business')
+       RETURNING id, title`,
+      [businessId],
+    )).rows[0];
+    // C already has a conversation with A — one link message from T1's offer share, one from
+    // T8's event share — reuse it for the post share too (tests idempotent conversation reuse
+    // across three different content types, not just a same-content reshare like T7 covers).
+    const t9 = await api('POST', '/feed/share/offer-to-friends', {
+      token: A.token, body: { content_type: 'post', content_id: post.id, targetProfileIds: [C.profileId] },
+    });
+    const t9Result = t9.data?.data?.results?.[0];
+    const cMsgs2 = cConvId ? await api('GET', `/conversations/${cConvId}/messages`, { token: C.token }) : null;
+    const postLinkMsgCount = (cMsgs2?.data?.data?.messages ?? []).filter((m) => m.body.includes('/s/')).length;
+    assert('T9-POST-REFER', t9.status === 201 && !!t9Result?.ok && t9Result.conversationId === cConvId && postLinkMsgCount === 3,
+      'Sharing a POST via the same endpoint reuses the existing A<->C conversation (now 3 link messages: offer/event/post)', { t9Result, postLinkMsgCount });
 
   } finally {
     try {
