@@ -77,18 +77,18 @@ async function upsertBusinessSubscription(client, {
 
 // Explicit UPDATE (not upsertBusinessSubscription's ON CONFLICT) because that COALESCEs
 // stripe_subscription_id from the existing row when passed null — correct for the webhook's
-// partial updates, but wrong here since cancelling must actively clear it. Leaves
-// stripe_customer_id untouched so a future re-subscribe reuses the same Stripe customer.
-async function setSubscriptionToFreePlan(client, businessId, freePlanId) {
+// partial updates, but wrong here since cancelling must actively clear it. Leaves plan_id
+// (so the UI can still show what plan they were on) and stripe_customer_id (so a future
+// re-subscribe reuses the same Stripe customer) untouched.
+async function cancelBusinessSubscriptionInPlace(client, businessId) {
   const { rows } = await client.query(
     `UPDATE business_subscriptions
-     SET plan_id = $2,
-         status = 'active',
+     SET status = 'cancelled',
          stripe_subscription_id = NULL,
          current_period_end = NULL
      WHERE business_id = $1
      RETURNING *`,
-    [businessId, freePlanId]
+    [businessId]
   );
   return rows[0] ?? null;
 }
@@ -166,7 +166,7 @@ module.exports = {
   getBusinessSubscriptionByStripeSubscriptionId,
   getBusinessSubscriptionByStripeCustomerId,
   upsertBusinessSubscription,
-  setSubscriptionToFreePlan,
+  cancelBusinessSubscriptionInPlace,
   updateSubscriptionStatusByStripeSubscriptionId,
   setBusinessStripeCustomerId,
   getPlanByStripePriceId,

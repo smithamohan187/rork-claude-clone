@@ -2,7 +2,7 @@ const { Router } = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { authenticate } = require('../../middleware/authenticate');
+const { authenticate, optionalAuthenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
 const { registerBusinessSchema } = require('./business.validation');
 const {
@@ -31,8 +31,9 @@ router.get('/me', authenticate, getMyBusinessHandler);
 router.get('/me/dashboard-summary', authenticate, getDashboardSummaryHandler);
 // Owner-only QR deep link — distinct path depth from /:id, no collision
 router.get('/:id/scan-code', authenticate, getScanCodeHandler);
-// Public — no auth — must come after /me so Express doesn't treat 'me' as :id
-router.get('/:id', getBusinessProfileHandler);
+// Public — auth optional (used to exempt the owner from the subscription gate) — must come
+// after /me so Express doesn't treat 'me' as :id
+router.get('/:id', optionalAuthenticate, getBusinessProfileHandler);
 router.post('/register', authenticate, validateRequest(registerBusinessSchema), registerBusinessHandler);
 router.post('/:id/logo', authenticate, upload.single('logo'), uploadLogoHandler);
 router.post('/:id/photo', authenticate, upload.single('photo'), uploadPhotoHandler);

@@ -52,12 +52,13 @@ const completeOnboardingHandler = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /businesses/:id — public, no auth required.
+ * GET /businesses/:id — public, auth optional.
  * Returns full business profile with hours, rating aggregates, and subscriber count.
+ * Hidden (404) from non-owners while the business's own subscription isn't active/trialing.
  */
 const getBusinessProfileHandler = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const business = await getPublicBusinessProfile(id);
+  const business = await getPublicBusinessProfile(id, req.user?.userId ?? null);
   if (!business) {
     return res.status(404).json({ success: false, data: null, error: 'Business not found' });
   }

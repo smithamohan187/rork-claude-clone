@@ -2,29 +2,37 @@ import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Check, CreditCard, X } from 'lucide-react-native';
+import { ArrowLeft, AlertTriangle, CreditCard, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useBillingSettings } from '@/hooks/useBillingSettings';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 import type { SubscriptionPlan } from '@/api/services/billingService';
 
 export default function BillingSettingsScreen() {
   const router = useRouter();
-  const { plans, subscription, loading, updating, error, setError, selectPlan } = useBillingSettings();
+  const { showSnackbar } = useSnackbar();
+  const { plans, subscription, loading, updating, error, setError, cancelPlan, renewWithPlan } = useBillingSettings();
 
-  const handleSelectPlan = useCallback((plan: SubscriptionPlan) => {
-    if (plan.id === subscription?.plan_id) return;
+  const isActive = subscription?.status === 'active' || subscription?.status === 'trial';
 
-    const isDowngradeToFree = plan.price_monthly === 0;
-    const title = isDowngradeToFree ? 'Cancel your paid plan?' : `Switch to ${plan.name}?`;
-    const message = isDowngradeToFree
-      ? 'Your plan will move to Free. You can subscribe to a paid plan again anytime.'
-      : `Your plan will change to ${plan.name} at $${plan.price_monthly}/mo.`;
+  const handleCancel = useCallback(() => {
+    Alert.alert(
+      'Cancel your subscription?',
+      "If you cancel, your business will no longer be listed in the app and you won't be able to view your subscribers.",
+      [
+        { text: 'Keep subscription', style: 'cancel' },
+        { text: 'Cancel subscription', style: 'destructive', onPress: cancelPlan },
+      ],
+    );
+  }, [cancelPlan]);
 
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: () => selectPlan(plan.id) },
-    ]);
-  }, [subscription, selectPlan]);
+  const handleRenew = useCallback(async (plan: SubscriptionPlan) => {
+    const success = await renewWithPlan(plan.id);
+    if (success) {
+      showSnackbar('Subscription renewed — your business is live!');
+      router.replace('/(tabs)/feed' as never);
+    }
+  }, [renewWithPlan, showSnackbar, router]);
 
   return (
     <View style={styles.container}>
@@ -44,34 +52,6 @@ export default function BillingSettingsScreen() {
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {subscription && (
-            <View style={styles.currentCard}>
-              <View style={styles.currentCardIcon}>
-                <CreditCard size={22} color={Colors.navyDark} />
-              </View>
-              <View style={styles.currentCardInfo}>
-                <Text style={styles.currentCardLabel}>Current plan</Text>
-                <Text style={styles.currentCardName}>{subscription.plan_name}</Text>
-                {subscription.current_period_end && (
-                  <Text style={styles.currentCardMeta}>
-                    Renews {new Date(subscription.current_period_end).toLocaleDateString()}
-                  </Text>
-                )}
-              </View>
-              <View style={[
-                styles.statusBadge,
-                subscription.status === 'active' ? styles.statusBadgeActive : styles.statusBadgeInactive,
-              ]}>
-                <Text style={[
-                  styles.statusBadgeText,
-                  subscription.status === 'active' ? styles.statusBadgeTextActive : styles.statusBadgeTextInactive,
-                ]}>
-                  {subscription.status}
-                </Text>
-              </View>
-            </View>
-          )}
-
           {!!error && (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
@@ -81,39 +61,79 @@ export default function BillingSettingsScreen() {
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Available plans</Text>
-          <View style={styles.planList}>
-            {plans.map((plan) => {
-              const isCurrent = plan.id === subscription?.plan_id;
-              const priceLabel = plan.price_monthly === 0 ? 'Free' : `$${plan.price_monthly}/mo`;
-              return (
-                <TouchableOpacity
-                  key={plan.id}
-                  style={[styles.planCard, isCurrent && styles.planCardCurrent]}
-                  onPress={() => handleSelectPlan(plan)}
-                  disabled={isCurrent || updating}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.planCardHeader}>
-                    <Text style={styles.planCardName}>{plan.name}</Text>
-                    <Text style={styles.planCardPrice}>{priceLabel}</Text>
-                  </View>
-                  {isCurrent && (
-                    <View style={styles.currentPill}>
-                      <Check size={14} color={Colors.navyDark} />
-                      <Text style={styles.currentPillText}>Current</Text>
-                    </View>
+          {isActive && subscription ? (
+            <>
+              <View style={styles.currentCard}>
+                <View style={styles.currentCardIcon}>
+                  <CreditCard size={22} color={Colors.navyDark} />
+                </View>
+                <View style={styles.currentCardInfo}>
+                  <Text style={styles.currentCardLabel}>Current plan</Text>
+                  <Text style={styles.currentCardName}>{subscription.plan_name}</Text>
+                  {subscription.current_period_end && (
+                    <Text style={styles.currentCardMeta}>
+                      Renews {new Date(subscription.current_period_end).toLocaleDateString()}
+                    </Text>
                   )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                </View>
+                <View style={[styles.statusBadge, styles.statusBadgeActive]}>
+                  <Text style={[styles.statusBadgeText, styles.statusBadgeTextActive]}>
+                    {subscription.status}
+                  </Text>
+                </View>
+              </View>
 
-          {updating && (
-            <View style={styles.updatingRow}>
-              <ActivityIndicator size="small" color={Colors.navyDark} />
-              <Text style={styles.updatingText}>Updating your plan...</Text>
-            </View>
+              <Text style={styles.tierNote}>
+                Your plan tier is set automatically based on your subscriber count — no need to switch plans manually.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleCancel}
+                disabled={updating}
+                activeOpacity={0.7}
+              >
+                {updating ? (
+                  <ActivityIndicator size="small" color={Colors.error} />
+                ) : (
+                  <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.warningBanner}>
+                <AlertTriangle size={20} color={Colors.error} />
+                <Text style={styles.warningText}>
+                  Your subscription is cancelled — your business isn't listed in the app and you can't view your subscribers. Renew to go live again.
+                </Text>
+              </View>
+
+              <Text style={styles.sectionTitle}>Choose a plan to renew</Text>
+              <View style={styles.planList}>
+                {plans.map((plan) => (
+                  <TouchableOpacity
+                    key={plan.id}
+                    style={styles.planCard}
+                    onPress={() => handleRenew(plan)}
+                    disabled={updating}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.planCardHeader}>
+                      <Text style={styles.planCardName}>{plan.name}</Text>
+                      <Text style={styles.planCardPrice}>£{plan.price_monthly}/mo</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {updating && (
+                <View style={styles.updatingRow}>
+                  <ActivityIndicator size="small" color={Colors.navyDark} />
+                  <Text style={styles.updatingText}>Starting checkout...</Text>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       )}
@@ -172,7 +192,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   currentCardIcon: {
     width: 44,
@@ -211,9 +231,6 @@ const styles = StyleSheet.create({
   statusBadgeActive: {
     backgroundColor: Colors.success + '15',
   },
-  statusBadgeInactive: {
-    backgroundColor: Colors.error + '15',
-  },
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
@@ -221,9 +238,6 @@ const styles = StyleSheet.create({
   },
   statusBadgeTextActive: {
     color: Colors.success,
-  },
-  statusBadgeTextInactive: {
-    color: Colors.error,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -239,6 +253,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.error,
     marginRight: 8,
+  },
+  tierNote: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  cancelButton: {
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.error,
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: Colors.error + '10',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.error,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 13,
@@ -261,10 +309,6 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: Colors.surface,
   },
-  planCardCurrent: {
-    borderColor: Colors.navyDark,
-    backgroundColor: Colors.navyDark + '06',
-  },
   planCardHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -278,20 +322,6 @@ const styles = StyleSheet.create({
   planCardPrice: {
     fontSize: 13,
     color: Colors.textSecondary,
-  },
-  currentPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: Colors.navyDark + '10',
-  },
-  currentPillText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.navyDark,
   },
   updatingRow: {
     flexDirection: 'row',

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Country, State, City } from 'country-state-city';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 import {
   registerBusiness,
   fetchMyBusiness,
@@ -66,6 +67,7 @@ async function toDisplayUri(uri: string): Promise<string> {
 export function useCreateBusiness() {
   const router = useRouter();
   const { updateAuthUser, refreshProfiles, authLoading, isAuthenticated } = useAuth();
+  const { showSnackbar } = useSnackbar();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -78,7 +80,6 @@ export function useCreateBusiness() {
   const [plansLoading, setPlansLoading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [existingSubscription, setExistingSubscription] = useState<BusinessSubscription | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { checkout } = useSubscriptionCheckout();
 
   // A resolved subscription (active/trial) means this is a normal revisit/edit — the plan is
@@ -343,12 +344,13 @@ export function useCreateBusiness() {
     }
   }, []);
 
-  const finishAndNavigate = useCallback(async () => {
+  const finishAndNavigate = useCallback(async (message?: string) => {
     updateAuthUser({ role: 'business' });
     // Refresh profiles so the business pill appears in ProfileSwitcherPill
     try { await refreshProfiles(); } catch { /* non-fatal */ }
     router.replace('/(tabs)/feed' as never);
-  }, [updateAuthUser, refreshProfiles, router]);
+    if (message) showSnackbar(message);
+  }, [updateAuthUser, refreshProfiles, router, showSnackbar]);
 
   const submit = useCallback(async () => {
     if (!validateStep(6)) return;
@@ -399,11 +401,11 @@ export function useCreateBusiness() {
 
         if (!selectedPlan || selectedPlan.price_monthly === 0) {
           await selectFreePlan();
-          setSuccessMessage('Business created successfully!');
+          await finishAndNavigate('Business created successfully!');
         } else {
           const { outcome } = await checkout(selectedPlan.id);
           if (outcome === 'success') {
-            setSuccessMessage('Payment completed and business created successfully!');
+            await finishAndNavigate('Payment completed — your business is live!');
           } else if (outcome !== 'redirected') {
             // 'redirected' (web) means the page is navigating away to Stripe — not a failure.
             // The checkout-success/checkout-cancel screens take over from here.
@@ -456,8 +458,6 @@ export function useCreateBusiness() {
     setSelectedPlanId: (v: string) => { setSelectedPlanId(v); clearFieldError('selectedPlanId'); },
     // Categories
     businessCategories,
-    // Success message (business creation complete — free plan or paid checkout)
-    successMessage,
     // Navigation
     goNext, goBack, submit, finishAndNavigate,
   };

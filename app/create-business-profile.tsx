@@ -17,7 +17,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Snackbar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -135,7 +134,6 @@ export default function CreateBusinessProfileScreen() {
     pickLogo, pickCover,
     // Step 6
     plans, plansLoading, selectedPlanId, setSelectedPlanId, existingSubscription, isPlanLocked,
-    successMessage, finishAndNavigate,
     // Navigation
     goNext: hookGoNext,
     goBack: hookGoBack,
@@ -151,21 +149,10 @@ export default function CreateBusinessProfileScreen() {
     if (currentStep > 1) setCreationMethod('manual');
   }, [currentStep]);
 
-  // Business creation actually completed (free plan or native paid checkout) — show a brief
-  // confirmation before navigating, same pattern as sign-in.tsx's welcomeInfo Snackbar.
-  const [successSnackVisible, setSuccessSnackVisible] = useState(false);
-  useEffect(() => {
-    if (successMessage) setSuccessSnackVisible(true);
-  }, [successMessage]);
-  const handleSuccessSnackDismiss = useCallback(() => {
-    setSuccessSnackVisible(false);
-    if (successMessage) finishAndNavigate();
-  }, [successMessage, finishAndNavigate]);
-
   const step6SelectedPlan = plans.find(p => p.id === selectedPlanId);
   const step6Label = isPlanLocked
     ? 'Save Changes'
-    : (step6SelectedPlan && step6SelectedPlan.price_monthly > 0 ? 'Pay Now' : 'Create Business');
+    : (step6SelectedPlan && step6SelectedPlan.price_monthly > 0 ? 'Start Free Trial' : 'Create Business');
 
   const onSlideViewableChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length === 0) return;
@@ -752,9 +739,20 @@ export default function CreateBusinessProfileScreen() {
         <Text style={styles.stepSubtitle}>
           {isPlanLocked
             ? 'Your plan is managed separately — head to Plan & Billing to change it'
-            : 'Pick the plan that fits your business — you can change this later'}
+            : 'Pick the plan that fits your business — every plan starts with a 30-day free trial.'}
         </Text>
       </View>
+
+      {!isPlanLocked && !plansLoading && (
+        <View style={styles.trialBanner}>
+          <Text style={styles.trialBannerTitle}>30 days free, no charge today</Text>
+          <Text style={styles.trialBannerText}>
+            You won't be billed for 30 days. After your trial, we charge based on the subscriber
+            tier your business is in at that time — if you grow into a higher tier later, your
+            price adjusts automatically at your next renewal.
+          </Text>
+        </View>
+      )}
 
       {isPlanLocked && existingSubscription ? (
         <View>
@@ -788,9 +786,15 @@ export default function CreateBusinessProfileScreen() {
         <ActivityIndicator size="small" color={Colors.navyDark} />
       ) : (
         <View style={styles.planList}>
-          {plans.map((plan) => {
+          {plans.map((plan, index) => {
             const isSelected = plan.id === selectedPlanId;
-            const priceLabel = plan.price_monthly === 0 ? 'Free' : `$${plan.price_monthly}/mo`;
+            const priceLabel = plan.price_monthly === 0 ? 'Free' : `£${plan.price_monthly}/mo after trial`;
+            const prevMax = index > 0 ? (plans[index - 1].max_subscribers ?? 0) : 0;
+            const rangeLabel = plan.max_subscribers == null
+              ? `${(prevMax + 1).toLocaleString()}+ subscribers`
+              : index === 0
+                ? `Up to ${plan.max_subscribers.toLocaleString()} subscribers`
+                : `${(prevMax + 1).toLocaleString()}–${plan.max_subscribers.toLocaleString()} subscribers`;
             return (
               <TouchableOpacity
                 key={plan.id}
@@ -800,12 +804,16 @@ export default function CreateBusinessProfileScreen() {
               >
                 <View style={styles.planCardHeader}>
                   <Text style={styles.planCardName}>{plan.name}</Text>
+                  <Text style={styles.planCardRange}>{rangeLabel}</Text>
                   <Text style={styles.planCardPrice}>{priceLabel}</Text>
                 </View>
                 {isSelected && <Check size={18} color={Colors.navyDark} />}
               </TouchableOpacity>
             );
           })}
+          <Text style={styles.trialFootnote}>
+            You'll add payment details next, but won't be charged until your trial ends.
+          </Text>
         </View>
       )}
       {!!errors.selectedPlanId && <Text style={styles.errorText}>{errors.selectedPlanId}</Text>}
@@ -983,14 +991,6 @@ export default function CreateBusinessProfileScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-
-      <Snackbar
-        visible={successSnackVisible}
-        onDismiss={handleSuccessSnackDismiss}
-        duration={3000}
-      >
-        {successMessage ?? ''}
-      </Snackbar>
     </View>
   );
 }
@@ -1785,6 +1785,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500' as const,
     color: Colors.textSecondary,
+  },
+  planCardRange: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+  trialBanner: {
+    backgroundColor: Colors.teal + '10',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 4,
+  },
+  trialBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: Colors.teal,
+  },
+  trialBannerText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.textSecondary,
+  },
+  trialFootnote: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
   },
   currentPlanCard: {
     flexDirection: 'row',

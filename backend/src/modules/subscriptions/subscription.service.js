@@ -5,6 +5,7 @@ const pointsModel = require('../points/points.model');
 const customerInviteService = require('../customerInvites/customerInvite.service');
 const notificationsService = require('../notifications/notifications.service');
 const rewardConfigModel = require('../rewardConfig/rewardConfig.model');
+const billingService = require('../billing/billing.service');
 
 async function subscribeToBusiness(userId, businessId) {
   const profileId = await subscriptionModel.getActiveProfileId(userId);
@@ -178,6 +179,9 @@ async function getBusinessMembers(userId, businessId = null) {
   if (!ownedId) throw Object.assign(new Error('No business found for this user'), { status: 403 });
   const targetId = businessId ?? ownedId;
   if (targetId !== ownedId) throw Object.assign(new Error('Not authorised to view these members'), { status: 403 });
+  if (!(await billingService.isSubscriptionActive(ownedId))) {
+    throw Object.assign(new Error('Your subscription is not active — resubscribe to view your subscribers'), { status: 403 });
+  }
   return subscriptionModel.getBusinessMembers(ownedId);
 }
 
@@ -186,6 +190,9 @@ async function removeBusinessMember(userId, businessId = null, memberProfileId) 
   if (!ownedId) throw Object.assign(new Error('No business found for this user'), { status: 403 });
   const targetId = businessId ?? ownedId;
   if (targetId !== ownedId) throw Object.assign(new Error('Not authorised to remove this member'), { status: 403 });
+  if (!(await billingService.isSubscriptionActive(ownedId))) {
+    throw Object.assign(new Error('Your subscription is not active — resubscribe to manage your subscribers'), { status: 403 });
+  }
   await subscriptionModel.removeSubscriber(ownedId, memberProfileId);
   return { removed: true };
 }

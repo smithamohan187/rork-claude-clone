@@ -35,6 +35,9 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
     stripeCustomerId = customer.id;
   }
 
+  // Only a business with no prior business_subscriptions row at all gets the 30-day trial —
+  // a renewal after cancelling has already had its trial (or an active period), so it goes
+  // straight to a paid checkout.
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: stripeCustomerId,
@@ -42,7 +45,7 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: { business_id: business.id, plan_id: plan.id },
-    subscription_data: { trial_period_days: 30 },
+    ...(existingSubscription ? {} : { subscription_data: { trial_period_days: 30 } }),
   });
 
   return { url: session.url };
@@ -192,31 +195,42 @@ async function recheckAllTiers() {
   return results;
 }
 
-// "Cancel" means revert to the permanent Free tier, matching selectFreePlan's existing
-// treatment of Free as the no-payment baseline rather than a hard lockout.
+// Cancelling stops billing outright — no Free-tier fallback (Free was deactivated in migration
+// 015; there is no permanently-free plan anymore). The business simply has no active
+// subscription until it renews, which also removes it from listings/subscriber access
+// (see isSubscriptionActive below).
 async function cancelSubscription(userId) {
   const business = await resolveBusinessForUser(userId);
   const current = await billingModel.getBusinessSubscription(business.id);
-
-  if (current?.stripe_subscription_id) {
-    await stripe.subscriptions.cancel(current.stripe_subscription_id);
+  if (!current || current.status === 'cancelled') {
+    throw Object.assign(new Error('No active subscription to cancel'), { status: 400 });
   }
 
-  const freePlan = await billingModel.getFreePlan();
-  if (!freePlan) throw Object.assign(new Error('No free subscription plan found'), { status: 500 });
+  if (current.stripe_subscription_id) {
+    await stripe.subscriptions.cancel(current.stripe_subscription_id);
+  }
 
   const client = await getClient();
   try {
     await client.query('BEGIN');
-    const subscription = await billingModel.setSubscriptionToFreePlan(client, business.id, freePlan.id);
+    await billingModel.cancelBusinessSubscriptionInPlace(client, business.id);
     await client.query('COMMIT');
-    return subscription;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
   }
+  return billingModel.getBusinessSubscription(business.id);
+}
+
+// A business is publicly visible / can access its own subscriber data only while its platform
+// subscription is active or trialing. No row at all counts as not-visible (same bucket as
+// 'cancelled') — a business mid-checkout or pre-Stripe-migration isn't entitled to visibility
+// any more than one that explicitly cancelled.
+async function isSubscriptionActive(businessId) {
+  const sub = await billingModel.getBusinessSubscription(businessId);
+  return !!sub && (sub.status === 'active' || sub.status === 'trial');
 }
 
 function verifyWebhookSignature(rawBody, signature) {
@@ -305,6 +319,7 @@ module.exports = {
   changePlan,
   createPortalSession,
   cancelSubscription,
+  isSubscriptionActive,
   verifyWebhookSignature,
   handleWebhookEvent,
   getSubscriptionForUser,

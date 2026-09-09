@@ -27,6 +27,10 @@ async function getBusinessDirectory({ search, category, limit, offset, viewerPro
      FROM businesses b
      LEFT JOIN business_categories bc ON bc.id = b.category_id
      WHERE b.is_active = TRUE
+       AND EXISTS (
+         SELECT 1 FROM business_subscriptions bs
+         WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial')
+       )
        AND ($1::text IS NULL OR b.name ILIKE '%' || $1 || '%')
        AND ($2::text IS NULL OR bc.name = $2)`,
     [searchParam, categoryParam]
@@ -52,6 +56,10 @@ async function getBusinessDirectory({ search, category, limit, offset, viewerPro
      LEFT JOIN subscriptions s        ON s.business_id = b.id
      LEFT JOIN business_reviews br    ON br.business_id = b.id
      WHERE b.is_active = TRUE
+       AND EXISTS (
+         SELECT 1 FROM business_subscriptions bs
+         WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial')
+       )
        AND ($1::text IS NULL OR b.name ILIKE '%' || $1 || '%')
        AND ($2::text IS NULL OR bc.name = $2)
      GROUP BY b.id, bc.name, bc.icon

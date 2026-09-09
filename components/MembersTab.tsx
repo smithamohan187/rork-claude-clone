@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
@@ -108,26 +107,26 @@ export default function MembersTab({ businessId, onShowSnack }: Props) {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={members}
-        keyExtractor={(m) => m.profile_id}
-        renderItem={({ item }) => (
-          <MemberRow
-            member={item}
-            onViewProfile={handleViewProfile}
-            onRemove={handleRemovePress}
-          />
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon={<Users size={40} color={GREEN} strokeWidth={1.5} />}
-            title="No members yet"
-            subtitle="Subscribers will appear here"
-          />
-        }
-        contentContainerStyle={members.length === 0 ? styles.emptyContainer : styles.listContent}
-      />
+      {members.length === 0 ? (
+        <EmptyState
+          icon={<Users size={40} color={GREEN} strokeWidth={1.5} />}
+          title="No members yet"
+          subtitle="Subscribers will appear here"
+        />
+      ) : (
+        <View style={styles.listContent}>
+          {members.map((item, index) => (
+            <React.Fragment key={item.profile_id}>
+              {index > 0 && <View style={styles.separator} />}
+              <MemberRow
+                member={item}
+                onViewProfile={handleViewProfile}
+                onRemove={handleRemovePress}
+              />
+            </React.Fragment>
+          ))}
+        </View>
+      )}
 
       <Portal>
         <Dialog visible={!!pendingRemove} onDismiss={handleDismiss} style={styles.dialog}>
@@ -161,9 +160,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 24,
-  },
-  emptyContainer: {
-    flexGrow: 1,
   },
   row: {
     flexDirection: 'row',

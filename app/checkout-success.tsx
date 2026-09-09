@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Snackbar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 import { fetchMySubscription } from '@/api/services/billingService';
 
 // Landing page for the web checkout redirect (see hooks/useSubscriptionCheckout.ts). A full-page
@@ -18,8 +18,8 @@ type ScreenStatus = 'polling' | 'timedOut';
 export default function CheckoutSuccessScreen() {
   const router = useRouter();
   const { authLoading, isAuthenticated, updateAuthUser, refreshProfiles } = useAuth();
+  const { showSnackbar } = useSnackbar();
   const [status, setStatus] = useState<ScreenStatus>('polling');
-  const [showSuccess, setShowSuccess] = useState(false);
 
   const proceedToApp = useCallback(async () => {
     updateAuthUser({ role: 'business' });
@@ -36,8 +36,8 @@ export default function CheckoutSuccessScreen() {
         const subscription = await fetchMySubscription();
         if (subscription?.status === 'active') {
           if (isCancelled()) return;
-          setStatus('polling');
-          setShowSuccess(true);
+          showSnackbar('Payment completed — your business is live!');
+          await proceedToApp();
           return;
         }
       } catch {
@@ -50,7 +50,7 @@ export default function CheckoutSuccessScreen() {
     if (isCancelled()) return;
     // Stripe hasn't confirmed the subscription yet — don't silently pretend it worked.
     setStatus('timedOut');
-  }, [proceedToApp]);
+  }, [proceedToApp, showSnackbar]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -92,14 +92,6 @@ export default function CheckoutSuccessScreen() {
     <View style={styles.container}>
       <ActivityIndicator size="large" color={Colors.navyDark} />
       <Text style={styles.text}>Finishing setup...</Text>
-
-      <Snackbar
-        visible={showSuccess}
-        onDismiss={proceedToApp}
-        duration={3000}
-      >
-        Payment completed and business created successfully!
-      </Snackbar>
     </View>
   );
 }

@@ -42,6 +42,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
        WHERE o.status = 'active'
          AND (o.expires_at IS NULL OR o.expires_at > NOW())
          AND b.is_active = TRUE
+         AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
 
        UNION ALL
@@ -74,6 +75,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
        WHERE e.status != 'cancelled'
          AND e.starts_at > NOW()
          AND b.is_active = TRUE
+         AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
 
        UNION ALL
@@ -105,6 +107,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
         AND sp.profile_id = $1
        WHERE p.is_active = true
          AND b.is_active = TRUE
+         AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
          AND ($2::uuid IS NULL OR b.category_id = $2::uuid)
      ) feed
      ORDER BY created_at DESC
@@ -145,6 +148,7 @@ async function getRecommendedBusinesses(profileId, limit) {
          AND profile_type = 'business'
      )
      AND b.is_active = true
+     AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
      ORDER BY subscriber_count DESC, b.created_at DESC
      LIMIT $2`,
     [profileId, limit]
@@ -168,6 +172,7 @@ async function getRecommendedByLocation(profileId, limit) {
      FROM businesses b
      LEFT JOIN business_categories bc ON bc.id = b.category_id
      WHERE b.is_active = true
+       AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
        AND b.city IS NOT NULL
        AND LOWER(b.city) = LOWER((SELECT city FROM profiles WHERE id = $1))
        AND b.id NOT IN (
@@ -206,6 +211,7 @@ async function getTopRatedBusinesses(limit, userId = null) {
      FROM businesses b
      LEFT JOIN business_categories bc ON bc.id = b.category_id
      WHERE b.is_active = true
+       AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
        AND ($2::uuid IS NULL OR b.profile_id NOT IN (
          SELECT id FROM profiles WHERE user_id = $2 AND profile_type = 'business'
        ))

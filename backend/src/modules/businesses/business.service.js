@@ -17,6 +17,7 @@ const {
 } = require('./business.model');
 const { getClient } = require('../../config/database');
 const marketplaceService = require('../marketplace/marketplace.service');
+const billingService = require('../billing/billing.service');
 const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 function slugify(name) {
@@ -185,16 +186,22 @@ async function completeOnboarding(businessId) {
 }
 
 /**
- * Fetch public business profile by id — used by the unauthenticated GET /businesses/:id endpoint.
- * Runs both queries in parallel since hours and business details are independent.
- * Returns null if no business found (controller handles the 404).
+ * Fetch public business profile by id — used by the optionally-authenticated
+ * GET /businesses/:id endpoint. Runs both queries in parallel since hours and business details
+ * are independent. Returns null if no business found, or if the requester isn't the owner and
+ * the business's own platform subscription isn't active/trialing (controller handles the 404
+ * either way) — the owner can always see their own (even cancelled) profile.
  */
-async function getPublicBusinessProfile(businessId) {
+async function getPublicBusinessProfile(businessId, requestingUserId = null) {
   const [business, hours] = await Promise.all([
     getBusinessById(businessId),
     getBusinessHours(businessId),
   ]);
   if (!business) return null;
+  const isOwner = requestingUserId != null && business.owner_user_id === requestingUserId;
+  if (!isOwner && !(await billingService.isSubscriptionActive(businessId))) {
+    return null;
+  }
   return { ...business, hours };
 }
 
