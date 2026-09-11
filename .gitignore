@@ -45,3 +45,16 @@ rork-eslint.config.js
 core
 node_modules
 .expo
+.claude
+.vs
+uploads
+bun.lock
+.claudeignore
+.gitignore
+
+backend/.env
+backend/cloud-sql-proxy.exe
+touchpoints_backup.sql
+backend/migrations/
+eas.json
+bun.lock
