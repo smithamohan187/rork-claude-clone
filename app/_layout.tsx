@@ -30,6 +30,13 @@ import ShareDeepLinkHandler from "@/components/ShareDeepLinkHandler";
 import { SnackbarProvider, GlobalSnackbar } from "@/contexts/SnackbarContext";
 import { SideDrawerProvider } from "@/contexts/SideDrawerContext";
 import SideDrawer from "@/components/SideDrawer";
+import { LogBox } from "react-native";
+
+if (__DEV__) {
+  LogBox.ignoreLogs([
+    "Can't perform a React state update on a component that hasn't mounted yet.",
+  ]);
+}
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -197,7 +204,7 @@ function RootLayoutNav() {
         options={{ headerShown: false, animation: 'slide_from_right' }}
       />
       <Stack.Screen
-        name="edit-profile"
+        name="my-profile"
         options={{ headerShown: false, animation: 'slide_from_right' }}
       />
       <Stack.Screen

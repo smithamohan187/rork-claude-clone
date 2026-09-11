@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface StoredCoupon {
   id: string;
@@ -51,16 +52,29 @@ function computeStatus(c: StoredCoupon, now: number): StoredCoupon['status'] {
 }
 
 export const [CouponProvider, useCoupons] = createContextHook(() => {
+  const { authUser } = useAuth();
+  const userId = authUser?.id;
   const [coupons, setCoupons] = useState<StoredCoupon[]>([]);
   const [scanAttempts, setScanAttempts] = useState<ScanAttemptLog[]>([]);
   const [loaded, setLoaded] = useState<boolean>(false);
 
+  // Coupons/scans are stored per-user so switching accounts on the same device
+  // never shows one account's coupons to another.
   useEffect(() => {
+    setCoupons([]);
+    setScanAttempts([]);
+    setLoaded(false);
+
+    if (!userId) {
+      setLoaded(true);
+      return;
+    }
+
     (async () => {
       try {
         const [rawC, rawS] = await Promise.all([
-          AsyncStorage.getItem(COUPONS_KEY),
-          AsyncStorage.getItem(SCANS_KEY),
+          AsyncStorage.getItem(`${COUPONS_KEY}_${userId}`),
+          AsyncStorage.getItem(`${SCANS_KEY}_${userId}`),
         ]);
         if (rawC) {
           const parsed = JSON.parse(rawC) as StoredCoupon[];
@@ -76,19 +90,21 @@ export const [CouponProvider, useCoupons] = createContextHook(() => {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [userId]);
 
   const persistCoupons = useCallback((updated: StoredCoupon[]) => {
-    AsyncStorage.setItem(COUPONS_KEY, JSON.stringify(updated)).catch((e) =>
+    if (!userId) return;
+    AsyncStorage.setItem(`${COUPONS_KEY}_${userId}`, JSON.stringify(updated)).catch((e) =>
       console.log('[CouponContext] persist coupons failed', e)
     );
-  }, []);
+  }, [userId]);
 
   const persistScans = useCallback((updated: ScanAttemptLog[]) => {
-    AsyncStorage.setItem(SCANS_KEY, JSON.stringify(updated)).catch((e) =>
+    if (!userId) return;
+    AsyncStorage.setItem(`${SCANS_KEY}_${userId}`, JSON.stringify(updated)).catch((e) =>
       console.log('[CouponContext] persist scans failed', e)
     );
-  }, []);
+  }, [userId]);
 
   const addCoupon = useCallback(
     (

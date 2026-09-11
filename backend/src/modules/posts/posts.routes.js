@@ -16,7 +16,8 @@ const {
   uploadPostImageHandler,
 } = require('./posts.controller');
 
-const uploadDir = path.join(__dirname, '../../../../uploads/posts');
+//const uploadDir = path.join(__dirname, '../../../../uploads/posts');
+const uploadDir = path.join('/tmp', 'uploads', 'posts');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

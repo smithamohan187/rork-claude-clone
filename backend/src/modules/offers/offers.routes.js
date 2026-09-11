@@ -20,7 +20,8 @@ const {
   uploadOfferImageHandler,
 } = require('./offers.controller');
 
-const uploadDir = path.join(__dirname, '../../../../uploads/offers');
+//const uploadDir = path.join(__dirname, '../../../../uploads/offers');
+const uploadDir = path.join('/tmp', 'uploads', 'offers');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

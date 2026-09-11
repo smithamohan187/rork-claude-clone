@@ -17,7 +17,8 @@ const {
   uploadEventImageHandler,
 } = require('./events.controller');
 
-const uploadDir = path.join(__dirname, '../../../../uploads/events');
+//const uploadDir = path.join(__dirname, '../../../../uploads/events');
+const uploadDir = path.join('/tmp', 'uploads', 'events');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

@@ -16,7 +16,8 @@ const {
   getDashboardSummaryHandler,
 } = require('./business.controller');
 
-const uploadDir = path.join(__dirname, '../../../../uploads/businesses');
+//const uploadDir = path.join(__dirname, '../../../../uploads/businesses');
+const uploadDir = path.join('/tmp', 'uploads', 'businesses');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

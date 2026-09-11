@@ -8,7 +8,6 @@ import {
   Modal,
   Platform,
   LayoutAnimation,
-  UIManager,
   Linking,
 } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
@@ -25,10 +24,6 @@ import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 
 const PURPLE = '#1A5C35';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 function easeNext() {
   if (Platform.OS !== 'web') {

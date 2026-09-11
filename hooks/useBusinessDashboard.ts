@@ -4,14 +4,14 @@ import { fetchDashboardSummary, fetchMyBusinessId, type DashboardSummary } from 
 import { useAuth } from '@/contexts/AuthContext';
 
 export function useBusinessDashboard() {
-  const { authLoading, isAuthenticated } = useAuth();
+  const { authLoading, isAuthenticated, accountType } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (authLoading || !isAuthenticated) return;
+    if (authLoading || !isAuthenticated || accountType !== 'business') return;
     setLoading(true);
     setError(null);
     try {
@@ -23,7 +23,7 @@ export function useBusinessDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, accountType]);
 
   useFocusEffect(
     useCallback(() => {

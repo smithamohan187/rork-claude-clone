@@ -7,7 +7,9 @@ const { validateRequest } = require('../../middleware/validateRequest');
 const { getMyProfile, updateMyProfile, getInterests, updateMyAvatar, uploadMyAvatarFile, getPublicProfileHandler } = require('./profile.controller');
 const { updateProfileSchema } = require('./profile.validation');
 
-const avatarUploadDir = path.join(__dirname, '../../../../uploads/avatars');
+  //const avatarUploadDir = path.join(__dirname, '../../../../uploads/avatars');
+ // fs.mkdirSync(avatarUploadDir, { recursive: true });
+const avatarUploadDir = path.join('/tmp', 'uploads', 'avatars');
 fs.mkdirSync(avatarUploadDir, { recursive: true });
 
 const avatarStorage = multer.diskStorage({

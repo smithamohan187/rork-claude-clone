@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,10 +13,6 @@ import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 import ExpandableText from '../ExpandableText';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface Props {
   offer: OfferFeedItem;

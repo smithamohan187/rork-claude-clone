@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { getSavedBusinesses, unsaveBusiness, type SavedBusinessItem } from '@/api/services/savedBusinessService';
 import { useAuth } from '@/contexts/AuthContext';
 

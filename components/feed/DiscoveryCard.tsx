@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from 'react-native';
+import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Share2, Users } from 'lucide-react-native';
@@ -8,10 +8,6 @@ import type { SubscribedBusiness } from '@/hooks/usePersonalisedFeed';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { StarRatingDisplay } from '@/components/ratings/StarRatingDisplay';
 import { pickFeedImage } from '@/constants/feedImages';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface Props {
   business: SubscribedBusiness;

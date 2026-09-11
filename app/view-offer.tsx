@@ -6,7 +6,6 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,12 +18,9 @@ import {
   ChevronUp,
   Clock,
   MapPin,
-  MessageCircle,
-  Share2,
 } from 'lucide-react-native';
-import LikeButton from '@/components/feed/LikeButton';
-import CommentSheet from '@/components/feed/CommentSheet';
 import { toggleSaveOffer } from '@/api/services/savedOfferService';
+import { useSubscription } from '@/hooks/useSubscription';
 import {
   ActivityIndicator,
   Button,
@@ -44,6 +40,7 @@ const AMBER = '#F59E0B';
 
 type Offer = {
   id: string;
+  business_id: string;
   title: string;
   description: string | null;
   image_url: string | null;
@@ -130,18 +127,15 @@ export default function ViewOfferScreen() {
 
   const [offer, setOffer] = useState<Offer | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
-  const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
   const [sharingPoints, setSharingPoints] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
   const [showTerms, setShowTerms] = useState<boolean>(false);
   const [snackbarVisible, setSnackbarVisible] = useState<boolean>(false);
   const [snackbarText, setSnackbarText] = useState<string>('');
-  const [sharing, setSharing] = useState<boolean>(false);
-  const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [savingBookmark, setSavingBookmark] = useState<boolean>(false);
-  const subscribing = false;
+  const { isSubscribed, isToggling: subscribing, subscribe } = useSubscription(offer?.business_id || business?.id || businessId);
 
   const fetchData = useCallback(async () => {
     if (!offerId) {
@@ -151,13 +145,20 @@ export default function ViewOfferScreen() {
     }
     try {
       setLoading(true);
-      const [offerData, bizData] = await Promise.all([
+      const [offerData, bizDataOptimistic] = await Promise.all([
         fetchOfferById(offerId),
         businessId ? fetchBusinessProfile(businessId) : Promise.resolve(null),
       ]);
 
+      // The route's businessId param isn't always passed by every caller (e.g.
+      // saved-activity.tsx) — the offer row itself always carries the real
+      // business_id, so fall back to fetching with that if the optimistic
+      // parallel fetch above came back empty.
+      const bizData = bizDataOptimistic ?? (offerData.business_id ? await fetchBusinessProfile(offerData.business_id) : null);
+
       setOffer({
         id:               offerData.id,
+        business_id:      offerData.business_id,
         title:            offerData.title,
         description:      offerData.description,
         image_url:        offerData.image_url,
@@ -185,8 +186,7 @@ export default function ViewOfferScreen() {
         });
       }
 
-      // Subscriptions and points modules not yet built
-      setIsSubscribed(false);
+      // Points module not yet built
       setSharingPoints(0);
     } catch (e) {
       if (__DEV__) console.log('[ViewOffer] fetch error', e);
@@ -203,21 +203,6 @@ export default function ViewOfferScreen() {
   const countdown = useMemo(() => getCountdown(offer?.expires_at ?? null), [offer?.expires_at]);
   const offerEnded = !offer?.is_active || countdown.expired;
 
-  const handleShare = useCallback(async () => {
-    if (sharing || !offer || !business) return;
-    setSharing(true);
-    try {
-      const message = `Check out this offer from ${business.business_name}: ${offer.title}`;
-      await Share.share({ message });
-      setSnackbarText('Offer shared');
-      setSnackbarVisible(true);
-    } catch (e) {
-      if (__DEV__) console.log('[ViewOffer] share error', e);
-    } finally {
-      setSharing(false);
-    }
-  }, [sharing, offer, business]);
-
   const handleToggleSave = useCallback(async () => {
     if (savingBookmark || !offer) return;
     setSavingBookmark(true);
@@ -233,12 +218,6 @@ export default function ViewOfferScreen() {
       setSavingBookmark(false);
     }
   }, [savingBookmark, saved, offer]);
-
-  const handleSubscribe = useCallback(async () => {
-    // Subscriptions module not yet built
-    setSnackbarText('Subscription feature coming soon');
-    setSnackbarVisible(true);
-  }, []);
 
   if (loading) {
     return (
@@ -412,24 +391,6 @@ export default function ViewOfferScreen() {
           ) : null}
 
           <View style={styles.engagementRow}>
-            <LikeButton
-              contentType="offer"
-              contentId={offer.id}
-              initialLikeCount={offer.like_count}
-              initialHasLiked={offer.liked_by_me}
-              isOwner={offer.is_owner}
-            />
-            <TouchableOpacity style={styles.commentBtn} onPress={() => setCommentOpen(true)} hitSlop={8} testID="view-offer-comment-btn">
-              <MessageCircle size={18} color="#6B7280" />
-              <Text style={styles.commentCount}>{offer.comment_count}</Text>
-            </TouchableOpacity>
-            <CommentSheet
-              visible={commentOpen}
-              contentType="offer"
-              contentId={offer.id}
-              initialCommentCount={offer.comment_count}
-              onClose={() => setCommentOpen(false)}
-            />
             <TouchableOpacity
               style={styles.saveBtn}
               onPress={handleToggleSave}
@@ -471,7 +432,7 @@ export default function ViewOfferScreen() {
               <Button
                 mode="contained"
                 buttonColor={PURPLE}
-                onPress={handleSubscribe}
+                onPress={subscribe}
                 loading={subscribing}
                 disabled={subscribing || offerEnded}
                 style={styles.subBtn}
@@ -498,39 +459,6 @@ export default function ViewOfferScreen() {
         </View>
       </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={styles.bottomBarWrap}>
-        <View style={styles.bottomBar}>
-          <Button
-            mode="outlined"
-            textColor={PURPLE}
-            onPress={handleShare}
-            loading={sharing}
-            disabled={sharing || offerEnded}
-            style={[styles.shareBtn, !isSubscribed && { flex: 1 }, isSubscribed && { flex: 1 }]}
-            contentStyle={styles.btnContent}
-            icon={() => <Share2 size={18} color={PURPLE} />}
-            testID="share-offer-btn"
-          >
-            Share Offer
-          </Button>
-          {!isSubscribed ? (
-            <Button
-              mode="contained"
-              buttonColor={PURPLE}
-              onPress={handleSubscribe}
-              loading={subscribing}
-              disabled={subscribing || offerEnded}
-              style={[styles.subscribeBottomBtn, { flex: 1.2 }]}
-              contentStyle={styles.btnContent}
-              labelStyle={styles.subscribeBottomLabel}
-              testID="subscribe-earn-btn"
-            >
-              Subscribe & Earn Rewards
-            </Button>
-          ) : null}
-        </View>
-      </SafeAreaView>
-
       <Snackbar
         visible={snackbarVisible}
         onDismiss={() => setSnackbarVisible(false)}
@@ -545,7 +473,7 @@ export default function ViewOfferScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { paddingBottom: 140 },
+  scrollContent: { paddingBottom: 24 },
   heroWrap: { width: '100%', height: 240, backgroundColor: '#E5E7EB' },
   heroImage: { width: '100%', height: '100%' },
   heroGradient: {
@@ -655,16 +583,6 @@ const styles = StyleSheet.create({
     gap: 16,
     marginTop: 16,
   },
-  commentBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  commentCount: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -711,26 +629,7 @@ const styles = StyleSheet.create({
   subscribedChip: { backgroundColor: TEAL, alignSelf: 'flex-start' },
   subscribedChipText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   pointsText: { color: '#064E3B', fontSize: 14, fontWeight: '600' },
-  bottomBarWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  shareBtn: { borderColor: PURPLE, borderRadius: 10, borderWidth: 1.5 },
-  subscribeBottomBtn: { borderRadius: 10 },
-  subscribeBottomLabel: { fontWeight: '700', fontSize: 13 },
-  btnContent: { height: 46 },
-  snackbar: { marginBottom: 100 },
+  snackbar: { marginBottom: 24 },
   skeletonHero: { width: '100%', height: 240, backgroundColor: '#EEF2F7' },
   skeletonBlock: {
     height: 16,

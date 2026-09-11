@@ -69,8 +69,8 @@ export default function BusinessInviteSmsScreen() {
         setPermissionDenied(true);
         return;
       }
-      const mod: typeof import('expo-contacts') | null = await import('expo-contacts').catch(
-        () => null as unknown as typeof import('expo-contacts'),
+      const mod: typeof import('expo-contacts/legacy') | null = await import('expo-contacts/legacy').catch(
+        () => null as unknown as typeof import('expo-contacts/legacy'),
       );
       if (!mod) {
         setContacts(fallback);
