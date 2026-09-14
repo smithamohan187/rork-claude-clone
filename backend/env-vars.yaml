@@ -1,0 +1,1 @@
+DB_USER: "postgres" DB_NAME: "touchpoints" INSTANCE_CONNECTION_NAME: "spheric-alcove-506115-e1:asia-south1:touchpoints-db"
