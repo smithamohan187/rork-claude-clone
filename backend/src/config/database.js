@@ -13,7 +13,6 @@ const { Pool } = require('pg');
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });*/
-console.log('DEBUG ENV:', { INSTANCE_CONNECTION_NAME: process.env.INSTANCE_CONNECTION_NAME, DB_HOST: process.env.DB_HOST, DB_PORT: process.env.DB_PORT, NODE_ENV: process.env.NODE_ENV });
 const isCloudRun = !!process.env.INSTANCE_CONNECTION_NAME;
 
 const pool = new Pool({
