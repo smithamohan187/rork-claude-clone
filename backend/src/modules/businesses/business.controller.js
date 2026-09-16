@@ -1,3 +1,4 @@
+const { uploadFileToGCS } = require('../../config/storage');
 const {
   registerBusiness,
   fetchMyBusiness,
@@ -25,7 +26,7 @@ const registerBusinessHandler = asyncHandler(async (req, res) => {
   res.status(201).json(ok(business));
 });
 
-const uploadLogoHandler = asyncHandler(async (req, res) => {
+/*const uploadLogoHandler = asyncHandler(async (req, res) => {
   console.log('[multer] req.file:', req.file);
   if (!req.file) {
     return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
@@ -33,15 +34,31 @@ const uploadLogoHandler = asyncHandler(async (req, res) => {
   const logoUrl = `/uploads/businesses/${req.file.filename}`;
   const result = await uploadBusinessLogo(req.params.id, logoUrl);
   res.status(200).json(ok(result));
+});*/
+const uploadLogoHandler = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
+  }
+  const logoUrl = await uploadFileToGCS(req.file, 'businesses');
+  const result = await uploadBusinessLogo(req.params.id, logoUrl);
+  res.status(200).json(ok(result));
 });
 
-const uploadPhotoHandler = asyncHandler(async (req, res) => {
+/*const uploadPhotoHandler = asyncHandler(async (req, res) => {
   console.log('[photo upload] req.file:', req.file);
   console.log('[photo upload] content-type:', req.headers['content-type']);
   if (!req.file) {
     return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
   }
   const photoUrl = `/uploads/businesses/${req.file.filename}`;
+  const result = await uploadBusinessCoverPhoto(req.params.id, photoUrl);
+  res.status(200).json(ok(result));
+});*/
+const uploadPhotoHandler = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
+  }
+  const photoUrl = await uploadFileToGCS(req.file, 'businesses');
   const result = await uploadBusinessCoverPhoto(req.params.id, photoUrl);
   res.status(200).json(ok(result));
 });

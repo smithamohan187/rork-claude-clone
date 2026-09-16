@@ -1,5 +1,5 @@
-const path   = require('path');
-const fs     = require('fs');
+//const path   = require('path');
+//const fs     = require('fs');
 const multer = require('multer');
 const { Router } = require('express');
 const { authenticate } = require('../../middleware/authenticate');
@@ -9,14 +9,15 @@ const { updateProfileSchema } = require('./profile.validation');
 
   //const avatarUploadDir = path.join(__dirname, '../../../../uploads/avatars');
  // fs.mkdirSync(avatarUploadDir, { recursive: true });
-const avatarUploadDir = path.join('/tmp', 'uploads', 'avatars');
+/*const avatarUploadDir = path.join('/tmp', 'uploads', 'avatars');
 fs.mkdirSync(avatarUploadDir, { recursive: true });
 
 const avatarStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, avatarUploadDir),
   filename:    (_req, _file, cb) => cb(null, `${Date.now()}-avatar.jpg`),
 });
-const avatarUpload = multer({ storage: avatarStorage });
+const avatarUpload = multer({ storage: avatarStorage });*/
+const avatarUpload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 

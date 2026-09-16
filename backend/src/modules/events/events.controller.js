@@ -1,4 +1,5 @@
 // events.controller.js — HTTP request/response handlers for the events module.
+const { uploadFileToGCS } = require('../../config/storage');
 const eventsService = require('./events.service');
 const { ok, fail } = require('../../utils/apiResponse');
 
@@ -72,9 +73,15 @@ const toggleEventStatusHandler = asyncHandler(async (req, res) => {
   }
 });
 
-const uploadEventImageHandler = asyncHandler(async (req, res) => {
+/*const uploadEventImageHandler = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json(fail('No file uploaded'));
   const imageUrl = `/uploads/events/${req.file.filename}`;
+  const event = await eventsService.uploadEventImage(req.user.userId, req.params.id, imageUrl);
+  res.json(ok({ event }));
+});*/
+const uploadEventImageHandler = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json(fail('No file uploaded'));
+  const imageUrl = await uploadFileToGCS(req.file, 'events');
   const event = await eventsService.uploadEventImage(req.user.userId, req.params.id, imageUrl);
   res.json(ok({ event }));
 });

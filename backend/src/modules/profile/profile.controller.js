@@ -1,3 +1,4 @@
+const { uploadFileToGCS } = require('../../config/storage');
 const { fetchProfile, fetchInterestCategories, updateProfile, updateAvatar, getPublicProfile } = require('./profile.service');
 const { ok } = require('../../utils/apiResponse');
 
@@ -31,11 +32,19 @@ const updateMyAvatar = asyncHandler(async (req, res) => {
   res.status(200).json(ok(result));
 });
 
-const uploadMyAvatarFile = asyncHandler(async (req, res) => {
+/*const uploadMyAvatarFile = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
   }
   const url = `/uploads/avatars/${req.file.filename}`;
+  res.status(200).json(ok({ url }));
+});*/
+
+const uploadMyAvatarFile = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
+  }
+  const url = await uploadFileToGCS(req.file, 'avatars');
   res.status(200).json(ok({ url }));
 });
 

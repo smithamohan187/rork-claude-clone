@@ -1,3 +1,4 @@
+const { uploadFileToGCS } = require('../../config/storage');
 const postsService = require('./posts.service');
 const { ok, fail } = require('../../utils/apiResponse');
 
@@ -72,9 +73,16 @@ const deletePostHandler = asyncHandler(async (req, res) => {
   }
 });
 
-const uploadPostImageHandler = asyncHandler(async (req, res) => {
+/*const uploadPostImageHandler = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json(fail('No file uploaded'));
   const imageUrl = `/uploads/posts/${req.file.filename}`;
+  const post = await postsService.uploadPostImage(req.user.userId, req.params.id, imageUrl);
+  res.json(ok({ post }));
+});*/
+
+const uploadPostImageHandler = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json(fail('No file uploaded'));
+  const imageUrl = await uploadFileToGCS(req.file, 'posts');
   const post = await postsService.uploadPostImage(req.user.userId, req.params.id, imageUrl);
   res.json(ok({ post }));
 });

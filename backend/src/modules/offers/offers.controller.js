@@ -1,3 +1,4 @@
+const { uploadFileToGCS } = require('../../config/storage');
 const offersService = require('./offers.service');
 const { ok, fail } = require('../../utils/apiResponse');
 
@@ -69,9 +70,15 @@ const toggleStatusHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
-const uploadOfferImageHandler = asyncHandler(async (req, res) => {
+/*const uploadOfferImageHandler = asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json(fail('No file uploaded'));
   const imageUrl = `/uploads/offers/${req.file.filename}`;
+  const offer = await offersService.uploadOfferImage(req.user.userId, req.params.id, imageUrl);
+  res.json(ok({ offer }));
+});*/
+const uploadOfferImageHandler = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json(fail('No file uploaded'));
+  const imageUrl = await uploadFileToGCS(req.file, 'offers');
   const offer = await offersService.uploadOfferImage(req.user.userId, req.params.id, imageUrl);
   res.json(ok({ offer }));
 });
