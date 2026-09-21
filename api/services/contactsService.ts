@@ -10,10 +10,10 @@ export interface DeviceContact {
   emails: string[];
 }
 
-async function loadContactsModule(): Promise<typeof import('expo-contacts') | null> {
+async function loadContactsModule(): Promise<typeof import('expo-contacts/legacy') | null> {
   if (Platform.OS === 'web') return null;
   try {
-    return await import('expo-contacts');
+    return await import('expo-contacts/legacy');
   } catch {
     return null;
   }

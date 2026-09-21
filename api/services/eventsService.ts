@@ -1,6 +1,8 @@
 // eventsService.ts — API service layer for the events module.
 import { apiClient, getAccessToken, API_BASE_URL } from '@/api/client';
 import { Platform } from 'react-native';
+import { File as ExpoFile } from 'expo-file-system';
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export type EventType = 'In Person' | 'Online' | 'Hybrid';
 
@@ -38,12 +40,6 @@ export interface CreateEventPayload {
 export type UpdateEventPayload = Partial<CreateEventPayload> & { image_url?: string | null };
 
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');
-
-function resolveUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
 
 function resolveEvent(event: Event): Event {
   return { ...event, type: 'event', image_url: resolveUrl(event.image_url) };
@@ -99,7 +95,10 @@ async function buildEventFormData(uri: string): Promise<FormData> {
     const blob = await fetch(uri).then((r) => r.blob());
     form.append('image', new File([blob], 'event.jpg', { type: 'image/jpeg' }));
   } else {
-    form.append('image', { uri, name: 'event.jpg', type: 'image/jpeg' } as any);
+    // expo/fetch (SDK 57+) only accepts string | Blob | {bytes()} FormData parts —
+    // the old {uri, name, type} object shape throws "Unsupported FormData part implementation".
+    const file = new ExpoFile(uri);
+    form.append('image', file, 'event.jpg');
   }
   return form;
 }

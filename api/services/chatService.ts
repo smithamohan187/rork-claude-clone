@@ -1,6 +1,7 @@
 // Service layer — wraps apiClient calls for the direct-chat endpoints.
 // Screens never call apiClient directly; they go through hooks, which call these.
-import { apiClient, API_BASE_URL } from '@/api/client';
+import { apiClient } from '@/api/client';
+import { resolveImageUrl } from '@/utils/resolveImageUrl';
 
 export type ConversationType = 'business' | 'friend';
 
@@ -47,9 +48,7 @@ export interface ChatFriend {
 }
 
 export function resolveAvatarUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL.replace(/\/$/, '')}${url}`;
+  return resolveImageUrl(url);
 }
 
 export async function getConversations(type: ConversationType): Promise<Conversation[]> {

@@ -1,25 +1,21 @@
 import React, { useCallback, useRef } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export interface FeedFilterChip {
   key: string;
   label: string;
-  emoji: string;
+  emoji?: string;
+  icon?: string | null;
 }
 
 export const FEED_FILTER_CHIPS: FeedFilterChip[] = [
   { key: 'bookmarked', emoji: '🔖', label: 'Bookmarked' },
   { key: 'trending', emoji: '🔥', label: 'Trending' },
-  { key: 'food', emoji: '🍕', label: 'Food' },
-  { key: 'fashion', emoji: '👗', label: 'Fashion' },
-  { key: 'wellness', emoji: '💆', label: 'Wellness' },
-  { key: 'fitness', emoji: '💪', label: 'Fitness' },
-  { key: 'cafes', emoji: '☕', label: 'Cafés' },
-  { key: 'events', emoji: '🎉', label: 'Events' },
-  { key: 'tech', emoji: '📱', label: 'Tech' },
 ];
 
 interface Props {
+  chips?: FeedFilterChip[];
   selected: string;
   onSelect: (key: string) => void;
 }
@@ -59,8 +55,12 @@ const ChipItem = React.memo(function ChipItem({
       style={styles.chipWrap}
       testID={`feed-chip-${chip.key}`}
     >
-      <Animated.View style={[styles.chip, { backgroundColor: bg, borderColor }]}> 
-        <Text style={styles.emoji}>{chip.emoji}</Text>
+      <Animated.View style={[styles.chip, { backgroundColor: bg, borderColor }]}>
+        {chip.emoji ? (
+          <Text style={styles.emoji}>{chip.emoji}</Text>
+        ) : chip.icon ? (
+          <MaterialCommunityIcons name={chip.icon as any} size={14} color={active ? '#FFFFFF' : '#1A5C35'} />
+        ) : null}
         <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
           {chip.label}
         </Text>
@@ -69,7 +69,7 @@ const ChipItem = React.memo(function ChipItem({
   );
 });
 
-export const FeedFilterChips = React.memo(function FeedFilterChips({ selected, onSelect }: Props) {
+export const FeedFilterChips = React.memo(function FeedFilterChips({ chips = FEED_FILTER_CHIPS, selected, onSelect }: Props) {
   const handlePress = useCallback((k: string) => () => onSelect(k), [onSelect]);
   return (
     <View style={styles.container}>
@@ -80,7 +80,7 @@ export const FeedFilterChips = React.memo(function FeedFilterChips({ selected, o
         decelerationRate="normal"
         bounces
       >
-        {FEED_FILTER_CHIPS.map((c) => (
+        {chips.map((c) => (
           <ChipItem
             key={c.key}
             chip={c}

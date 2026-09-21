@@ -1,10 +1,5 @@
-import { apiClient, apiRequest, API_BASE_URL } from '@/api/client';
-
-function resolveAvatarUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL.replace(/\/$/, '')}${url}`;
-}
+import { apiClient, apiRequest } from '@/api/client';
+import { resolveImageUrl as resolveAvatarUrl } from '@/utils/resolveImageUrl';
 
 export async function subscribeToBusiness(businessId: string): Promise<{ subscribed: boolean }> {
   const result = await apiClient.post<{ subscribed: boolean }>('/subscriptions/subscribe', { business_id: businessId });

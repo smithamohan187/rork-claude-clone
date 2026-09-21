@@ -19,7 +19,8 @@ import {
   type SubscribedBusiness,
 } from '@/hooks/usePersonalisedFeed';
 import UnifiedTopHeader from '@/components/feed/UnifiedTopHeader';
-import { FeedFilterChips } from '@/components/feed/FeedFilterChips';
+import { FeedFilterChips, FEED_FILTER_CHIPS, type FeedFilterChip } from '@/components/feed/FeedFilterChips';
+import { fetchBusinessCategories, type BusinessCategory } from '@/api/services/businessDirectoryService';
 import { HeroDiscoveryBanner } from '@/components/feed/HeroDiscoveryBanner';
 import { ValuePropositionStrip } from '@/components/feed/ValuePropositionStrip';
 import { OfferFeedCard } from '@/components/feed/OfferFeedCard';
@@ -77,6 +78,7 @@ export default function PersonalisedFeedScreen() {
     toggleInterested,
     toggleSavePost,
     toggleFeedLike,
+    setSelectedCategory,
   } = usePersonalisedFeed();
 
   const recommendationHeading = useMemo<string | null>(() => {
@@ -104,8 +106,30 @@ export default function PersonalisedFeedScreen() {
   const [viewerIndex, setViewerIndex] = useState<number>(0);
 
   const [selectedChip, setSelectedChip] = useState<string>('trending');
+  const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [showBusinessNudge, setShowBusinessNudge] = useState<boolean>(true); // TEMP: force true for debugging
   const isBookmarkedFilter = selectedChip === 'bookmarked';
+
+  useEffect(() => {
+    fetchBusinessCategories()
+      .then(setCategories)
+      .catch((err) => {
+        if (__DEV__) console.log('[PersonalisedFeed] fetchBusinessCategories error', err);
+      });
+  }, []);
+
+  const filterChips = useMemo<FeedFilterChip[]>(
+    () => [
+      ...FEED_FILTER_CHIPS,
+      ...categories.map((c) => ({ key: c.id, label: c.name, icon: c.icon })),
+    ],
+    [categories],
+  );
+
+  const handleChipSelect = useCallback((key: string) => {
+    setSelectedChip(key);
+    setSelectedCategory(key === 'bookmarked' || key === 'trending' ? null : key);
+  }, [setSelectedCategory]);
 
   const { unreadCount } = useNotifications();
   useEffect(() => {
@@ -318,10 +342,10 @@ const header = useMemo(() => {
         {feedItems.length === 0 && recommendationHeading && discoveryBusinesses.length > 0 ? (
           <Text style={styles.sectionLabel}>{recommendationHeading}</Text>
         ) : null}
-        <FeedFilterChips selected={selectedChip} onSelect={setSelectedChip} />
+        <FeedFilterChips chips={filterChips} selected={selectedChip} onSelect={handleChipSelect} />
       </View>
     );
-  }, [feedItems.length, recommendationHeading, discoveryBusinesses.length, selectedChip, isSearching, router, scrollToDiscovery, showBusinessNudge, handleDismissNudge, handleSetUpBusiness]);
+  }, [feedItems.length, recommendationHeading, discoveryBusinesses.length, selectedChip, filterChips, handleChipSelect, isSearching, router, scrollToDiscovery, showBusinessNudge, handleDismissNudge, handleSetUpBusiness]);
 
   const listFooter = useMemo(() => {
     if (isSearching || !loadingMore) return null;

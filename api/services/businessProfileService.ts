@@ -1,6 +1,7 @@
 // Service layer for the public business profile endpoint.
 // Screens never call apiClient directly — they go through hooks, which call these functions.
-import { apiClient, API_BASE_URL } from '@/api/client';
+import { apiClient } from '@/api/client';
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export interface BusinessHour {
   day_of_week: number;    // 0 = Sunday … 6 = Saturday
@@ -38,18 +39,6 @@ export interface BusinessProfile {
   hours: BusinessHour[];
 }
 
-// Strip trailing slash so relative paths like /uploads/... append cleanly
-const BASE_URL = API_BASE_URL.replace(/\/$/, '');
-
-/**
- * Convert a relative server path to an absolute URL for expo-image.
- * e.g. /uploads/businesses/logo.jpg → http://localhost:3000/uploads/businesses/logo.jpg
- */
-function resolveUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
 
 /**
  * Fetch a public business profile by id.

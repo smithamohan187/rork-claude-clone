@@ -24,6 +24,7 @@ import {
 } from '@/api/client';
 import { authApi, AuthTokens, SessionResponse, BackendProfile } from '@/api/auth.api';
 import type { AccountType, ProfileEntry } from '@/types';
+import { resolveImageUrl } from '@/utils/resolveImageUrl';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AsyncStorage key — the only key this context owns.
@@ -32,10 +33,7 @@ import type { AccountType, ProfileEntry } from '@/types';
 const ACCOUNT_TYPE_KEY = 'account_type';
 
 function resolveUrl(url: string | null | undefined): string | undefined {
-  if (!url) return undefined;
-  if (url.startsWith('http')) return url;
-  const base = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  return `${base}${url}`;
+  return resolveImageUrl(url) ?? undefined;
 }
 const ACTIVE_PROFILE_ID_KEY = 'active_profile_id';
 

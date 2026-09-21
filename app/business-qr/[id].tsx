@@ -70,16 +70,13 @@ export default function BusinessQRScreen() {
       try {
         if (Platform.OS !== 'web') {
           await activateKeepAwakeAsync('business-qr-screen');
-          const { status } = await Brightness.requestPermissionsAsync();
-          if (status === 'granted') {
-            try {
-              prev = await Brightness.getBrightnessAsync();
-            } catch (e) {
-              console.log('[BusinessQR] getBrightnessAsync failed', e);
-            }
-            if (!cancelled) {
-              await Brightness.setBrightnessAsync(1);
-            }
+          try {
+            prev = await Brightness.getBrightnessAsync();
+          } catch (e) {
+            console.log('[BusinessQR] getBrightnessAsync failed', e);
+          }
+          if (!cancelled) {
+            await Brightness.setBrightnessAsync(1);
           }
         }
       } catch (e) {
@@ -96,8 +93,6 @@ export default function BusinessQRScreen() {
         }
         if (prev != null) {
           Brightness.setBrightnessAsync(prev).catch(() => {});
-        } else {
-          Brightness.restoreSystemBrightnessAsync?.().catch(() => {});
         }
       }
     };

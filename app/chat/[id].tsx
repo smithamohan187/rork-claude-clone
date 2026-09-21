@@ -12,7 +12,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Phone, Video, Building2, ImagePlus, Film, Play, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +26,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { accountType, businessProfileData, authUser } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const isMarketplaceChat = useMemo(() => (id ?? '').startsWith('mkt-'), [id]);
 
@@ -365,7 +366,7 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
-        <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+        <View style={[styles.inputSafe, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           {isBizConv && (
             <View style={styles.inputBizIndicator}>
               <Image source={{ uri: businessAvatar ?? '' }} style={styles.inputBizAvatar} />
@@ -411,7 +412,7 @@ export default function ChatScreen() {
               <Send size={20} color={Colors.navyDark} />
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );

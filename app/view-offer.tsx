@@ -127,7 +127,6 @@ export default function ViewOfferScreen() {
 
   const [offer, setOffer] = useState<Offer | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
-  const [sharingPoints, setSharingPoints] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
   const [showTerms, setShowTerms] = useState<boolean>(false);
@@ -185,9 +184,6 @@ export default function ViewOfferScreen() {
           city:          bizData.city,
         });
       }
-
-      // Points module not yet built
-      setSharingPoints(0);
     } catch (e) {
       if (__DEV__) console.log('[ViewOffer] fetch error', e);
       setError(true);
@@ -451,9 +447,6 @@ export default function ViewOfferScreen() {
               >
                 You are subscribed
               </Chip>
-              <Text style={styles.pointsText}>
-                You earn {sharingPoints} pts for sharing this
-              </Text>
             </View>
           )}
         </View>
@@ -628,7 +621,6 @@ const styles = StyleSheet.create({
   },
   subscribedChip: { backgroundColor: TEAL, alignSelf: 'flex-start' },
   subscribedChipText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  pointsText: { color: '#064E3B', fontSize: 14, fontWeight: '600' },
   snackbar: { marginBottom: 24 },
   skeletonHero: { width: '100%', height: 240, backgroundColor: '#EEF2F7' },
   skeletonBlock: {

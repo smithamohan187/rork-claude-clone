@@ -4,14 +4,8 @@ import {
   getSubscribedBusinesses,
   unsubscribeFromBusiness,
 } from '@/api/services/subscriptionService';
-import { API_BASE_URL } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
-
-function resolveUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL.replace(/\/$/, '')}${url}`;
-}
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export interface SubscribedBusinessItem {
   id: string;

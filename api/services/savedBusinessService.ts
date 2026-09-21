@@ -1,12 +1,5 @@
 import { apiClient, apiRequest } from '@/api/client';
-
-const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-
-function resolveLogoUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
+import { resolveImageUrl as resolveLogoUrl } from '@/utils/resolveImageUrl';
 
 export interface SavedBusinessItem {
   id: string;

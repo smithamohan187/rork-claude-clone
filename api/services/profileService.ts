@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
+import { File as ExpoFile } from 'expo-file-system';
 import { apiClient } from '../client';
+import { resolveImageUrl } from '@/utils/resolveImageUrl';
 
 export interface InterestCategory {
   id: string;
@@ -37,9 +39,7 @@ export interface UpdateProfilePayload {
 const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export function resolveAvatarUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
+  return resolveImageUrl(url);
 }
 
 function dataUriToBlob(dataUri: string): Blob {
@@ -73,7 +73,10 @@ export async function uploadAvatarFile(params: {
     const blob = dataUriToBlob(params.base64DataUri);
     formData.append('avatar', blob, 'avatar.jpg');
   } else {
-    formData.append('avatar', { uri: params.fileUri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
+    // expo/fetch (SDK 57+) only accepts string | Blob | {bytes()} FormData parts —
+    // the old {uri, name, type} object shape throws "Unsupported FormData part implementation".
+    const file = new ExpoFile(params.fileUri);
+    formData.append('avatar', file, 'avatar.jpg');
   }
   const res = await fetch(`${BASE_URL}/profile/me/avatar-upload`, {
     method: 'POST',

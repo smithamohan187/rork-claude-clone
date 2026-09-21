@@ -1,12 +1,5 @@
 import { apiClient } from '@/api/client';
-
-const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-
-function resolveUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export interface FeedApiItem {
   item_type: 'offer' | 'event' | 'post';

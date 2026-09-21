@@ -1,13 +1,6 @@
 import { apiClient } from '@/api/client';
 import { type EventType } from '@/api/services/eventsService';
-
-const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-
-function resolveUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export interface SavedEventItem {
   id: string;

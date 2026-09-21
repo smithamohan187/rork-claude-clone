@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -12,12 +11,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { TextInput } from 'react-native-paper';
-import * as Clipboard from 'expo-clipboard';
 import { ArrowLeft, Eye, Send, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildBusinessReferralLink } from '@/components/feed/BusinessInviteBanner';
+import { sendInviteEmail } from '@/api/services/mailComposerService';
 
 const PURPLE = '#00B246';
 const ORANGE = '#1A5C35';
@@ -97,30 +96,13 @@ export default function BusinessInviteEmailScreen() {
       return;
     }
     try {
-      const mod: typeof import('expo-mail-composer') | null = await import('expo-mail-composer').catch(
-        () => null as unknown as typeof import('expo-mail-composer'),
-      );
-      let sent = false;
-      if (mod && Platform.OS !== 'web') {
-        const available = await mod.isAvailableAsync();
-        if (available) {
-          await mod.composeAsync({ recipients: allEmails, subject, body: previewBody });
-          sent = true;
-        }
-      }
-      if (!sent) {
-        const url = `mailto:${allEmails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(previewBody)}`;
-        const supported = await Linking.canOpenURL(url).catch(() => false);
-        if (supported) {
-          await Linking.openURL(url);
-          sent = true;
-        }
-      }
-      if (!sent) {
-        await Clipboard.setStringAsync(`${subject}\n\n${previewBody}`);
+      const result = await sendInviteEmail({ recipients: allEmails, subject, body: previewBody });
+      if (result === 'clipboard') {
         showSnackbar('Email copied to clipboard');
-      } else {
+      } else if (result === 'mailto') {
         showSnackbar("🎉 Invites sent! You'll earn points when they join TouchPoint.");
+      } else {
+        showSnackbar('Could not open email');
       }
       goExplore();
     } catch (e) {

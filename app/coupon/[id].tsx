@@ -11,7 +11,7 @@ import {
   AppState,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -264,6 +264,7 @@ function Initials({ name, size = 56 }: { name: string; size?: number }) {
 
 export default function CouponDisplayScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getById, markExpired } = useCoupons();
   const prevUsedRef = useRef<boolean>(false);
@@ -319,11 +320,8 @@ export default function CouponDisplayScreen() {
     (async () => {
       try {
         if (Platform.OS !== 'web') {
-          const { status } = await Brightness.requestPermissionsAsync();
-          if (status === 'granted') {
-            originalBrightness = await Brightness.getBrightnessAsync();
-            await Brightness.setBrightnessAsync(1);
-          }
+          originalBrightness = await Brightness.getBrightnessAsync();
+          await Brightness.setBrightnessAsync(1);
           await activateKeepAwakeAsync('coupon');
         }
       } catch (e) {
@@ -336,8 +334,6 @@ export default function CouponDisplayScreen() {
           if (Platform.OS !== 'web') {
             if (originalBrightness !== null) {
               await Brightness.setBrightnessAsync(originalBrightness);
-            } else {
-              await Brightness.restoreSystemBrightnessAsync();
             }
             deactivateKeepAwake('coupon');
           }
@@ -438,7 +434,7 @@ export default function CouponDisplayScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.bizBlock}>

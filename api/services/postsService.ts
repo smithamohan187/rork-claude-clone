@@ -1,5 +1,7 @@
 import { apiClient, getAccessToken, API_BASE_URL } from '@/api/client';
 import { Platform } from 'react-native';
+import { File as ExpoFile } from 'expo-file-system';
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export interface Post {
   id: string;
@@ -23,12 +25,6 @@ export interface CreatePostPayload {
 }
 
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');
-
-function resolveUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
 
 function resolvePost(post: Post): Post {
   return { ...post, type: 'post', image_url: resolveUrl(post.image_url) };
@@ -89,7 +85,10 @@ async function buildPostFormData(uri: string): Promise<FormData> {
     const blob = await fetch(uri).then((r) => r.blob());
     form.append('image', new File([blob], 'post.jpg', { type: 'image/jpeg' }));
   } else {
-    form.append('image', { uri, name: 'post.jpg', type: 'image/jpeg' } as any);
+    // expo/fetch (SDK 57+) only accepts string | Blob | {bytes()} FormData parts —
+    // the old {uri, name, type} object shape throws "Unsupported FormData part implementation".
+    const file = new ExpoFile(uri);
+    form.append('image', file, 'post.jpg');
   }
   return form;
 }

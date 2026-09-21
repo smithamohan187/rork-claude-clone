@@ -1,12 +1,5 @@
-import { apiClient, API_BASE_URL } from '@/api/client';
-
-const BASE_URL = API_BASE_URL.replace(/\/$/, '');
-
-function resolveUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
+import { apiClient } from '@/api/client';
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export type ActivityType = 'redemption' | 'subscriber' | 'like' | 'comment' | 'referral';
 

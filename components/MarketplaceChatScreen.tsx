@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone, MoreVertical, Tag, Paperclip, Send, Zap, CheckCheck } from 'lucide-react-native';
 import { conversations, chatMessages } from '@/mocks/data';
@@ -41,6 +41,7 @@ interface Props {
 export default function MarketplaceChatScreen({ chatId }: Props) {
   const router = useRouter();
   const { authUser } = useAuth();
+  const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
 
   /* lookup conversation + participant */
@@ -216,7 +217,7 @@ export default function MarketplaceChatScreen({ chatId }: Props) {
         </TouchableOpacity>
 
         {/* input bar */}
-        <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+        <View style={[styles.inputSafe, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={styles.inputRow}>
             <TouchableOpacity activeOpacity={0.7} style={styles.attachBtn} hitSlop={6}>
               <Paperclip size={22} color={TEXT_SEC} />
@@ -239,7 +240,7 @@ export default function MarketplaceChatScreen({ chatId }: Props) {
               <Send size={18} color={WHITE} />
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );

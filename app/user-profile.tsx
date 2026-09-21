@@ -20,7 +20,6 @@ import {
   Bookmark,
   Bell,
   Home,
-  Newspaper,
   Shield,
   CircleHelp,
   LogOut,
@@ -442,22 +441,6 @@ export default function UserProfileScreen() {
                 titleStyle={styles.listItemTitle}
                 descriptionStyle={styles.listItemDesc}
                 testID="settings-my-subscriptions"
-              />
-              <Divider style={styles.divider} />
-              <List.Item
-                title="New User Feed"
-                description="Discover the latest activity"
-                left={() => (
-                  <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
-                    <Newspaper size={18} color={PURPLE} />
-                  </View>
-                )}
-                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-                onPress={() => router.push('/feed-preview/new-user-feed' as any)}
-                style={styles.listItem}
-                titleStyle={styles.listItemTitle}
-                descriptionStyle={styles.listItemDesc}
-                testID="settings-new-user-feed"
               />
               <Divider style={styles.divider} />
               <List.Item

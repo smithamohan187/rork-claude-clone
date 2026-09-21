@@ -302,7 +302,7 @@ export default function SavedActivityScreen() {
               items={businesses}
               onRemove={handleRemoveFavourite}
               onView={(id) => router.push(`/business-profile/${id}` as never)}
-              onExplore={() => router.back()}
+              onExplore={() => router.push('/(tabs)/marketplace' as never)}
             />
       )}
 
@@ -315,7 +315,7 @@ export default function SavedActivityScreen() {
               onView={(id) =>
                 router.push({ pathname: '/view-offer', params: { offerId: id } } as never)
               }
-              onExplore={() => router.back()}
+              onExplore={() => router.push('/(tabs)/feed' as never)}
             />
       )}
 
@@ -328,7 +328,7 @@ export default function SavedActivityScreen() {
               onView={(id) =>
                 router.push({ pathname: '/view-event', params: { eventId: id } } as never)
               }
-              onExplore={() => router.back()}
+              onExplore={() => router.push('/(tabs)/feed' as never)}
             />
       )}
 
@@ -338,7 +338,7 @@ export default function SavedActivityScreen() {
           : <PostsTab
               items={savedPosts}
               onRemove={handleRemovePost}
-              onExplore={() => router.back()}
+              onExplore={() => router.push('/(tabs)/feed' as never)}
             />
       )}
 
@@ -454,7 +454,7 @@ function OffersTab({ items, onRemove, onView, onExplore }: OffersTabProps) {
         icon={<Bookmark size={40} color="#E8F5EE" />}
         title="No saved offers"
         subtitle="Tap the bookmark on any offer to save it for later"
-        ctaLabel="Explore Offers"
+        ctaLabel="Explore Feed"
         onCta={onExplore}
       />
     );
@@ -562,7 +562,7 @@ function EventsTab({ upcoming, past, onView, onExplore }: EventsTabProps) {
         icon={<Calendar size={40} color="#E8F5EE" />}
         title="No events yet"
         subtitle="Events you show interest in will appear here"
-        ctaLabel="Explore Businesses"
+        ctaLabel="Explore Feed"
         onCta={onExplore}
       />
     );

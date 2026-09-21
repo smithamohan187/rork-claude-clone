@@ -1,13 +1,7 @@
 import { apiClient, getAccessToken, API_BASE_URL } from '../client';
 import { Platform } from 'react-native';
-
-const BASE_URL = API_BASE_URL.replace(/\/$/, '');
-
-function resolveUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url}`;
-}
+import { File as ExpoFile } from 'expo-file-system';
+import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 async function buildFormData(fieldName: string, uri: string): Promise<FormData> {
   const form = new FormData();
@@ -19,12 +13,10 @@ async function buildFormData(fieldName: string, uri: string): Promise<FormData> 
     const file = new File([blob], `${fieldName}.jpg`, { type: 'image/jpeg' });
     form.append(fieldName, file);
   } else {
-    // iOS / Android — native FormData handles the object shape
-    form.append(fieldName, {
-      uri,
-      name: `${fieldName}.jpg`,
-      type: 'image/jpeg',
-    } as any);
+    // expo/fetch (SDK 57+) only accepts string | Blob | {bytes()} FormData parts —
+    // the old {uri, name, type} object shape throws "Unsupported FormData part implementation".
+    const file = new ExpoFile(uri);
+    form.append(fieldName, file, `${fieldName}.jpg`);
   }
 
   return form;

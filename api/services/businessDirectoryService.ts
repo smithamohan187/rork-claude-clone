@@ -1,6 +1,7 @@
 // Service layer — wraps apiClient calls for the business directory endpoints.
 // Screens never call apiClient directly; they go through hooks, which call these functions.
 import { apiClient } from '@/api/client';
+import { resolveImageUrl as resolveLogoUrl } from '@/utils/resolveImageUrl';
 
 // Shape returned by GET /businessdirectory/categories
 export interface BusinessCategory {
@@ -31,18 +32,6 @@ export interface BusinessDirectoryResult {
   page: number;
 }
 
-// Strip trailing slash so we can safely append paths like /uploads/businesses/file.jpg
-const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-
-/**
- * Turn a relative logo path into an absolute URL.
- * React Native expo-image requires http:// — passing /uploads/... renders nothing.
- */
-function resolveLogoUrl(url: string | null): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;   // already absolute
-  return `${BASE_URL}${url}`;
-}
 
 /**
  * Fetch a page of businesses, optionally filtered by search text and category name.

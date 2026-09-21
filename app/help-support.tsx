@@ -13,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Surface, Searchbar, Divider, Dialog, Portal, Button } from 'react-native-paper';
 import {
   ArrowLeft,
-  MessageCircle,
   Mail,
   Phone,
   ChevronDown,
@@ -68,7 +67,6 @@ const FAQS: FAQ[] = [
 ];
 
 const QUICK_HELP = [
-  { id: 'chat', label: 'Chat with Us', icon: MessageCircle, color: '#3B82F6' },
   { id: 'email', label: 'Email Support', icon: Mail, color: '#0D9488' },
   { id: 'call', label: 'Call Us', icon: Phone, color: '#F59E0B' },
 ];
@@ -138,10 +136,7 @@ export default function HelpSupportScreen() {
 
   const handleQuickHelp = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (id === 'chat') {
-      console.log('[HelpSupport] Opening chat with support');
-      router.push('/chat/support' as any);
-    } else if (id === 'email') {
+    if (id === 'email') {
       console.log('[HelpSupport] Opening email composer');
       Linking.openURL('mailto:support@touchpoint.app?subject=Help%20Request');
     } else if (id === 'call') {
