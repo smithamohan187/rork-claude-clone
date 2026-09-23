@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ interface PillProps {
 
 const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress }: PillProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  const [imageFailed, setImageFailed] = useState<boolean>(false);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scale, {
@@ -57,7 +58,14 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
   const resolved = resolveAvatarUrl(
     profile.type === 'business' && profile.logoUrl ? profile.logoUrl : profile.avatarUrl
   );
+  const showImage = !!resolved && !imageFailed;
   const initial = (profile.displayName?.[0] ?? '?').toUpperCase();
+
+  // Reset the failure flag when the URL itself changes (e.g. after a fresh photo
+  // upload) — otherwise a pill that 404'd once stays stuck on initials forever.
+  useEffect(() => {
+    setImageFailed(false);
+  }, [resolved]);
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -70,8 +78,13 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
         testID={`profile-pill-${profile.id}`}
       >
         <View style={[styles.pillAvatarWrap, isActive && styles.pillAvatarWrapActive]}>
-          {resolved ? (
-            <Image source={{ uri: resolved }} style={styles.pillAvatar} contentFit="cover" />
+          {showImage ? (
+            <Image
+              source={{ uri: resolved }}
+              style={styles.pillAvatar}
+              contentFit="cover"
+              onError={() => setImageFailed(true)}
+            />
           ) : (
             <View style={[styles.pillAvatar, styles.pillAvatarFallback]}>
               <Text style={[styles.pillAvatarInitial, isActive && styles.pillAvatarInitialActive]}>
