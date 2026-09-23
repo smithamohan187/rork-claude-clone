@@ -1,16 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSocket } from '@/hooks/useSocket';
 import {
   getMessages,
-  sendMessage as sendMessageApi,
-  markRead,
   getOrCreateConversation,
   ChatMessage,
   ConversationType,
 } from '@/api/services/chatService';
-
-const POLL_INTERVAL_MS = 3000;
 
 interface UseConversationParams {
   conversationId?: string;
@@ -24,12 +21,14 @@ export interface OtherParty {
   businessId: string | null;
 }
 
-// Detail + polling hook for chat-detail. Resolves the conversation id (creating
-// it on demand from targetProfileId + type), loads + marks read, then polls for
-// new messages every 3s while the screen is focused. All timers and state writes
-// are torn down on blur/unmount so no update fires on an unmounted component.
+// Detail hook for chat-detail. Resolves the conversation id (creating it on
+// demand from targetProfileId + type) and loads initial history over REST, then
+// joins the conversation's socket room for real-time send/receive/read while the
+// screen is focused. All listeners/state writes are torn down on blur/unmount so
+// no update fires on an unmounted component.
 export function useConversation({ conversationId: initialId, targetProfileId, type }: UseConversationParams) {
   const { activeProfileId, authLoading, isAuthenticated } = useAuth();
+  const socket = useSocket();
   const [conversationId, setConversationId] = useState<string | null>(initialId ?? null);
   const [otherParty, setOtherParty] = useState<OtherParty | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -58,22 +57,16 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
 
   useFocusEffect(
     useCallback(() => {
-      if (authLoading || !isAuthenticated) return;
+      if (authLoading || !isAuthenticated || !socket) return;
       activeRef.current = true;
-      let interval: ReturnType<typeof setInterval> | null = null;
+      let joinedId: string | null = null;
 
-      const poll = async () => {
-        const cid = convIdRef.current;
-        if (!cid) return;
-        try {
-          const newer = await getMessages(cid, lastIdRef.current ?? undefined);
-          if (!activeRef.current) return;
-          const added = ingest(newer);
-          if (added) markRead(cid).catch(() => {});
-        } catch {
-          /* transient poll error — next tick retries */
-        }
+      const onNewMessage = (message: ChatMessage) => {
+        if (!activeRef.current || message.conversation_id !== convIdRef.current) return;
+        const added = ingest([message]);
+        if (added) socket.emit('mark_read', { conversationId: convIdRef.current });
       };
+      socket.on('new_message', onNewMessage);
 
       (async () => {
         setLoading(true);
@@ -101,23 +94,23 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
           knownIdsRef.current = new Set(initial.map((m) => m.id));
           lastIdRef.current = initial.length ? initial[initial.length - 1].id : null;
           setMessages(initial);
-          markRead(cid).catch(() => {});
+
+          joinedId = cid;
+          socket.emit('join_conversation', { conversationId: cid });
+          socket.emit('mark_read', { conversationId: cid });
         } catch (err) {
           if (activeRef.current) setError(err instanceof Error ? err.message : 'Failed to load chat');
         } finally {
           if (activeRef.current) setLoading(false);
         }
-
-        if (activeRef.current) {
-          interval = setInterval(poll, POLL_INTERVAL_MS);
-        }
       })();
 
       return () => {
         activeRef.current = false;
-        if (interval) clearInterval(interval);
+        socket.off('new_message', onNewMessage);
+        if (joinedId) socket.emit('leave_conversation', { conversationId: joinedId });
       };
-    }, [targetProfileId, type, ingest, authLoading, isAuthenticated]),
+    }, [targetProfileId, type, ingest, authLoading, isAuthenticated, socket]),
   );
 
   // Returns whether the send succeeded, so the caller (chat-detail) can restore
@@ -127,7 +120,7 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
     async (body: string): Promise<boolean> => {
       const text = body.trim();
       const cid = convIdRef.current;
-      if (!text || !cid) return false;
+      if (!text || !cid || !socket) return false;
 
       const tempId = `temp-${Date.now()}`;
       const optimistic: ChatMessage = {
@@ -140,7 +133,11 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
       setMessages((prev) => [...prev, optimistic]);
       setSending(true);
       try {
-        const saved = await sendMessageApi(cid, text);
+        const ack = await new Promise<{ success: boolean; message?: ChatMessage; error?: string }>((resolve) => {
+          socket.emit('send_message', { conversationId: cid, body: text }, resolve);
+        });
+        if (!ack.success || !ack.message) throw new Error(ack.error ?? 'Failed to send message');
+        const saved = ack.message;
         if (!activeRef.current) return true;
         knownIdsRef.current.add(saved.id);
         lastIdRef.current = saved.id;
@@ -156,7 +153,7 @@ export function useConversation({ conversationId: initialId, targetProfileId, ty
         if (activeRef.current) setSending(false);
       }
     },
-    [activeProfileId],
+    [activeProfileId, socket],
   );
 
   return { conversationId, otherParty, messages, loading, error, sending, send, myProfileId: activeProfileId };

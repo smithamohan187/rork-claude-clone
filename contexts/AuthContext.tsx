@@ -25,6 +25,7 @@ import {
 import { authApi, AuthTokens, SessionResponse, BackendProfile } from '@/api/auth.api';
 import type { AccountType, ProfileEntry } from '@/types';
 import { resolveImageUrl } from '@/utils/resolveImageUrl';
+import { disconnectSocket } from '@/api/socket';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AsyncStorage key — the only key this context owns.
@@ -356,6 +357,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       // Clear tokens first so any in-flight requests after this point fail cleanly.
       await clearTokens();
       setAccessTokenState(null);
+      disconnectSocket();
 
       // Remove persisted preferences so the next login starts fresh.
       await AsyncStorage.removeItem(ACCOUNT_TYPE_KEY);

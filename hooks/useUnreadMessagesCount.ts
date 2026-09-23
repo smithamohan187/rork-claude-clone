@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { getConversations } from '@/api/services/chatService';
 import { useAuth } from '@/contexts/AuthContext';
-
-const POLL_INTERVAL_MS = 15000;
+import { useSocket } from '@/hooks/useSocket';
 
 // Real, backend-derived unread count for the Chat tab badge — sums unread_count
-// across both business and friend conversations. Polls at a slower cadence than the
-// in-chat message poll (useConversation.ts) since this only drives a tab-bar badge.
+// across both business and friend conversations. Loads once on auth and then
+// re-derives in real time from the socket's conversation_updated event (fired on
+// every new message / read-state change for this profile), rather than polling.
 export function useUnreadMessagesCount(): number {
   const { isAuthenticated, authLoading } = useAuth();
+  const socket = useSocket();
   const [count, setCount] = useState<number>(0);
 
   useEffect(() => {
@@ -32,17 +33,19 @@ export function useUnreadMessagesCount(): number {
         );
         setCount(total);
       } catch {
-        /* transient poll error — next tick retries */
+        /* transient error — next conversation_updated event (or next mount) retries */
       }
     };
 
     load();
-    const interval = setInterval(load, POLL_INTERVAL_MS);
+    if (!socket) return () => { active = false; };
+
+    socket.on('conversation_updated', load);
     return () => {
       active = false;
-      clearInterval(interval);
+      socket.off('conversation_updated', load);
     };
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, socket]);
 
   return count;
 }

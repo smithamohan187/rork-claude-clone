@@ -1,11 +1,16 @@
 require('dotenv').config();
+const http = require('http');
 const app = require('./src/app');
 const cron = require('node-cron');
 const billingService = require('./src/modules/billing/billing.service');
+const { initSocket } = require('./src/realtime/socket');
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`[Server] Running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
 });
 
