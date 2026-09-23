@@ -304,6 +304,14 @@ async function getSessionByUserId(userId) {
      ORDER BY p.profile_type ASC`,
     [userId]
   );
+  // Same business-avatar-is-the-logo fallback as `activeProfile` above, applied per row —
+  // without this, a business row's avatar_url stays empty/stale in the profiles[] array
+  // even though its real logo is present on the joined `logo_url` column.
+  for (const profile of allProfiles) {
+    if (profile.profile_type === 'business') {
+      profile.avatar_url = profile.logo_url || profile.avatar_url;
+    }
+  }
 
   return { ...activeProfile, profiles: allProfiles };
 }

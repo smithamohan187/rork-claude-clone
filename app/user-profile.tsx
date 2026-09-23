@@ -338,22 +338,6 @@ export default function UserProfileScreen() {
               ) : null}
               <Divider style={styles.divider} />
               <List.Item
-                title="Manage Subscription"
-                description="Your plan, billing and invoices"
-                left={() => (
-                  <View style={[styles.settingsIcon, { backgroundColor: '#22C55E' + '12' }]}>
-                    <CreditCard size={18} color="#22C55E" />
-                  </View>
-                )}
-                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-                onPress={() => router.push('/manage-subscription' as any)}
-                style={styles.listItem}
-                titleStyle={styles.listItemTitle}
-                descriptionStyle={styles.listItemDesc}
-                testID="settings-manage-subscription"
-              />
-              <Divider style={styles.divider} />
-              <List.Item
                 title="Plan & Billing"
                 description="View and change your subscription plan"
                 left={() => (
@@ -368,29 +352,33 @@ export default function UserProfileScreen() {
                 descriptionStyle={styles.listItemDesc}
                 testID="settings-billing"
               />
-              <Divider style={styles.divider} />
-              <List.Item
-                title="AI Studio"
-                description="Generate offers, events & posts with AI"
-                left={() => (
-                  <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
-                    <Sparkles size={18} color={PURPLE} />
-                  </View>
-                )}
-                right={() => (
-                  <View style={styles.aiStudioRight}>
-                    <View style={styles.betaBadge}>
-                      <Text style={styles.betaBadgeText}>Beta</Text>
-                    </View>
-                    <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />
-                  </View>
-                )}
-                onPress={() => router.push('/ai-studio' as any)}
-                style={styles.listItem}
-                titleStyle={styles.listItemTitle}
-                descriptionStyle={styles.listItemDesc}
-                testID="settings-ai-studio"
-              />
+              {false && (
+                <>
+                  <Divider style={styles.divider} />
+                  <List.Item
+                    title="AI Studio"
+                    description="Generate offers, events & posts with AI"
+                    left={() => (
+                      <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
+                        <Sparkles size={18} color={PURPLE} />
+                      </View>
+                    )}
+                    right={() => (
+                      <View style={styles.aiStudioRight}>
+                        <View style={styles.betaBadge}>
+                          <Text style={styles.betaBadgeText}>Beta</Text>
+                        </View>
+                        <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />
+                      </View>
+                    )}
+                    onPress={() => router.push('/ai-studio' as any)}
+                    style={styles.listItem}
+                    titleStyle={styles.listItemTitle}
+                    descriptionStyle={styles.listItemDesc}
+                    testID="settings-ai-studio"
+                  />
+                </>
+              )}
               <Divider style={styles.divider} />
               <List.Item
                 title="Messages"

@@ -9,8 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Info, CheckCheck } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -76,6 +77,7 @@ function formatClock(iso: string): string {
 
 export default function ChatDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     id?: string;
     targetProfileId?: string;
@@ -119,6 +121,25 @@ export default function ChatDetailScreen() {
   const { showSnackbar } = useSnackbar();
   const [inputText, setInputText] = useState<string>('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
+
+  // Android's window resize (adjustResize) isn't reliable in Expo Go, and
+  // KeyboardAvoidingView's own height/padding animation was still leaving the
+  // input bar hidden behind the keyboard — so on Android we track the keyboard
+  // height directly and push the input bar above it ourselves.
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setAndroidKeyboardHeight(e.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setAndroidKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const scrollToEnd = useCallback((animated = true) => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated }));
@@ -253,7 +274,7 @@ export default function ChatDetailScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
         {loading && messages.length === 0 ? (
@@ -268,6 +289,7 @@ export default function ChatDetailScreen() {
         ) : (
           <FlatList
             ref={listRef}
+            style={styles.flex}
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
@@ -283,7 +305,11 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        <View style={styles.inputBar}>
+        <View style={[
+          styles.inputBar,
+          { paddingBottom: 24 + insets.bottom },
+          Platform.OS === 'android' && { marginBottom: androidKeyboardHeight },
+        ]}>
           <TextInput
             testID="message-input"
             value={inputText}

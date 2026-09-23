@@ -25,7 +25,7 @@ const pool = new Pool({
   password: process.env.DB_PASS,
   max: parseInt(process.env.DB_POOL_MAX) || 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 });
 
 // Test connection on startup

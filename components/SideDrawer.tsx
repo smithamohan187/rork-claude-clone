@@ -201,8 +201,10 @@ const SideDrawer = React.memo(function SideDrawer() {
 
   const handleSwitchToBusiness = useCallback(async () => {
     close();
-    await switchAccount(accountType === 'business' ? 'personal' : 'business');
-  }, [close, switchAccount, accountType]);
+    const target = accountType === 'business' ? 'personal' : 'business';
+    await switchAccount(target);
+    router.push('/(tabs)/feed' as never);
+  }, [close, switchAccount, accountType, router]);
 
   const handleLogout = useCallback(() => {
     close();

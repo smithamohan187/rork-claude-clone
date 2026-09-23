@@ -18,7 +18,6 @@ import { useRouter } from 'expo-router';
 
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Rss } from 'lucide-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
@@ -369,7 +368,7 @@ function RedeemSlide() {
   );
 }
 
-function ReadySlide({ onExplore, onFeed, onLogIn }: { onExplore: () => void; onFeed: () => void; onLogIn: () => void }) {
+function ReadySlide({ onExplore, onLogIn }: { onExplore: () => void; onLogIn: () => void }) {
   const glow = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -402,9 +401,6 @@ function ReadySlide({ onExplore, onFeed, onLogIn }: { onExplore: () => void; onF
           <Text style={[styles.subtext, { color: 'rgba(255,255,255,0.88)', marginBottom: 0 }]}>
             •  Explore businesses important to you
           </Text>
-          <Text style={[styles.subtext, { color: 'rgba(255,255,255,0.88)', marginBottom: 0 }]}>
-            •  Go to your Newsfeed
-          </Text>
         </View>
 
         <View style={styles.readyButtons}>
@@ -415,15 +411,6 @@ function ReadySlide({ onExplore, onFeed, onLogIn }: { onExplore: () => void; onF
             testID="ready-explore-btn"
           >
             <Text style={styles.primaryReadyText}>🔍  Explore Businesses Near Me</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryReadyBtn}
-            onPress={onFeed}
-            activeOpacity={0.8}
-            testID="ready-feed-btn"
-          >
-            <Text style={styles.secondaryReadyText}>Go to My Feed</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -501,22 +488,11 @@ export default function OnboardingScreen() {
     router.push('/(auth)/sign-up');
   }, [router, haptic, completeOnboarding]);
 
-  const handleFeed = useCallback(() => {
-    haptic('light');
-    void completeOnboarding();
-    router.push('/(tabs)/feed' as never);
-  }, [router, haptic, completeOnboarding]);
-
   const handleLogIn = useCallback(() => {
     haptic('light');
     void completeOnboarding();
     router.push('/(auth)/sign-in');
   }, [router, haptic, completeOnboarding]);
-
-  const handleBrowseFeeds = useCallback(() => {
-    haptic('light');
-    router.push('/(tabs)/feed' as never);
-  }, [router, haptic]);
 
   const onScroll = useMemo(
     () =>
@@ -546,11 +522,11 @@ export default function OnboardingScreen() {
         body = <RedeemSlide />;
         break;
       case 'ready':
-        body = <ReadySlide onExplore={handleExplore} onFeed={handleFeed} onLogIn={handleLogIn} />;
+        body = <ReadySlide onExplore={handleExplore} onLogIn={handleLogIn} />;
         break;
     }
     return <View style={{ width, height: '100%' }}>{body}</View>;
-  }, [handleExplore, handleFeed, handleLogIn]);
+  }, [handleExplore, handleLogIn]);
 
   const isReadySlide = activeIndex === SLIDES.length - 1;
 
@@ -625,17 +601,6 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         )}
 
-        {!isReadySlide && (
-          <TouchableOpacity
-            style={styles.feedsButton}
-            onPress={handleBrowseFeeds}
-            activeOpacity={0.7}
-            testID="view-feeds-btn"
-          >
-            <Rss size={14} color="rgba(255,255,255,0.85)" strokeWidth={2} />
-            <Text style={styles.feedsButtonText}>Browse Feeds</Text>
-          </TouchableOpacity>
-        )}
       </SafeAreaView>
       </View>
     </View>
@@ -1020,20 +985,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
-  secondaryReadyBtn: {
-    height: 52,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  secondaryReadyText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600' as const,
-  },
   loginLink: {
     alignItems: 'center' as const,
     paddingVertical: 12,
@@ -1091,20 +1042,6 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: BRAND_DEEP,
     letterSpacing: 0.2,
-  },
-  feedsButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 6,
-    paddingVertical: 8,
-    marginTop: 4,
-  },
-  feedsButtonText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: 'rgba(255,255,255,0.85)',
-    textDecorationLine: 'underline' as const,
   },
 });
 

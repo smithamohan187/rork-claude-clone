@@ -16,7 +16,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
@@ -117,6 +117,7 @@ const welcomePoints = rewardRules.find(r => r.action === 'Welcome')?.points ?? 2
 
 export default function ReferralRequestScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ type?: string }>();
   const { currentUser, accountType, businessProfileData } = useAuth();
   const { createReferralRequest } = useReferrals();
@@ -559,7 +560,7 @@ export default function ReferralRequestScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
     >
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={s.previewContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.previewContainer, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={s.recipientCard}>
         <Text style={s.recipientLabel}>
           Sending to ({totalSelected} contact{totalSelected !== 1 ? 's' : ''})
@@ -906,7 +907,7 @@ export default function ReferralRequestScreen() {
           />
 
           {mockForwardTotal > 0 && (
-            <View style={s.fwdBottomBar}>
+            <View style={[s.fwdBottomBar, { paddingBottom: insets.bottom + 12 }]}>
               <TouchableOpacity
                 style={[s.fwdContinueBtn, { backgroundColor: typeConfig.accentColor }]}
                 activeOpacity={0.85}
@@ -985,7 +986,7 @@ export default function ReferralRequestScreen() {
             )}
           </ScrollView>
 
-          <View style={s.fwdPageBtnBar}>
+          <View style={[s.fwdPageBtnBar, { paddingBottom: insets.bottom + 12 }]}>
             <TouchableOpacity
               style={[s.fwdPageBtn, { backgroundColor: typeConfig.accentColor }]}
               activeOpacity={0.8}

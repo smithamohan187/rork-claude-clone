@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, Search, Send, Users, X } from 'lucide-react-native';
 import { shareContentToFriends, ReferContentType } from '@/api/services/sharesService';
 import { getMyReferrals } from '@/api/services/referralService';
@@ -51,6 +52,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
   onError,
 }: Props) {
   const { authLoading, isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
   const [friends, setFriends] = useState<ChatFriend[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
@@ -218,7 +220,7 @@ export const ReferOfferSheet = React.memo(function ReferOfferSheet({
             }}
           />
 
-          <View style={styles.bottomBar}>
+          <View style={[styles.bottomBar, { paddingBottom: (Platform.OS === 'ios' ? 28 : 14) + insets.bottom }]}>
             <Pressable
               disabled={selected.size === 0 || sending}
               onPress={handleSend}

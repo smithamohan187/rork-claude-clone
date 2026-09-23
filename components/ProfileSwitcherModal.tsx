@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
+  const router = useRouter();
   const { authUser, accountType, switchAccount, profiles } = useAuth();
   const personalProfile = profiles.find(p => p.type === 'personal');
   const businessProfile  = profiles.find(p => p.type === 'business');
@@ -96,6 +98,7 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
               onPress={async () => {
                 await switchAccount('personal');
                 handleClose();
+                router.push('/(tabs)/feed' as never);
               }}
               activeOpacity={0.7}
               testID="switcher-personal"
@@ -137,6 +140,7 @@ export default function ProfileSwitcherModal({ visible, onDismiss }: Props) {
                   onPress={async () => {
                     await switchAccount('business');
                     handleClose();
+                    router.push('/(tabs)/feed' as never);
                   }}
                   activeOpacity={0.7}
                   testID="switcher-business"

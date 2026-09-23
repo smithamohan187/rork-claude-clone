@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -199,6 +199,13 @@ const ActivityRow = React.memo(function ActivityRow({ item }: { item: RecentActi
   );
 });
 
+function getChipInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const second = parts[1]?.[0] ?? '';
+  return (first + second).toUpperCase() || '?';
+}
+
 export default function BusinessDashboard() {
   const { authUser, activeProfile, profiles } = useAuth();
   const router = useRouter();
@@ -207,6 +214,11 @@ export default function BusinessDashboard() {
   const redemptions = useRecentRedemptions();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
+  const [chipAvatarFailed, setChipAvatarFailed] = useState<boolean>(false);
+
+  useEffect(() => {
+    setChipAvatarFailed(false);
+  }, [activeProfile?.avatarUrl]);
   const hasMultipleProfiles = profiles.length > 1;
 
   const handleViewAsCustomer = useCallback(() => {
@@ -297,7 +309,20 @@ export default function BusinessDashboard() {
                 activeOpacity={0.85}
                 testID="biz-profile-switcher-chip"
               >
-                <Image source={{ uri: activeProfile?.avatarUrl }} style={styles.profileChipAvatar} contentFit="cover" />
+                {activeProfile?.avatarUrl && !chipAvatarFailed ? (
+                  <Image
+                    source={{ uri: activeProfile.avatarUrl }}
+                    style={styles.profileChipAvatar}
+                    contentFit="cover"
+                    onError={() => setChipAvatarFailed(true)}
+                  />
+                ) : (
+                  <View style={[styles.profileChipAvatar, styles.profileChipAvatarFallback]}>
+                    <Text style={styles.profileChipAvatarInitials}>
+                      {getChipInitials(activeProfile?.displayName ?? 'Business')}
+                    </Text>
+                  </View>
+                )}
                 <Text style={styles.profileChipName} numberOfLines={1}>{activeProfile?.displayName ?? 'Business'}</Text>
                 <View style={styles.profileChipBadge}>
                   <Text style={styles.profileChipBadgeText}>Business</Text>
@@ -597,6 +622,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.6)',
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  profileChipAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileChipAvatarInitials: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: '#fff',
   },
   profileChipName: {
     flex: 1,

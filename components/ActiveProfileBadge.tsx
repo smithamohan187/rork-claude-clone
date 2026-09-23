@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown } from 'lucide-react-native';
@@ -30,6 +30,11 @@ export default function ActiveProfileBadge({ testID }: Props) {
   const hasMultiple = profiles.length > 1;
   const displayName = authUser?.name ?? authUser?.email ?? '';
   const avatarUrl = authUser?.avatar ?? '';
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [avatarUrl]);
 
   const handlePress = useCallback(() => {
     if (!hasMultiple) return;
@@ -52,11 +57,12 @@ export default function ActiveProfileBadge({ testID }: Props) {
         accessibilityLabel={`Active profile ${displayName}. ${hasMultiple ? 'Tap to switch profile.' : ''}`}
         testID={testID ?? 'active-profile-badge'}
       >
-        {avatarUrl ? (
+        {avatarUrl && !imgFailed ? (
           <Image
             source={{ uri: avatarUrl }}
             style={styles.avatar}
             contentFit="cover"
+            onError={() => setImgFailed(true)}
           />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>

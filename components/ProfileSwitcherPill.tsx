@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSnackbar } from '@/contexts/SnackbarContext';
@@ -98,6 +99,7 @@ const Pill = React.memo(function Pill({ profile, isActive, isSwitching, onPress 
 });
 
 export default function ProfileSwitcherPill() {
+  const router = useRouter();
   const { activeProfile, profiles, switchProfile } = useAuth();
   const { showSnackbar } = useSnackbar();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -110,13 +112,14 @@ export default function ProfileSwitcherPill() {
       try {
         await switchProfile(profile.id);
         showSnackbar(`Switched to ${profile.displayName}`);
+        router.push('/(tabs)/feed' as never);
       } catch (err) {
         console.log('[ProfileSwitcherPill] switch error', err);
       } finally {
         setSwitchingId(null);
       }
     },
-    [activeProfile?.id, switchProfile, showSnackbar],
+    [activeProfile?.id, switchProfile, showSnackbar, router],
   );
 
   if (profiles.length === 0) return null;
