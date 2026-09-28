@@ -1256,7 +1256,13 @@ function OffersTab({
               testID={`offer-${offer.id}`}
             >
               {offer.image_url ? (
-                <Image source={{ uri: offer.image_url }} style={styles.offerImage} contentFit="cover" />
+                <TouchableOpacity
+                  onPress={() => onOpen(offer)}
+                  activeOpacity={0.9}
+                  testID={`offer-image-${offer.id}`}
+                >
+                  <Image source={{ uri: offer.image_url }} style={styles.offerImage} contentFit="cover" />
+                </TouchableOpacity>
               ) : null}
               <View style={styles.offerCardTop}>
                 <View style={styles.discountBadge}>
@@ -1485,7 +1491,13 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                 <Text style={styles.eventDateDay}>{getDay(event.starts_at)}</Text>
               </View>
               {event.image_url ? (
-                <Image source={{ uri: event.image_url }} style={styles.eventImage} contentFit="cover" />
+                <TouchableOpacity
+                  onPress={() => openEvent(event.id)}
+                  activeOpacity={0.9}
+                  testID={`event-image-${event.id}`}
+                >
+                  <Image source={{ uri: event.image_url }} style={styles.eventImage} contentFit="cover" />
+                </TouchableOpacity>
               ) : null}
               <View style={styles.eventInfo}>
                 <View style={styles.eventTitleRow}>

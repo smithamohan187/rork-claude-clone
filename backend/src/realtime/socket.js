@@ -64,7 +64,9 @@ function initSocket(httpServer) {
     socket.on('send_message', async ({ conversationId, body } = {}, ack) => {
       try {
         const message = await chatService.sendMessage(socket.data.userId, conversationId, body);
-        io.to(conversationId).emit('new_message', message);
+        // socket.to() excludes the sender — they already get this message via the
+        // ack below; io.to() would double-deliver it (duplicate message client-side).
+        socket.to(conversationId).emit('new_message', message);
 
         const participants = await conversationModel.getParticipants(conversationId);
         participants.forEach((p) => {

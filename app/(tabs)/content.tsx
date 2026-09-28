@@ -238,6 +238,26 @@ export default function ManageContentScreen() {
     [router],
   );
 
+  const handleOpenItem = useCallback(
+    (item: ContentItem) => {
+      if (item.type === 'offer') {
+        const o = item as unknown as Offer;
+        router.push({ pathname: '/view-offer', params: { offerId: o.id, businessId: o.business_id } } as never);
+      } else if (item.type === 'event') {
+        const e = item as unknown as Event;
+        router.push({ pathname: '/view-event', params: { eventId: e.id, businessId: e.business_id } } as never);
+      }
+    },
+    [router],
+  );
+
+  const handleOpenPost = useCallback(
+    (post: Post) => {
+      router.push({ pathname: '/view-post', params: { postId: post.id, businessId: post.business_id } } as never);
+    },
+    [router],
+  );
+
   const handleConfirmAction = useCallback(async () => {
     const { action, item } = confirm;
     if (!item || !action) {
@@ -403,7 +423,12 @@ export default function ManageContentScreen() {
 
     return (
       <Surface key={item.id} style={styles.card} elevation={1}>
-        <View style={styles.cardTop}>
+        <TouchableOpacity
+          style={styles.cardTop}
+          onPress={() => handleOpenItem(item)}
+          activeOpacity={0.85}
+          testID={`open-${item.id}`}
+        >
           {renderThumbnail(item)}
           <View style={styles.cardTopText}>
             <Text style={styles.cardTitle} numberOfLines={previewLines}>
@@ -424,7 +449,7 @@ export default function ManageContentScreen() {
             ) : null}
             <Text style={styles.cardSubtitle}>{renderSubtitle(item)}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <Divider style={styles.cardDivider} />
 
@@ -514,7 +539,12 @@ export default function ManageContentScreen() {
 
   const renderPostCard = (post: Post) => (
     <Surface key={post.id} style={styles.card} elevation={1}>
-      <View style={styles.cardTop}>
+      <TouchableOpacity
+        style={styles.cardTop}
+        onPress={() => handleOpenPost(post)}
+        activeOpacity={0.85}
+        testID={`open-post-${post.id}`}
+      >
         {post.image_url ? (
           <Image source={{ uri: post.image_url }} style={styles.thumb} />
         ) : (
@@ -533,7 +563,7 @@ export default function ManageContentScreen() {
           ) : null}
           <Text style={styles.cardSubtitle}>Posted {relativeTime(post.created_at)}</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       <Divider style={styles.cardDivider} />
 
