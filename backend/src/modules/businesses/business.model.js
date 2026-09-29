@@ -118,6 +118,14 @@ async function setOnboardingComplete(businessId) {
   );
 }
 
+async function getOnboardingStatus(businessId) {
+  const { rows } = await query(
+    'SELECT onboarding_complete FROM businesses WHERE id = $1',
+    [businessId]
+  );
+  return rows[0] ?? null;
+}
+
 /**
  * Fetch a single business by its primary-key id for the public profile view.
  * JOINs category name, subscriber count, and rating aggregates in one query
@@ -235,6 +243,7 @@ async function setUserActiveProfile(client, userId, profileId) {
 async function getDashboardSummary(businessId) {
   const { rows } = await query(
     `SELECT
+       b.onboarding_complete,
        COALESCE(
          (SELECT COUNT(*)::int FROM subscriptions
           WHERE business_id = $1 AND is_active = true),
@@ -259,7 +268,23 @@ async function getDashboardSummary(businessId) {
           WHERE business_id = $1
             AND status = 'used'),
          0
-       ) AS total_redemption_count`,
+       ) AS total_redemption_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM posts WHERE business_id = $1),
+         0
+       ) AS post_count,
+       COALESCE(
+         (SELECT COUNT(*)::int FROM customer_invites WHERE business_id = $1),
+         0
+       ) AS invite_count,
+       EXISTS(
+         SELECT 1 FROM rewards_catalog WHERE business_id = $1
+       ) AS has_rewards,
+       (
+         SELECT status FROM business_subscriptions WHERE business_id = $1
+       ) AS subscription_status
+     FROM businesses b
+     WHERE b.id = $1`,
     [businessId]
   );
   return rows[0];
@@ -276,6 +301,7 @@ module.exports = {
   updateBusinessLogo,
   updateBusinessCoverPhoto,
   setOnboardingComplete,
+  getOnboardingStatus,
   getBusinessByProfileId,
   getBusinessById,
   insertBusinessProfile,

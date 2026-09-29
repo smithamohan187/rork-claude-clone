@@ -7,6 +7,7 @@ const {
   updateBusinessLogo,
   updateBusinessCoverPhoto,
   setOnboardingComplete,
+  getOnboardingStatus,
   getBusinessByProfileId,
   getBusinessById,
   insertBusinessProfile,
@@ -220,6 +221,17 @@ async function getBusinessScanCode(businessId, requestingUserId) {
   return { businessId, url: `${SHARE_BASE_URL}/b/${businessId}` };
 }
 
+// Shared gate used by offers/events/customer-invites: a business may only post offers/events or
+// invite customers once its profile is marked complete AND its platform subscription has at
+// least started (active or trialing — the checklist unlocks as soon as the Stripe trial starts,
+// not once it ends). Reuses the same isSubscriptionActive check the directory/feed visibility
+// gate already relies on, so "trial" and "active" are treated identically everywhere.
+async function isBusinessUnlocked(businessId) {
+  const status = await getOnboardingStatus(businessId);
+  if (!status?.onboarding_complete) return false;
+  return billingService.isSubscriptionActive(businessId);
+}
+
 async function fetchDashboardSummary(userId) {
   const businessProfile = await getBusinessProfileByUserId(userId);
   if (!businessProfile) return null;
@@ -308,4 +320,5 @@ module.exports = {
   getBusinessScanCode,
   renderBusinessScanPageHtml,
   fetchDashboardSummary,
+  isBusinessUnlocked,
 };

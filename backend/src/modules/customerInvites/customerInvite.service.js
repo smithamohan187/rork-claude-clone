@@ -1,6 +1,7 @@
 const { query, getClient } = require('../../config/database');
 const customerInviteModel = require('./customerInvite.model');
 const subscriptionModel = require('../subscriptions/subscription.model');
+const businessService = require('../businesses/business.service');
 const { SHARE_BASE_URL } = require('../../config/shareUrl');
 
 // Lazy require to avoid a circular dependency: subscription.service already requires
@@ -57,8 +58,29 @@ function resolveIdentifier({ name, email, phone }) {
   };
 }
 
+// Resolves the caller's OWN business server-side rather than trusting the client-supplied
+// business_id — createCustomerInvite/bulkCreateCustomerInvites previously trusted the body's
+// business_id entirely (unlike offers/events, which always resolve ownership first). A mismatch
+// between the caller's real business and a supplied business_id is rejected rather than silently
+// substituted, so a caller who passes no business_id (or their own) is unaffected.
+async function resolveOwnedBusinessId(userId, requestedBusinessId) {
+  const ownedBusinessId = await subscriptionModel.getBusinessIdByUserId(userId);
+  if (!ownedBusinessId) throw Object.assign(new Error('No business found for this user'), { status: 403 });
+  if (requestedBusinessId && requestedBusinessId !== ownedBusinessId) {
+    throw Object.assign(new Error('Not authorised to send invites for this business'), { status: 403 });
+  }
+  return ownedBusinessId;
+}
+
 async function createCustomerInvite(userId, { business_id, channel, name, email, phone }) {
   const inviter_profile_id = await resolveProfileId(userId);
+  const ownedBusinessId = await resolveOwnedBusinessId(userId, business_id);
+  if (!(await businessService.isBusinessUnlocked(ownedBusinessId))) {
+    throw Object.assign(
+      new Error('Complete your business profile and start your Stripe trial to invite customers'),
+      { status: 403 }
+    );
+  }
 
   const resolved = resolveIdentifier({ name, email, phone });
   if (resolved.error) throw Object.assign(new Error(resolved.error), { status: 400 });
@@ -66,7 +88,7 @@ async function createCustomerInvite(userId, { business_id, channel, name, email,
   const referral_code = generateReferralCode();
   const row = await customerInviteModel.insertInvite(null, {
     inviter_profile_id,
-    business_id,
+    business_id: ownedBusinessId,
     channel,
     invitee_identifier: resolved.invitee_identifier,
     invitee_email: resolved.invitee_email,
@@ -82,6 +104,13 @@ async function createCustomerInvite(userId, { business_id, channel, name, email,
 // non-duplicate rows in a single transaction. Returns a per-row status report.
 async function bulkCreateCustomerInvites(userId, { business_id, rows }) {
   const inviter_profile_id = await resolveProfileId(userId);
+  const ownedBusinessId = await resolveOwnedBusinessId(userId, business_id);
+  if (!(await businessService.isBusinessUnlocked(ownedBusinessId))) {
+    throw Object.assign(
+      new Error('Complete your business profile and start your Stripe trial to invite customers'),
+      { status: 403 }
+    );
+  }
 
   const seenInFile = new Set();
   const results = [];
@@ -124,7 +153,7 @@ async function bulkCreateCustomerInvites(userId, { business_id, rows }) {
       const referral_code = generateReferralCode();
       const row = await customerInviteModel.insertInvite(client, {
         inviter_profile_id,
-        business_id,
+        business_id: ownedBusinessId,
         channel: 'csv',
         invitee_identifier: resolved.invitee_identifier,
         invitee_email: resolved.invitee_email,

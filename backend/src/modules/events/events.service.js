@@ -1,6 +1,7 @@
 // events.service.js — business logic for the events module. No pool.query() calls.
 const eventsModel = require('./events.model');
 const notificationsService = require('../notifications/notifications.service');
+const businessService = require('../businesses/business.service');
 const { getClient } = require('../../config/database');
 
 async function verifyEventOwnership(userId, eventId) {
@@ -17,6 +18,12 @@ async function verifyEventOwnership(userId, eventId) {
 async function createEvent(userId, payload) {
   const businessId = await eventsModel.getBusinessIdByUserId(userId);
   if (!businessId) throw new Error('No business found for this user');
+  if (!(await businessService.isBusinessUnlocked(businessId))) {
+    throw Object.assign(
+      new Error('Complete your business profile and start your Stripe trial to post events'),
+      { status: 403 }
+    );
+  }
 
   const client = await getClient();
   let event;

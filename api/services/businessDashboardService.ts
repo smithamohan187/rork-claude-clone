@@ -5,6 +5,11 @@ export interface DashboardSummary {
   active_offer_count: number;
   upcoming_event_count: number;
   total_redemption_count: number;
+  onboarding_complete: boolean;
+  post_count: number;
+  invite_count: number;
+  has_rewards: boolean;
+  subscription_status: 'active' | 'cancelled' | 'expired' | 'trial' | null;
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {

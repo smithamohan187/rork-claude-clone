@@ -2,6 +2,7 @@ const offersModel = require('./offers.model');
 const notificationsService = require('../notifications/notifications.service');
 const likesModel = require('../likes/likes.model');
 const commentsModel = require('../comments/comments.model');
+const businessService = require('../businesses/business.service');
 const { getClient } = require('../../config/database');
 
 async function verifyOfferOwnership(userId, offerId) {
@@ -18,6 +19,12 @@ async function verifyOfferOwnership(userId, offerId) {
 async function createOffer(userId, payload) {
   const businessId = await offersModel.getBusinessIdByUserId(userId);
   if (!businessId) throw new Error('No business found for this user');
+  if (!(await businessService.isBusinessUnlocked(businessId))) {
+    throw Object.assign(
+      new Error('Complete your business profile and start your Stripe trial to post offers'),
+      { status: 403 }
+    );
+  }
 
   const client = await getClient();
   let offer;

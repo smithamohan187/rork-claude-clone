@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
+import SetupChecklist from '@/components/business/SetupChecklist';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -374,6 +375,8 @@ export default function BusinessDashboard() {
             );
           })}
         </View>
+
+        <SetupChecklist summary={summary} />
 
         <Pressable
           onPress={handleManageContent}

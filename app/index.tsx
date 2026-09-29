@@ -42,20 +42,32 @@ const GREEN = BRAND_GREEN;
 const GREEN_SOFT = 'rgba(255,255,255,0.15)';
 
 const ONBOARDING_KEY = 'onboarding_complete';
+const ROLE_KEY = 'selected_role';
 
-type SlideId = 'welcome' | 'subscribe' | 'refer' | 'earn' | 'redeem' | 'ready';
+type SlideId =
+  | 'welcome' | 'subscribe' | 'refer' | 'earn' | 'redeem' | 'ready'
+  | 'biz-welcome' | 'biz-discover-offers' | 'biz-grow-loyalty' | 'biz-ready';
+
+type Role = 'customer' | 'business';
 
 interface SlideMeta {
   id: SlideId;
 }
 
-const SLIDES: SlideMeta[] = [
+const CUSTOMER_SLIDES: SlideMeta[] = [
   { id: 'welcome' },
   { id: 'subscribe' },
   { id: 'refer' },
   { id: 'earn' },
   { id: 'redeem' },
   { id: 'ready' },
+];
+
+const BUSINESS_SLIDES: SlideMeta[] = [
+  { id: 'biz-welcome' },
+  { id: 'biz-discover-offers' },
+  { id: 'biz-grow-loyalty' },
+  { id: 'biz-ready' },
 ];
 
 interface Confetti {
@@ -433,6 +445,233 @@ function ReadySlide({ onExplore, onLogIn }: { onExplore: () => void; onLogIn: ()
   );
 }
 
+function BizWelcomeSlide() {
+  return (
+    <View style={styles.slideInner}>
+      <ConfettiLayer />
+      <View style={styles.slideContent}>
+        <PulsingView scaleTo={1.06} duration={1200}>
+          <View style={styles.iconHaloGold}>
+            <MaterialCommunityIcons name="storefront-outline" size={56} color={GOLD} />
+          </View>
+        </PulsingView>
+        <Text style={styles.heading}>Welcome, Business Owner!</Text>
+        <Text style={styles.subtitle}>Grow your business with TouchPoint</Text>
+        <Text style={styles.subtext}>
+          Get discovered by new customers, run offers and events, and build a loyalty program that keeps people coming back.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function BizDiscoverOffersSlide() {
+  const actions = [
+    { emoji: '📍', label: 'Get listed in the Business Directory' },
+    { emoji: '🏷️', label: 'Post exclusive offers & discounts' },
+    { emoji: '📅', label: 'Create events customers can join' },
+    { emoji: '📣', label: 'Reach subscribers with updates' },
+  ];
+  return (
+    <View style={styles.slideInner}>
+      <View style={styles.slideContent}>
+        <PulsingView scaleTo={1.05}>
+          <View style={styles.iconHaloGold}>
+            <MaterialCommunityIcons name="bullhorn-outline" size={56} color={GOLD} />
+          </View>
+        </PulsingView>
+
+        <Text style={styles.heading}>Get discovered & run offers</Text>
+        <Text style={styles.subtext}>
+          Show up where local customers are already looking, and give them a reason to walk through your door.
+        </Text>
+
+        <View style={styles.earnList}>
+          {actions.map((a, i) => (
+            <StaggeredFadeIn key={a.label} delay={200 + i * 140}>
+              <View style={styles.earnRow}>
+                <View style={styles.earnIcon}>
+                  <Text style={styles.earnEmoji}>{a.emoji}</Text>
+                </View>
+                <Text style={styles.earnLabel}>{a.label}</Text>
+              </View>
+            </StaggeredFadeIn>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function BizGrowLoyaltySlide() {
+  const perks = ['Points', 'Tiers', 'Rewards'];
+  const grid = [
+    { emoji: '🎯', label: 'Loyalty Program', sub: 'Reward repeat customers' },
+    { emoji: '🤝', label: 'Invite Customers', sub: 'Turn visitors into subscribers' },
+    { emoji: '📈', label: 'Grow Your Base', sub: 'Stay top of mind, every visit' },
+    { emoji: '⭐', label: 'Build Trust', sub: 'Reviews & ratings from real fans' },
+  ];
+  return (
+    <View style={styles.slideInner}>
+      <View style={styles.slideContent}>
+        <PulsingView scaleTo={1.05}>
+          <View style={styles.iconHaloGold}>
+            <MaterialCommunityIcons name="chart-line" size={56} color={GOLD} />
+          </View>
+        </PulsingView>
+
+        <Text style={styles.heading}>Build loyalty, grow customers</Text>
+        <Text style={styles.subtext}>
+          Set up a rewards program and turn first-time visitors into regulars.
+        </Text>
+
+        <View style={styles.chipRow}>
+          {perks.map((p, i) => (
+            <StaggeredFadeIn key={p} delay={250 + i * 220}>
+              <View style={styles.perkChip}>
+                <Text style={styles.perkChipText}>{p}</Text>
+              </View>
+            </StaggeredFadeIn>
+          ))}
+        </View>
+
+        <View style={styles.grid2}>
+          {grid.map((g, i) => (
+            <StaggeredFadeIn key={g.label} delay={500 + i * 120} style={styles.gridCellWrap}>
+              <View style={styles.gridCell}>
+                <Text style={styles.gridEmoji}>{g.emoji}</Text>
+                <Text style={styles.gridLabel}>{g.label}</Text>
+                <Text style={styles.gridSub}>{g.sub}</Text>
+              </View>
+            </StaggeredFadeIn>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function BizReadySlide({ onSetup, onLogIn }: { onSetup: () => void; onLogIn: () => void }) {
+  const glow = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0.5, duration: 1400, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glow]);
+
+  return (
+    <View style={styles.slideInner}>
+      <View style={styles.slideContent}>
+        <View style={styles.rocketWrap}>
+          <Animated.View style={[styles.rocketGlow, { opacity: glow }]} />
+          <PulsingView scaleTo={1.1} duration={1100}>
+            <View style={styles.iconHaloGold}>
+              <MaterialCommunityIcons name="storefront-outline" size={56} color={GOLD} />
+            </View>
+          </PulsingView>
+        </View>
+
+        <Text style={[styles.heading, { color: '#FFFFFF' }]}>Ready to get listed?</Text>
+        <View style={{ marginBottom: 18, gap: 10 }}>
+          <Text style={[styles.subtext, { color: 'rgba(255,255,255,0.88)', marginBottom: 0 }]}>
+            •  Set up takes just a couple of minutes
+          </Text>
+          <Text style={[styles.subtext, { color: 'rgba(255,255,255,0.88)', marginBottom: 0 }]}>
+            •  Finish your profile anytime from your dashboard
+          </Text>
+        </View>
+
+        <View style={styles.readyButtons}>
+          <TouchableOpacity
+            style={styles.primaryReadyBtn}
+            onPress={onSetup}
+            activeOpacity={0.85}
+            testID="ready-setup-business-btn"
+          >
+            <Text style={styles.primaryReadyText}>🏪  Set Up My Business</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onLogIn}
+            activeOpacity={0.7}
+            style={styles.loginLink}
+            testID="login-link-business"
+          >
+            <Text style={styles.loginLinkText}>
+              Already have an account? <Text style={styles.loginLinkBold}>Log In</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.bottomNote}>
+          You can revisit this guide anytime from Profile → Help → Getting Started.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function RoleSelectScreen({ onSelectRole }: { onSelectRole: (role: Role) => void }) {
+  return (
+    <>
+      <SafeAreaView style={styles.safeArea} edges={['top']} pointerEvents="box-none">
+        <View style={styles.topBar}>
+          <View style={styles.logoRow}>
+            <View style={[styles.logoDot, { backgroundColor: '#FFFFFF' }]} />
+            <Text style={[styles.logoText, { color: '#FFFFFF' }]}>TouchPoint</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      <View style={styles.slideInner}>
+        <View style={styles.slideContent}>
+          <Text style={styles.heading}>How will you use TouchPoint?</Text>
+          <Text style={styles.subtext}>
+            Pick the path that fits you best — you can always add a business later.
+          </Text>
+
+          <View style={styles.roleCardList}>
+            <TouchableOpacity
+              style={styles.roleCard}
+              activeOpacity={0.85}
+              onPress={() => onSelectRole('customer')}
+              testID="role-customer-btn"
+            >
+              <View style={styles.iconHaloGold}>
+                <MaterialCommunityIcons name="account-outline" size={44} color={GOLD} />
+              </View>
+              <Text style={styles.roleCardTitle}>I&apos;m a Customer</Text>
+              <Text style={styles.roleCardSubtext}>
+                Discover businesses, earn points, redeem rewards.
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.roleCard}
+              activeOpacity={0.85}
+              onPress={() => onSelectRole('business')}
+              testID="role-business-btn"
+            >
+              <View style={styles.iconHaloGold}>
+                <MaterialCommunityIcons name="storefront-outline" size={44} color={GOLD} />
+              </View>
+              <Text style={styles.roleCardTitle}>I&apos;m a Business Owner</Text>
+              <Text style={styles.roleCardSubtext}>
+                List your business, run offers, build loyalty.
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </>
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Main component
 // ────────────────────────────────────────────────────────────────────────────
@@ -441,13 +680,24 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const flatListRef = useRef<FlatList<SlideMeta>>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  const [role, setRole] = useState<Role | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  const activeSlides = role === 'business' ? BUSINESS_SLIDES : CUSTOMER_SLIDES;
 
   const completeOnboarding = useCallback(async () => {
     try {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     } catch (e) {
       console.log('[Onboarding] save error', e);
+    }
+  }, []);
+
+  const persistRole = useCallback(async (selected: Role) => {
+    try {
+      await AsyncStorage.setItem(ROLE_KEY, selected);
+    } catch (e) {
+      console.log('[Onboarding] role save error', e);
     }
   }, []);
 
@@ -471,28 +721,46 @@ export default function OnboardingScreen() {
 
   const handleNext = useCallback(() => {
     haptic('light');
-    if (activeIndex < SLIDES.length - 1) {
+    if (activeIndex < activeSlides.length - 1) {
       flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
     }
-  }, [activeIndex, haptic]);
+  }, [activeIndex, activeSlides.length, haptic]);
+
+  const handleSelectRole = useCallback((selected: Role) => {
+    haptic('light');
+    setActiveIndex(0);
+    scrollX.setValue(0);
+    setRole(selected);
+  }, [haptic, scrollX]);
 
   const handleSkip = useCallback(() => {
     haptic('light');
     void completeOnboarding();
-    router.push('/(auth)/sign-up');
-  }, [router, haptic, completeOnboarding]);
+    if (role) void persistRole(role);
+    if (role === 'business') {
+      router.push('/(auth)/business-sign-up' as never);
+    } else {
+      router.push('/(auth)/sign-up' as never);
+    }
+  }, [router, haptic, completeOnboarding, persistRole, role]);
 
   const handleExplore = useCallback(() => {
     haptic('medium');
     void completeOnboarding();
-    router.push('/(auth)/sign-up');
-  }, [router, haptic, completeOnboarding]);
+    if (role) void persistRole(role);
+    if (role === 'business') {
+      router.push('/(auth)/business-sign-up' as never);
+    } else {
+      router.push('/(auth)/sign-up' as never);
+    }
+  }, [router, haptic, completeOnboarding, persistRole, role]);
 
   const handleLogIn = useCallback(() => {
     haptic('light');
     void completeOnboarding();
+    if (role) void persistRole(role);
     router.push('/(auth)/sign-in');
-  }, [router, haptic, completeOnboarding]);
+  }, [router, haptic, completeOnboarding, persistRole, role]);
 
   const onScroll = useMemo(
     () =>
@@ -524,11 +792,23 @@ export default function OnboardingScreen() {
       case 'ready':
         body = <ReadySlide onExplore={handleExplore} onLogIn={handleLogIn} />;
         break;
+      case 'biz-welcome':
+        body = <BizWelcomeSlide />;
+        break;
+      case 'biz-discover-offers':
+        body = <BizDiscoverOffersSlide />;
+        break;
+      case 'biz-grow-loyalty':
+        body = <BizGrowLoyaltySlide />;
+        break;
+      case 'biz-ready':
+        body = <BizReadySlide onSetup={handleExplore} onLogIn={handleLogIn} />;
+        break;
     }
     return <View style={{ width, height: '100%' }}>{body}</View>;
   }, [handleExplore, handleLogIn]);
 
-  const isReadySlide = activeIndex === SLIDES.length - 1;
+  const isReadySlide = activeIndex === activeSlides.length - 1;
 
   return (
     <View style={styles.container}>
@@ -538,6 +818,10 @@ export default function OnboardingScreen() {
         style={styles.bgImage}
       />
       <View style={styles.overlay}>
+      {role === null ? (
+        <RoleSelectScreen onSelectRole={handleSelectRole} />
+      ) : (
+      <>
       <SafeAreaView style={styles.safeArea} edges={['top']} pointerEvents="box-none">
         <View style={styles.topBar}>
           <View style={styles.logoRow}>
@@ -558,8 +842,9 @@ export default function OnboardingScreen() {
       </SafeAreaView>
 
       <FlatList
+        key={role}
         ref={flatListRef}
-        data={SLIDES}
+        data={activeSlides}
         renderItem={renderSlide}
         keyExtractor={(item) => item.id}
         horizontal
@@ -576,7 +861,7 @@ export default function OnboardingScreen() {
 
       <SafeAreaView edges={['bottom']} style={styles.bottomArea} pointerEvents="box-none">
         <View style={styles.dotsContainer}>
-          {SLIDES.map((_, i) => {
+          {activeSlides.map((_, i) => {
             const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
             const dotWidth = scrollX.interpolate({ inputRange, outputRange: [8, 26, 8], extrapolate: 'clamp' });
             const dotColor = '#FFFFFF';
@@ -602,6 +887,8 @@ export default function OnboardingScreen() {
         )}
 
       </SafeAreaView>
+      </>
+      )}
       </View>
     </View>
   );
@@ -1042,6 +1329,34 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: BRAND_DEEP,
     letterSpacing: 0.2,
+  },
+  roleCardList: {
+    width: '100%',
+    gap: 16,
+    marginTop: 12,
+  },
+  roleCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  roleCardTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+    marginBottom: 6,
+    textAlign: 'center' as const,
+  },
+  roleCardSubtext: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center' as const,
+    lineHeight: 18,
   },
 });
 
