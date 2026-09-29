@@ -2,6 +2,7 @@ const Stripe = require('stripe');
 const billingModel = require('./billing.model');
 const { getBusinessProfileByUserId, getBusinessByProfileId } = require('../businesses/business.model');
 const { getClient } = require('../../config/database');
+const { logger } = require('../../utils/logger');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -35,6 +36,13 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
     stripeCustomerId = customer.id;
   }
 
+  // Append Stripe's own {CHECKOUT_SESSION_ID} placeholder (auto-substituted by Stripe on
+  // redirect) so the success screen can verify the session directly via GET
+  // /billing/verify-session/:sessionId instead of only waiting on the async webhook, which can
+  // lag behind the redirect (or never arrive in some environments) — see verifySession below.
+  const separator = successUrl.includes('?') ? '&' : '?';
+  const successUrlWithSession = `${successUrl}${separator}session_id={CHECKOUT_SESSION_ID}`;
+
   // Only a business with no prior business_subscriptions row at all gets the 30-day trial —
   // a renewal after cancelling has already had its trial (or an active period), so it goes
   // straight to a paid checkout.
@@ -42,7 +50,7 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
     mode: 'subscription',
     customer: stripeCustomerId,
     line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
-    success_url: successUrl,
+    success_url: successUrlWithSession,
     cancel_url: cancelUrl,
     metadata: { business_id: business.id, plan_id: plan.id },
     ...(existingSubscription ? {} : { subscription_data: { trial_period_days: 30 } }),
@@ -233,11 +241,54 @@ async function isSubscriptionActive(businessId) {
   return !!sub && (sub.status === 'active' || sub.status === 'trial');
 }
 
+// Direct, synchronous alternative to waiting on the async webhook — called by the success screen
+// right after Stripe redirects back, using the session_id createCheckoutSession now appends to
+// success_url. Retrieves the session straight from Stripe and upserts business_subscriptions
+// itself if it finds a real (trialing/active) subscription, using the exact same
+// upsertBusinessSubscription call the webhook uses — safe to call even if the webhook already
+// ran, or runs again later (ON CONFLICT upsert, not an insert-only path).
+async function verifySession(userId, sessionId) {
+  const business = await resolveBusinessForUser(userId);
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['subscription'] });
+  if (session.metadata?.business_id !== business.id) {
+    throw Object.assign(new Error('This checkout session does not belong to your business'), { status: 403 });
+  }
+
+  const planId = session.metadata?.plan_id;
+  const subscription = session.subscription;
+  if (!subscription || !planId || typeof subscription === 'string') {
+    // Not paid/expanded yet — nothing to verify. Caller falls back to its existing poll.
+    return { verified: false, subscription: await billingModel.getBusinessSubscription(business.id) };
+  }
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const saved = await billingModel.upsertBusinessSubscription(client, {
+      businessId: business.id,
+      planId,
+      status: mapStripeStatus(subscription.status),
+      stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
+      stripeSubscriptionId: subscription.id,
+      currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+    });
+    await client.query('COMMIT');
+    return { verified: true, subscription: saved };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 function verifyWebhookSignature(rawBody, signature) {
   return stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
 }
 
 async function handleWebhookEvent(event) {
+  logger.info('billing.webhook', `received ${event.type}`, { eventId: event.id });
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -246,6 +297,7 @@ async function handleWebhookEvent(event) {
     if (!inserted) {
       // Already processed this event id — idempotent no-op.
       await client.query('ROLLBACK');
+      logger.info('billing.webhook', `duplicate ${event.type}, skipped`, { eventId: event.id });
       return { handled: false, reason: 'duplicate' };
     }
 
@@ -262,6 +314,9 @@ async function handleWebhookEvent(event) {
             stripeCustomerId: session.customer,
             stripeSubscriptionId: session.subscription,
           });
+          logger.info('billing.webhook', 'checkout.session.completed applied', { businessId, planId });
+        } else {
+          logger.warn('billing.webhook', 'checkout.session.completed missing business_id/plan_id metadata', { eventId: event.id });
         }
         break;
       }
@@ -273,6 +328,7 @@ async function handleWebhookEvent(event) {
           currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
           planId: plan?.id,
         });
+        logger.info('billing.webhook', 'customer.subscription.updated applied', { stripeSubscriptionId: sub.id, status: sub.status });
         break;
       }
       case 'customer.subscription.deleted': {
@@ -280,9 +336,11 @@ async function handleWebhookEvent(event) {
         await billingModel.updateSubscriptionStatusByStripeSubscriptionId(client, sub.id, {
           status: 'cancelled',
         });
+        logger.info('billing.webhook', 'customer.subscription.deleted applied', { stripeSubscriptionId: sub.id });
         break;
       }
       default:
+        logger.debug('billing.webhook', `unhandled event type ${event.type}`, { eventId: event.id });
         break;
     }
 
@@ -290,6 +348,7 @@ async function handleWebhookEvent(event) {
     return { handled: true };
   } catch (err) {
     await client.query('ROLLBACK');
+    logger.error('billing.webhook', `error handling ${event.type}`, err);
     throw err;
   } finally {
     client.release();
@@ -319,6 +378,7 @@ module.exports = {
   changePlan,
   createPortalSession,
   cancelSubscription,
+  verifySession,
   isSubscriptionActive,
   verifyWebhookSignature,
   handleWebhookEvent,

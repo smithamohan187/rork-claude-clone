@@ -79,6 +79,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useSavedBusiness } from '@/hooks/useSavedBusiness';
 import { useBusinessScanCode } from '@/hooks/useBusinessScanCode';
+import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
 import MembersTab from '@/components/MembersTab';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -230,6 +231,7 @@ export default function BusinessProfileScreen() {
   const welcomePointsValue = rewardData?.config?.welcome_bonus_points ?? 0;
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
+  const { unlocked: businessUnlocked, lockMessage } = useBusinessUnlockStatus();
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
 
   // Landed here via an already-authenticated tap on a customer-invite link (useShareDeepLink.ts) —
@@ -955,23 +957,28 @@ export default function BusinessProfileScreen() {
         {isOwner && (
           <View style={styles.inviteCustomersWrap}>
             <TouchableOpacity
-              style={styles.inviteCustomersBtn}
+              style={[styles.inviteCustomersBtn, !businessUnlocked && styles.inviteCustomersBtnLocked]}
               activeOpacity={0.85}
-              onPress={() =>
+              onPress={() => {
+                if (!businessUnlocked) {
+                  setSnackMsg(lockMessage);
+                  setSnackVisible(true);
+                  return;
+                }
                 router.push({
                   pathname: '/invite-customers',
                   params: { businessId: id ?? business.id, businessName: business.name },
-                } as never)
-              }
+                } as never);
+              }}
               testID="invite-customers-entry"
             >
-              <View style={styles.inviteCustomersIcon}>
+              <View style={[styles.inviteCustomersIcon, !businessUnlocked && styles.inviteCustomersIconLocked]}>
                 <UserPlus size={18} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.inviteCustomersTitle}>Invite Customers</Text>
                 <Text style={styles.inviteCustomersSubtitle}>
-                  Grow your subscribers via SMS, Email or CSV
+                  {businessUnlocked ? 'Grow your subscribers via SMS, Email or CSV' : lockMessage}
                 </Text>
               </View>
               <ChevronRight size={18} color={ACCENT} />
@@ -2545,6 +2552,12 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  inviteCustomersBtnLocked: {
+    opacity: 0.55,
+  },
+  inviteCustomersIconLocked: {
+    backgroundColor: '#9E9E9E',
   },
   inviteCustomersTitle: {
     color: '#1A5C35',

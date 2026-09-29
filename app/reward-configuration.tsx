@@ -7,7 +7,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Button,
   Surface,
@@ -66,6 +66,8 @@ const PRIZE_TYPE_META: Record<PrizeType, { label: string; color: string; icon: R
 export default function RewardConfigurationScreen() {
   const router = useRouter();
   const { authLoading, isAuthenticated } = useAuth();
+  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const cameFromChecklist = params.returnTo === 'dashboard';
 
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [loading, setLoading]   = useState<boolean>(true);
@@ -161,13 +163,27 @@ export default function RewardConfigurationScreen() {
         referral_bonus_points: parseInt(referralPoints || '0', 10),
         share_points:          parseInt(sharingPoints  || '0', 10),
       });
-      Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.');
+      // Points settings alone don't satisfy the dashboard checklist's "Add rewards & prizes" step —
+      // it also needs at least one prize in the catalog below. Make that explicit here rather than
+      // letting the owner assume saving this form is the whole job.
+      if (prizes.length === 0) {
+        Alert.alert(
+          'Configuration Saved',
+          "Your points settings are saved. Don't forget to add at least one prize below — this step isn't complete until you do."
+        );
+      } else if (cameFromChecklist) {
+        Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)/feed' as never) },
+        ]);
+      } else {
+        Alert.alert('Configuration Saved', 'Your reward program has been updated successfully.');
+      }
     } catch (err) {
       Alert.alert('Error', 'Failed to save configuration. Please try again.');
     } finally {
       setSaving(false);
     }
-  }, [businessId, welcomePoints, referralPoints, sharingPoints]);
+  }, [businessId, welcomePoints, referralPoints, sharingPoints, prizes.length, cameFromChecklist, router]);
 
   const handleSavePrize = useCallback(async () => {
     if (!prizeName.trim()) {
@@ -190,6 +206,11 @@ export default function RewardConfigurationScreen() {
         points_required:    pts,
         quantity_available: qty,
       };
+      // This is the exact moment the "Add rewards & prizes" checklist step transitions from
+      // incomplete to complete — the very first prize in an empty catalog. Only that transition
+      // (not every subsequent add/edit) auto-returns to the dashboard, so an owner adding several
+      // prizes in a row isn't bounced out after each one.
+      const wasFirstPrize = !editingPrize && prizes.length === 0;
       if (editingPrize) {
         const updated = await updateReward(editingPrize.id, payload);
         setPrizes(prev => prev.map(p => p.id === updated.id ? updated : p));
@@ -200,12 +221,15 @@ export default function RewardConfigurationScreen() {
       resetPrizeForm();
       setEditingPrize(null);
       setShowPrizeModal(false);
+      if (wasFirstPrize && cameFromChecklist) {
+        router.replace('/(tabs)/feed' as never);
+      }
     } catch (err) {
       Alert.alert('Error', editingPrize ? 'Failed to update prize. Please try again.' : 'Failed to add prize. Please try again.');
     } finally {
       setSavingPrize(false);
     }
-  }, [editingPrize, prizeName, prizeDesc, prizeType, prizePoints, prizeStock, resetPrizeForm]);
+  }, [editingPrize, prizeName, prizeDesc, prizeType, prizePoints, prizeStock, resetPrizeForm, prizes.length, cameFromChecklist, router]);
 
   const handleRemovePrize = useCallback((id: string) => {
     Alert.alert(
@@ -355,6 +379,14 @@ export default function RewardConfigurationScreen() {
                 Add Prize
               </Button>
             </View>
+
+            {prizes.length === 0 && (
+              <View style={styles.emptyPrizesNote} testID="empty-prizes-note">
+                <Text style={styles.emptyPrizesNoteText}>
+                  Add at least one prize below — the points settings above alone won&apos;t complete this step.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.prizesList}>
               {prizes.map((prize) => {
@@ -652,6 +684,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 4,
     fontSize: 14,
+  },
+  emptyPrizesNote: {
+    backgroundColor: '#FFF8E7',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  emptyPrizesNoteText: {
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 17,
   },
   prizesList: {
     gap: 10,

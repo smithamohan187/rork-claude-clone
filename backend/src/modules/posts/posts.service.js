@@ -1,6 +1,7 @@
 const postsModel = require('./posts.model');
 const likesModel = require('../likes/likes.model');
 const commentsModel = require('../comments/comments.model');
+const businessService = require('../businesses/business.service');
 
 async function verifyPostOwnership(userId, postId) {
   const businessId = await postsModel.getBusinessIdByUserId(userId);
@@ -16,6 +17,12 @@ async function verifyPostOwnership(userId, postId) {
 async function createPost(userId, payload) {
   const businessId = await postsModel.getBusinessIdByUserId(userId);
   if (!businessId) throw new Error('No business found for this user');
+  if (!(await businessService.isBusinessUnlocked(businessId))) {
+    throw Object.assign(
+      new Error('Complete your business profile and start your Stripe trial to post'),
+      { status: 403 }
+    );
+  }
   return postsModel.insertPost(businessId, payload);
 }
 

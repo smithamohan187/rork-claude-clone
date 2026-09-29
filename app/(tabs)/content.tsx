@@ -35,6 +35,7 @@ import {
   type ContentItem,
   type ItemStatus,
 } from '@/contexts/ManageContentContext';
+import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
 import { useOffers } from '@/hooks/useOffers';
 import { type Offer } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
@@ -188,6 +189,8 @@ export default function ManageContentScreen() {
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
+
+  const { unlocked: businessUnlocked, lockMessage } = useBusinessUnlockStatus();
 
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string }>({
     visible: false,
@@ -674,38 +677,41 @@ export default function ManageContentScreen() {
       <View style={styles.createBtnWrap}>
         {activeTab === 'offers' && (
           <TouchableOpacity
-            onPress={() => router.push('/create-offer' as any)}
-            style={styles.createOfferLink}
+            onPress={() => businessUnlocked ? router.push('/create-offer' as any) : showSnackbar(lockMessage)}
+            style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-offer-btn"
           >
-            <Plus size={15} color={PURPLE} />
-            <Text style={styles.createOfferText}>Create Offer</Text>
+            <Plus size={15} color={businessUnlocked ? PURPLE : TEXT_MUTED} />
+            <Text style={[styles.createOfferText, !businessUnlocked && styles.createTextLocked]}>Create Offer</Text>
           </TouchableOpacity>
         )}
         {activeTab === 'events' && (
           <TouchableOpacity
-            onPress={() => router.push('/create-offer?tab=event' as any)}
-            style={styles.createOfferLink}
+            onPress={() => businessUnlocked ? router.push('/create-offer?tab=event' as any) : showSnackbar(lockMessage)}
+            style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-event-btn"
           >
-            <Plus size={15} color={PURPLE} />
-            <Text style={styles.createOfferText}>Create Event</Text>
+            <Plus size={15} color={businessUnlocked ? PURPLE : TEXT_MUTED} />
+            <Text style={[styles.createOfferText, !businessUnlocked && styles.createTextLocked]}>Create Event</Text>
           </TouchableOpacity>
         )}
         {activeTab === 'posts' && (
           <TouchableOpacity
-            onPress={() => router.push('/create-offer?tab=post' as any)}
-            style={styles.createOfferLink}
+            onPress={() => businessUnlocked ? router.push('/create-offer?tab=post' as any) : showSnackbar(lockMessage)}
+            style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-post-btn"
           >
-            <Plus size={15} color={PURPLE} />
-            <Text style={styles.createOfferText}>Create Post</Text>
+            <Plus size={15} color={businessUnlocked ? PURPLE : TEXT_MUTED} />
+            <Text style={[styles.createOfferText, !businessUnlocked && styles.createTextLocked]}>Create Post</Text>
           </TouchableOpacity>
         )}
       </View>
+      {!businessUnlocked && (
+        <Text style={styles.lockHint}>Finish your business setup to start posting.</Text>
+      )}
 
       {activeTab === 'offers' && (
         <View style={styles.filterRow}>
@@ -1092,6 +1098,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600' as const,
     color: PURPLE,
+  },
+  createLinkLocked: {
+    opacity: 0.5,
+  },
+  createTextLocked: {
+    color: TEXT_MUTED,
+  },
+  lockHint: {
+    fontSize: 11.5,
+    color: TEXT_MUTED,
+    textAlign: 'right' as const,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    backgroundColor: '#fff',
   },
   filterRow: {
     flexDirection: 'row',

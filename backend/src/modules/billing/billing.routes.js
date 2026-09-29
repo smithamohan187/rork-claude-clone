@@ -10,6 +10,7 @@ const {
   createPortalSessionHandler,
   cancelSubscriptionHandler,
   getMySubscriptionHandler,
+  verifySessionHandler,
 } = require('./billing.controller');
 
 // Mounted at /billing in app.js — deliberately NOT /subscriptions, which is already the
@@ -25,5 +26,6 @@ router.post('/change-plan',       authenticate, validateRequest(changePlanSchema
 router.post('/portal-session',    authenticate, validateRequest(portalSessionSchema), createPortalSessionHandler);
 router.post('/cancel',            authenticate, cancelSubscriptionHandler);
 router.get('/my-subscription',    authenticate, getMySubscriptionHandler);
+router.get('/verify-session/:sessionId', authenticate, verifySessionHandler);
 
 module.exports = router;

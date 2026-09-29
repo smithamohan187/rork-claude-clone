@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSnackbar } from '@/contexts/SnackbarContext';
-import { fetchMySubscription } from '@/api/services/billingService';
+import { fetchMySubscription, verifyCheckoutSession } from '@/api/services/billingService';
 
 // Landing page for the web checkout redirect (see hooks/useSubscriptionCheckout.ts). A full-page
 // redirect to Stripe reloads the app from scratch, so this screen re-derives everything from the
@@ -17,6 +17,7 @@ type ScreenStatus = 'polling' | 'timedOut';
 
 export default function CheckoutSuccessScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ session_id?: string }>();
   const { authLoading, isAuthenticated, updateAuthUser, refreshProfiles } = useAuth();
   const { showSnackbar } = useSnackbar();
   const [status, setStatus] = useState<ScreenStatus>('polling');
@@ -28,6 +29,22 @@ export default function CheckoutSuccessScreen() {
   }, [updateAuthUser, refreshProfiles, router]);
 
   const pollForActiveSubscription = useCallback(async (isCancelled: () => boolean) => {
+    // Verify directly against Stripe first, using the session_id createCheckoutSession now
+    // appends to success_url — confirms in one round trip instead of waiting on the async
+    // webhook, which can lag behind the redirect or never arrive in some environments.
+    if (params.session_id) {
+      try {
+        const verified = await verifyCheckoutSession(params.session_id);
+        if (verified.verified && verified.subscription?.status) {
+          if (isCancelled()) return;
+          showSnackbar('Payment completed — your business is live!');
+          await proceedToApp();
+          return;
+        }
+      } catch {
+        // Fall through to the plain poll below.
+      }
+    }
     // The Stripe webhook that actually creates the business_subscriptions row can land a
     // moment after the redirect — poll briefly rather than assuming it's already there.
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
@@ -50,7 +67,7 @@ export default function CheckoutSuccessScreen() {
     if (isCancelled()) return;
     // Stripe hasn't confirmed the subscription yet — don't silently pretend it worked.
     setStatus('timedOut');
-  }, [proceedToApp, showSnackbar]);
+  }, [proceedToApp, showSnackbar, params.session_id]);
 
   useEffect(() => {
     if (authLoading) return;

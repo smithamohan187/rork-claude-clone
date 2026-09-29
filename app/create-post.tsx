@@ -102,7 +102,7 @@ const SAMPLE_VIDEOS = [
 
 export default function CreatePostScreen() {
   const router = useRouter();
-  const { currentUser, accountType } = useAuth();
+  const { authUser, accountType } = useAuth();
   const [content, setContent] = useState<string>('');
   const [selectedType, setSelectedType] = useState<PostType>('general');
   const [selectedImage, setSelectedImage] = useState<string>('');
@@ -131,7 +131,7 @@ export default function CreatePostScreen() {
   const [eventTags, setEventTags] = useState<string>('');
   const [eventIsHot, setEventIsHot] = useState<boolean>(false);
   const [existingEvents, setExistingEvents] = useState<LocalEvent[]>(
-    mockLocalEvents.filter(e => e.host === currentUser.name).slice(0, 3)
+    mockLocalEvents.filter(e => e.host === authUser?.name).slice(0, 3)
   );
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
@@ -193,8 +193,8 @@ export default function CreatePostScreen() {
       time: eventTime.trim(),
       location: eventLocation.trim(),
       category: eventCategory,
-      host: currentUser.name,
-      hostAvatar: currentUser.avatar,
+      host: authUser?.name ?? 'You',
+      hostAvatar: authUser?.avatar ?? '',
       attendees: editingEventId ? (existingEvents.find(e => e.id === editingEventId)?.attendees ?? 0) : 0,
       isFree: eventIsFree,
       price: eventIsFree ? undefined : eventPrice.trim(),
@@ -214,7 +214,7 @@ export default function CreatePostScreen() {
 
     resetEventForm();
     setShowEventForm(false);
-  }, [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot, editingEventId, existingEvents, currentUser, resetEventForm]);
+  }, [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot, editingEventId, existingEvents, authUser, resetEventForm]);
 
   const handleEditEvent = useCallback((event: LocalEvent) => {
     setEditingEventId(event.id);
@@ -441,9 +441,9 @@ export default function CreatePostScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.authorRow}>
-              <Image source={{ uri: currentUser.avatar }} style={styles.authorAvatar} />
+              <Image source={{ uri: authUser?.avatar }} style={styles.authorAvatar} />
               <View style={styles.authorMeta}>
-                <Text style={styles.authorName}>{currentUser.name}</Text>
+                <Text style={styles.authorName}>{authUser?.name}</Text>
                 <TouchableOpacity
                   style={[styles.typeBadge, getTypeBadgeStyle(selectedType)]}
                   onPress={() => setShowTypePicker(!showTypePicker)}

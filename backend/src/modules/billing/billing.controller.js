@@ -1,5 +1,6 @@
 const billingService = require('./billing.service');
 const { ok, fail } = require('../../utils/apiResponse');
+const { logger } = require('../../utils/logger');
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -65,6 +66,16 @@ const cancelSubscriptionHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const verifySessionHandler = asyncHandler(async (req, res) => {
+  try {
+    const result = await billingService.verifySession(req.user.userId, req.params.sessionId);
+    res.status(200).json(ok(result));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json(fail(err.message));
+    throw err;
+  }
+});
+
 const getMySubscriptionHandler = asyncHandler(async (req, res) => {
   try {
     const subscription = await billingService.getSubscriptionForUser(req.user.userId);
@@ -83,6 +94,7 @@ const stripeWebhookHandler = asyncHandler(async (req, res) => {
   try {
     event = billingService.verifyWebhookSignature(req.body, signature);
   } catch (err) {
+    logger.error('billing.webhook', 'signature verification failed', err);
     return res.status(400).json(fail(`Webhook signature verification failed: ${err.message}`));
   }
 
@@ -99,5 +111,6 @@ module.exports = {
   createPortalSessionHandler,
   cancelSubscriptionHandler,
   getMySubscriptionHandler,
+  verifySessionHandler,
   stripeWebhookHandler,
 };

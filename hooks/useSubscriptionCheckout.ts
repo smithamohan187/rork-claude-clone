@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { createCheckoutSession, createPortalSession, fetchMySubscription, BusinessSubscription } from '../api/services/billingService';
+import { createCheckoutSession, createPortalSession, fetchMySubscription, verifyCheckoutSession, BusinessSubscription } from '../api/services/billingService';
 
 export type CheckoutOutcome = 'success' | 'cancel' | 'dismiss' | 'redirected';
 
@@ -38,6 +38,19 @@ export function useSubscriptionCheckout() {
       const result = await WebBrowser.openAuthSessionAsync(url, successUrl);
 
       if (result.type === 'success' && result.url.startsWith(successUrl)) {
+        // The callback URL carries the real session_id Stripe substituted in — verify directly
+        // against Stripe rather than trusting the webhook has already landed (see
+        // billing.service.js#verifySession). Falls back to the plain subscription read if for
+        // some reason session_id is missing.
+        const sessionId = new URL(result.url).searchParams.get('session_id');
+        if (sessionId) {
+          try {
+            const verified = await verifyCheckoutSession(sessionId);
+            return { outcome: 'success', subscription: verified.subscription };
+          } catch {
+            // Fall through to the plain read below.
+          }
+        }
         const subscription = await fetchMySubscription();
         return { outcome: 'success', subscription };
       }

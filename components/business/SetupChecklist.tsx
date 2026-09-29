@@ -1,16 +1,36 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ProgressBar } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Check, ChevronRight, Circle } from 'lucide-react-native';
+import {
+  Check,
+  ChevronRight,
+  Store,
+  Gift,
+  CreditCard,
+  PenSquare,
+  UserPlus,
+  Sparkles,
+} from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import type { DashboardSummary } from '@/api/services/businessDashboardService';
 
 interface ChecklistItem {
   id: string;
   label: string;
+  sublabel: string;
   done: boolean;
   route: string;
+  icon: React.ElementType;
+  accent: string;
+  params?: Record<string, string>;
+}
+
+interface SetupChecklistProps {
+  summary: DashboardSummary | null;
+  businessId?: string | null;
+  businessName?: string;
 }
 
 // The dashboard's first-run "getting started" module. Deliberately a flat 5-item checklist with a
@@ -19,57 +39,120 @@ interface ChecklistItem {
 // Data comes from the same GET /businesses/me/dashboard-summary call the rest of the dashboard
 // already uses (extended with post/invite counts, has_rewards, onboarding_complete, and
 // subscription_status) so this adds no extra network round-trip.
-export default function SetupChecklist({ summary }: { summary: DashboardSummary | null }) {
+//
+// Every destination is pushed with returnTo=dashboard so it can navigate straight back here once
+// that step is actually satisfied, instead of leaving the owner to find their own way back.
+export default function SetupChecklist({ summary, businessId, businessName }: SetupChecklistProps) {
   const router = useRouter();
 
   const items = useMemo<ChecklistItem[]>(() => {
     const trialStarted = summary?.subscription_status === 'trial' || summary?.subscription_status === 'active';
     return [
-      { id: 'profile', label: 'Complete your profile', done: !!summary?.onboarding_complete, route: '/business-complete-profile' },
-      { id: 'rewards', label: 'Add rewards & tiers', done: !!summary?.has_rewards, route: '/reward-configuration' },
-      { id: 'trial', label: 'Start your Stripe trial', done: trialStarted, route: '/business-start-trial' },
-      { id: 'post', label: 'Add a post', done: (summary?.post_count ?? 0) > 0, route: '/create-post' },
-      { id: 'invite', label: 'Invite a customer', done: (summary?.invite_count ?? 0) > 0, route: '/invite-customers' },
+      {
+        id: 'profile', label: 'Complete your profile', sublabel: 'Address, contact & business type',
+        done: !!summary?.onboarding_complete, route: '/business-complete-profile',
+        icon: Store, accent: '#1A5C35',
+      },
+      // "Prizes", not "Tiers" — reward tiers are a global, admin-set concept (not something a
+      // business owner configures here); this step is specifically about the rewards catalog.
+      {
+        id: 'rewards', label: 'Add rewards & prizes', sublabel: 'Points settings + at least one prize',
+        done: !!summary?.has_rewards, route: '/reward-configuration',
+        icon: Gift, accent: '#7C3AED',
+      },
+      {
+        id: 'trial', label: 'Start your Stripe trial', sublabel: 'Unlocks posting & inviting customers',
+        done: trialStarted, route: '/business-start-trial',
+        icon: CreditCard, accent: '#E0A52E',
+      },
+      {
+        id: 'post', label: 'Add a post', sublabel: 'Share an update with subscribers',
+        done: (summary?.post_count ?? 0) > 0, route: '/create-post',
+        icon: PenSquare, accent: '#3B82F6',
+      },
+      {
+        id: 'invite', label: 'Invite a customer', sublabel: 'Grow your subscriber base',
+        done: (summary?.invite_count ?? 0) > 0, route: '/invite-customers',
+        icon: UserPlus, accent: '#EF4444',
+        params: { businessId: businessId ?? '', businessName: businessName ?? '' },
+      },
     ];
-  }, [summary]);
+  }, [summary, businessId, businessName]);
 
   const doneCount = items.filter(i => i.done).length;
   const allDone = doneCount === items.length;
+  const progress = doneCount / items.length;
 
   if (allDone) return null; // fades away once fully set up — nothing left to nudge the owner about
 
   return (
     <View style={styles.card} testID="setup-checklist">
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Finish setting up your business</Text>
-        <Text style={styles.count}>{doneCount} of {items.length}</Text>
-      </View>
-      <ProgressBar
-        progress={doneCount / items.length}
-        color={Colors.primary}
-        style={styles.progressBar}
-      />
+      <LinearGradient
+        colors={['#1A5C35', '#00B246']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerTop}>
+          <View style={styles.headerTitleRow}>
+            <Sparkles size={16} color="#FFFFFF" />
+            <Text style={styles.title}>Finish setting up your business</Text>
+          </View>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{doneCount}/{items.length}</Text>
+          </View>
+        </View>
+        <ProgressBar
+          progress={progress}
+          color="#FFFFFF"
+          style={styles.progressBar}
+        />
+      </LinearGradient>
+
       <View style={styles.list}>
-        {items.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.row}
-            onPress={() => router.push(item.route as never)}
-            activeOpacity={0.7}
-            testID={`checklist-item-${item.id}`}
-          >
-            <View style={[styles.iconWrap, item.done && styles.iconWrapDone]}>
-              {item.done ? <Check size={14} color="#FFFFFF" /> : <Circle size={10} color={Colors.textTertiary} />}
-            </View>
-            <Text style={[styles.rowLabel, item.done && styles.rowLabelDone]}>{item.label}</Text>
-            {!item.done && <ChevronRight size={16} color={Colors.textTertiary} />}
-          </TouchableOpacity>
-        ))}
+        {items.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.row, index < items.length - 1 && styles.rowDivider]}
+              onPress={() => router.push({
+                pathname: item.route,
+                params: { returnTo: 'dashboard', ...item.params },
+              } as never)}
+              activeOpacity={0.65}
+              testID={`checklist-item-${item.id}`}
+            >
+              <View
+                style={[
+                  styles.iconWrap,
+                  { backgroundColor: item.done ? item.accent : `${item.accent}18` },
+                ]}
+              >
+                {item.done ? (
+                  <Check size={16} color="#FFFFFF" strokeWidth={3} />
+                ) : (
+                  <Icon size={16} color={item.accent} />
+                )}
+              </View>
+              <View style={styles.rowTextWrap}>
+                <Text style={[styles.rowLabel, item.done && styles.rowLabelDone]}>{item.label}</Text>
+                <Text style={styles.rowSublabel} numberOfLines={1}>
+                  {item.done ? 'Done' : item.sublabel}
+                </Text>
+              </View>
+              {!item.done && <ChevronRight size={18} color={Colors.textTertiary} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
       {!(items.find(i => i.id === 'profile')?.done && items.find(i => i.id === 'trial')?.done) && (
-        <Text style={styles.lockNote}>
-          Complete your profile and start your Stripe trial to unlock posting offers/events and inviting customers.
-        </Text>
+        <View style={styles.lockNoteWrap}>
+          <Text style={styles.lockNote}>
+            🔒 Complete your profile and start your Stripe trial to unlock posting and inviting customers.
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -78,47 +161,80 @@ export default function SetupChecklist({ summary }: { summary: DashboardSummary 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
     marginHorizontal: 16,
     marginBottom: 16,
+    overflow: 'hidden',
     shadowColor: '#1A5C35',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  headerRow: {
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  title: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
-  count: { fontSize: 13, fontWeight: '600' as const, color: Colors.primaryDark },
-  progressBar: { height: 6, borderRadius: 3, marginBottom: 14 },
-  list: { gap: 2 },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  title: { fontSize: 14.5, fontWeight: '700' as const, color: '#FFFFFF', flexShrink: 1 },
+  countBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  countBadgeText: { fontSize: 12.5, fontWeight: '800' as const, color: '#FFFFFF' },
+  progressBar: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  list: { paddingHorizontal: 8, paddingVertical: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   iconWrap: {
-    width: 22, height: 22, borderRadius: 11,
-    borderWidth: 1.5, borderColor: Colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  iconWrapDone: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  rowLabel: { flex: 1, fontSize: 13.5, fontWeight: '500' as const, color: Colors.text },
-  rowLabelDone: { color: Colors.textTertiary, textDecorationLine: 'line-through' },
+  rowTextWrap: { flex: 1, gap: 1 },
+  rowLabel: { fontSize: 13.5, fontWeight: '600' as const, color: Colors.text },
+  rowLabelDone: { color: Colors.textTertiary },
+  rowSublabel: { fontSize: 11.5, color: Colors.textTertiary },
+  lockNoteWrap: {
+    backgroundColor: '#FFF8E7',
+    marginHorizontal: 12,
+    marginBottom: 12,
+    marginTop: 4,
+    borderRadius: 12,
+    padding: 10,
+  },
   lockNote: {
     fontSize: 11.5,
-    color: Colors.textTertiary,
-    marginTop: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    color: '#92400E',
     lineHeight: 16,
   },
 });

@@ -363,6 +363,8 @@ export default function BusinessDashboard() {
           </SafeAreaView>
         </View>
 
+        <SetupChecklist summary={summary} businessId={businessId} businessName={businessName} />
+
         <View style={styles.statsGrid}>
           {liveStats.map((stat) => {
             const isNavigable = stat.id === 'subscribers' || stat.id === 'offers';
@@ -375,8 +377,6 @@ export default function BusinessDashboard() {
             );
           })}
         </View>
-
-        <SetupChecklist summary={summary} />
 
         <Pressable
           onPress={handleManageContent}

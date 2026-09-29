@@ -69,9 +69,10 @@ const isValidPhone = (s: string): boolean => {
 
 export default function InviteCustomersScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ businessId?: string; businessName?: string }>();
+  const params = useLocalSearchParams<{ businessId?: string; businessName?: string; returnTo?: string }>();
   const businessId = params.businessId ?? '';
   const businessName = params.businessName ?? 'Your Business';
+  const cameFromChecklist = params.returnTo === 'dashboard';
 
   const inv = useInviteCustomers(businessId, businessName);
   const history = useCustomerInviteHistory(businessId);
@@ -92,7 +93,12 @@ export default function InviteCustomersScreen() {
     setConfirmVisible(false);
     await inv.submit();
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [inv]);
+    // Reaching here means the "Invite a customer" checklist step is satisfied — head straight
+    // back to the dashboard to see it ticked off, same as the other checklist destinations.
+    if (cameFromChecklist) {
+      router.replace('/(tabs)/feed' as never);
+    }
+  }, [inv, cameFromChecklist, router]);
 
   const TABS: { key: TabKey; label: string; count: number; Icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
     { key: 'contacts', label: 'Contacts', count: inv.selectedContactsCount, Icon: Users },

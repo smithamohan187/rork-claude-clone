@@ -74,6 +74,20 @@ export async function cancelSubscription(): Promise<BusinessSubscription> {
   return result.data;
 }
 
+export interface VerifySessionResult {
+  verified: boolean;
+  subscription: BusinessSubscription | null;
+}
+
+// Confirms a Checkout Session directly against Stripe (via session_id, which createCheckoutSession
+// now appends to success_url as {CHECKOUT_SESSION_ID}) instead of waiting on the async webhook —
+// see billing.service.js#verifySession. Safe to call even if the webhook already handled it.
+export async function verifyCheckoutSession(sessionId: string): Promise<VerifySessionResult> {
+  const result = await apiClient.get<VerifySessionResult>(`/billing/verify-session/${sessionId}`);
+  if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to verify checkout session');
+  return result.data;
+}
+
 export async function fetchMySubscription(): Promise<BusinessSubscription | null> {
   const result = await apiClient.get<BusinessSubscription | null>('/billing/my-subscription');
   if (!result.success) throw new Error(result.error ?? 'Failed to fetch subscription');
