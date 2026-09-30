@@ -52,6 +52,7 @@ import {
   Zap,
   Trophy,
   Check,
+  Lock,
 } from 'lucide-react-native';
 import { Switch, Snackbar, Dialog, Portal, Button as PaperButton, TextInput as PaperTextInput } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
@@ -59,6 +60,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Copy } from 'lucide-react-native';
 import { fetchRewardConfig, type RewardConfigFull } from '@/api/services/rewardConfigService';
 import BusinessQRCard from '@/components/business/BusinessQRCard';
+import EmptyState from '@/components/ui/EmptyState';
 import { QrCode } from 'lucide-react-native';
 import type { BusinessProfileData } from '@/mocks/businessProfile';
 import { useBusinessOffers, type OfferFilter } from '@/hooks/useBusinessOffers';
@@ -858,10 +860,19 @@ export default function BusinessProfileScreen() {
             />
           )}
           {activeTab === 'members' && isOwner && (
-            <MembersTab
-              businessId={id ?? ''}
-              onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
-            />
+            businessUnlocked ? (
+              <MembersTab
+                businessId={id ?? ''}
+                onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
+              />
+            ) : (
+              <EmptyState
+                icon={<Lock size={40} color={ACCENT} strokeWidth={1.5} />}
+                title="Members locked"
+                subtitle={lockMessage}
+                testID="members-tab-locked"
+              />
+            )
           )}
         </View>
 

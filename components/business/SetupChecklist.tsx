@@ -1,10 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { ProgressBar } from 'react-native-paper';
+import { ProgressBar, Snackbar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { Check, ChevronRight, Circle } from 'lucide-react-native';
+import { Check, ChevronRight, Circle, Lock } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
 import type { DashboardSummary } from '@/api/services/businessDashboardService';
+
+// Row ids that require the profile+trial gate before their destination screen is usable
+// (posting content, inviting customers) — kept in sync with the backend's isBusinessUnlocked gate.
+const GATED_ITEM_IDS = new Set(['post', 'invite']);
 
 interface ChecklistItem {
   id: string;
@@ -31,6 +36,19 @@ interface SetupChecklistProps {
 // that step is actually satisfied, instead of leaving the owner to find their own way back.
 export default function SetupChecklist({ summary, businessId, businessName }: SetupChecklistProps) {
   const router = useRouter();
+  const { unlocked: businessUnlocked, lockMessage } = useBusinessUnlockStatus();
+  const [snackVisible, setSnackVisible] = useState(false);
+
+  const handlePress = useCallback((item: ChecklistItem) => {
+    if (GATED_ITEM_IDS.has(item.id) && !businessUnlocked) {
+      setSnackVisible(true);
+      return;
+    }
+    router.push({
+      pathname: item.route,
+      params: { returnTo: 'dashboard', ...item.params },
+    } as never);
+  }, [businessUnlocked, router]);
 
   const items = useMemo<ChecklistItem[]>(() => {
     const trialStarted = summary?.subscription_status === 'trial' || summary?.subscription_status === 'active';
@@ -65,30 +83,43 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
         style={styles.progressBar}
       />
       <View style={styles.list}>
-        {items.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.row}
-            onPress={() => router.push({
-              pathname: item.route,
-              params: { returnTo: 'dashboard', ...item.params },
-            } as never)}
-            activeOpacity={0.7}
-            testID={`checklist-item-${item.id}`}
-          >
-            <View style={[styles.iconWrap, item.done && styles.iconWrapDone]}>
-              {item.done ? <Check size={14} color="#FFFFFF" /> : <Circle size={10} color={Colors.textTertiary} />}
-            </View>
-            <Text style={[styles.rowLabel, item.done && styles.rowLabelDone]}>{item.label}</Text>
-            {!item.done && <ChevronRight size={16} color={Colors.textTertiary} />}
-          </TouchableOpacity>
-        ))}
+        {items.map((item) => {
+          const isLocked = GATED_ITEM_IDS.has(item.id) && !businessUnlocked && !item.done;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.row}
+              onPress={() => handlePress(item)}
+              activeOpacity={0.7}
+              testID={`checklist-item-${item.id}`}
+            >
+              <View style={[styles.iconWrap, item.done && styles.iconWrapDone]}>
+                {item.done ? (
+                  <Check size={14} color="#FFFFFF" />
+                ) : isLocked ? (
+                  <Lock size={10} color={Colors.textTertiary} />
+                ) : (
+                  <Circle size={10} color={Colors.textTertiary} />
+                )}
+              </View>
+              <Text style={[styles.rowLabel, item.done && styles.rowLabelDone, isLocked && styles.rowLabelLocked]}>{item.label}</Text>
+              {!item.done && !isLocked && <ChevronRight size={16} color={Colors.textTertiary} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
       {!(items.find(i => i.id === 'profile')?.done && items.find(i => i.id === 'trial')?.done) && (
         <Text style={styles.lockNote}>
           Complete your profile and start your Stripe trial to unlock posting offers/events and inviting customers.
         </Text>
       )}
+      <Snackbar
+        visible={snackVisible}
+        onDismiss={() => setSnackVisible(false)}
+        duration={3000}
+      >
+        {lockMessage}
+      </Snackbar>
     </View>
   );
 }
@@ -130,6 +161,7 @@ const styles = StyleSheet.create({
   iconWrapDone: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   rowLabel: { flex: 1, fontSize: 13.5, fontWeight: '500' as const, color: Colors.text },
   rowLabelDone: { color: Colors.textTertiary, textDecorationLine: 'line-through' },
+  rowLabelLocked: { color: Colors.textTertiary },
   lockNote: {
     fontSize: 11.5,
     color: Colors.textTertiary,

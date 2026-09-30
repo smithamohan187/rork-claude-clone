@@ -12,9 +12,10 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Portal, Dialog, Button, Paragraph } from 'react-native-paper';
-import { ArrowLeft, Users, MessageCircle, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Users, MessageCircle, Trash2, Lock } from 'lucide-react-native';
 import { useMyBusinessMembers } from '@/hooks/useMyBusinessMembers';
 import { useConversations } from '@/hooks/useConversations';
+import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
 import type { BusinessMember } from '@/api/services/subscriptionService';
 
 const GREEN = '#1A5C35';
@@ -123,6 +124,7 @@ export default function BusinessMembersScreen() {
   const router = useRouter();
   const { members, isLoading, removeMember } = useMyBusinessMembers();
   const { conversations } = useConversations('business');
+  const { unlocked: businessUnlocked, loading: unlockLoading, lockMessage } = useBusinessUnlockStatus();
   const [pendingRemove, setPendingRemove] = useState<BusinessMember | null>(null);
 
   // Index the business's member-conversations by the member (other participant)
@@ -201,7 +203,17 @@ export default function BusinessMembersScreen() {
         </View>
       </View>
 
-      {isLoading && members.length === 0 ? (
+      {unlockLoading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={GREEN} size="large" />
+        </View>
+      ) : !businessUnlocked ? (
+        <View style={styles.emptyWrap}>
+          <Lock size={48} color={GREEN} strokeWidth={1.5} />
+          <Text style={styles.emptyTitle}>Members locked</Text>
+          <Text style={styles.emptySub}>{lockMessage}</Text>
+        </View>
+      ) : isLoading && members.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={GREEN} size="large" />
         </View>
