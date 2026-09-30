@@ -77,11 +77,16 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
         <Text style={styles.title}>Finish setting up your business</Text>
         <Text style={styles.count}>{doneCount} of {items.length}</Text>
       </View>
-      <ProgressBar
-        progress={doneCount / items.length}
-        color={Colors.primary}
-        style={styles.progressBar}
-      />
+      {/* react-native-paper's ProgressBar sets its outer wrapper to height:'100%' on web
+          (only the `style` prop reaches an inner track view) — inside a plain flex column
+          that stretches to fill all remaining space unless a fixed-height ancestor bounds it. */}
+      <View style={styles.progressBarWrapper}>
+        <ProgressBar
+          progress={doneCount / items.length}
+          color={Colors.primary}
+          style={styles.progressBar}
+        />
+      </View>
       <View style={styles.list}>
         {items.map((item) => {
           const isLocked = GATED_ITEM_IDS.has(item.id) && !businessUnlocked && !item.done;
@@ -145,7 +150,8 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 15, fontWeight: '700' as const, color: Colors.text },
   count: { fontSize: 13, fontWeight: '600' as const, color: Colors.primaryDark },
-  progressBar: { height: 6, borderRadius: 3, marginBottom: 14 },
+  progressBarWrapper: { height: 6, borderRadius: 3, marginBottom: 14, overflow: 'hidden' },
+  progressBar: { height: '100%', borderRadius: 3 },
   list: { gap: 2 },
   row: {
     flexDirection: 'row',

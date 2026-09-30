@@ -10,9 +10,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Camera, ImagePlus, MapPin, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useCompleteBusinessProfile } from '@/hooks/useCompleteBusinessProfile';
 
@@ -27,6 +28,8 @@ export default function BusinessCompleteProfileScreen() {
     city, setCity,
     state, setState,
     country, setCountry,
+    detecting, detectError, detectLocation,
+    logoUri, coverUri, pickLogo, pickCover,
     loadingInitial, saving, error,
     handleSave,
   } = useCompleteBusinessProfile();
@@ -69,6 +72,48 @@ export default function BusinessCompleteProfileScreen() {
               ))}
             </View>
 
+            <Text style={styles.sectionLabel}>PHOTOS</Text>
+            <View style={styles.uploadSection}>
+              <View style={styles.inputLabelRow}>
+                <ImagePlus size={16} color={Colors.textSecondary} />
+                <Text style={styles.inputLabel}>Business Logo</Text>
+              </View>
+              {logoUri ? (
+                <View style={styles.uploadedLogoWrap}>
+                  <Image source={{ uri: logoUri }} style={styles.uploadedLogo} contentFit="cover" />
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickLogo} activeOpacity={0.7}>
+                    <X size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.uploadLogoBox} onPress={pickLogo} activeOpacity={0.7}>
+                  <Camera size={22} color={Colors.textSecondary} />
+                  <Text style={styles.uploadPhotoText}>Tap to upload logo</Text>
+                  <Text style={styles.uploadPhotoSubtext}>Recommended: 1:1 square</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.uploadSection}>
+              <View style={styles.inputLabelRow}>
+                <ImagePlus size={16} color={Colors.textSecondary} />
+                <Text style={styles.inputLabel}>Cover Photo</Text>
+              </View>
+              {coverUri ? (
+                <View style={styles.uploadedImageWrap}>
+                  <Image source={{ uri: coverUri }} style={styles.uploadedBusinessPhoto} contentFit="cover" />
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickCover} activeOpacity={0.7}>
+                    <X size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.uploadPhotoBox} onPress={pickCover} activeOpacity={0.7}>
+                  <Camera size={24} color={Colors.textSecondary} />
+                  <Text style={styles.uploadPhotoText}>Tap to upload cover photo</Text>
+                  <Text style={styles.uploadPhotoSubtext}>Recommended: 16:9 landscape</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <Text style={styles.sectionLabel}>ABOUT</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Description</Text>
@@ -108,7 +153,27 @@ export default function BusinessCompleteProfileScreen() {
               />
             </View>
 
-            <Text style={styles.sectionLabel}>LOCATION</Text>
+            <View style={styles.locationHeaderRow}>
+              <Text style={styles.sectionLabel}>LOCATION</Text>
+              <TouchableOpacity
+                style={styles.detectLocationBtn}
+                onPress={detectLocation}
+                activeOpacity={0.7}
+                disabled={detecting}
+              >
+                {detecting ? (
+                  <ActivityIndicator size="small" color={Colors.primaryDark} />
+                ) : (
+                  <MapPin size={14} color={Colors.primaryDark} />
+                )}
+                <Text style={styles.detectLocationText}>
+                  {detecting ? 'Detecting…' : 'Detect my location'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {!!detectError && (
+              <Text style={styles.detectErrorText}>{detectError}</Text>
+            )}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Address</Text>
               <TextInput
@@ -206,6 +271,51 @@ const styles = StyleSheet.create({
   multiline: { height: 96, paddingTop: 12, textAlignVertical: 'top' },
   errorBox: { backgroundColor: '#FCEAEA', borderRadius: 12, padding: 12, marginBottom: 14 },
   errorText: { color: Colors.error, fontSize: 13 },
+  locationHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 8, marginBottom: 4,
+  },
+  detectLocationBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 4, paddingHorizontal: 4,
+  },
+  detectLocationText: { fontSize: 12, fontWeight: '600' as const, color: Colors.primaryDark },
+  detectErrorText: { fontSize: 12, color: Colors.error, marginBottom: 10 },
+  inputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  uploadSection: { marginBottom: 18 },
+  uploadPhotoBox: {
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadLogoBox: {
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadPhotoText: { fontSize: 13, fontWeight: '500' as const, color: Colors.textSecondary },
+  uploadPhotoSubtext: { fontSize: 11, color: Colors.textTertiary },
+  uploadedImageWrap: { position: 'relative' },
+  uploadedBusinessPhoto: { width: '100%', height: 180, borderRadius: 14 },
+  uploadedLogoWrap: { position: 'relative', alignSelf: 'flex-start' },
+  uploadedLogo: { width: 120, height: 120, borderRadius: 14 },
+  removeImageBtn: {
+    position: 'absolute', top: 8, right: 8,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   saveBtn: {
     backgroundColor: Colors.primaryDark, height: 52, borderRadius: 50,
     alignItems: 'center', justifyContent: 'center', marginTop: 8,
