@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -678,10 +679,21 @@ function RoleSelectScreen({ onSelectRole }: { onSelectRole: (role: Role) => void
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { authLoading, isAuthenticated } = useAuth();
   const flatListRef = useRef<FlatList<SlideMeta>>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [role, setRole] = useState<Role | null>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+
+  // A logged-in user should never see the role-select picker here — this screen can be
+  // re-mounted at any time (cold boot, a web deep-link redirect landing on "/", back-navigation),
+  // and without this gate an already-authenticated business owner mid-Stripe-trial-setup gets
+  // bounced into onboarding instead of their dashboard.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace('/(tabs)/feed' as never);
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   const activeSlides = role === 'business' ? BUSINESS_SLIDES : CUSTOMER_SLIDES;
 
@@ -809,6 +821,12 @@ export default function OnboardingScreen() {
   }, [handleExplore, handleLogIn]);
 
   const isReadySlide = activeIndex === activeSlides.length - 1;
+
+  // While session restore is in flight, or once we know the user is authenticated and the
+  // redirect above is about to fire, show nothing rather than flashing the role picker.
+  if (authLoading || isAuthenticated) {
+    return <View style={styles.container} />;
+  }
 
   return (
     <View style={styles.container}>

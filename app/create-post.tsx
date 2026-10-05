@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   View,
@@ -7,10 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,6 +50,29 @@ import type { LocalEvent } from '@/mocks/data';
 import { mockLocalEvents } from '@/mocks/data';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { createPost, updatePost } from '@/api/services/postsService';
+import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
+
+// Converts a local image URI to a stable display URI immediately after picking.
+// On Expo web, ImagePicker returns a blob: URL that gets revoked between renders,
+// causing the preview image to disappear. We convert to base64 right away so the
+// URI remains valid for both display and upload. Native file:// URIs are stable.
+async function toDisplayUri(uri: string): Promise<string> {
+  if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = reject;
+    xhr.open('GET', uri);
+    xhr.responseType = 'blob';
+    xhr.send();
+  });
+}
 
 type PostType = 'promotion' | 'announcement' | 'general';
 
@@ -118,6 +143,76 @@ export default function CreatePostScreen() {
   const successAnim = useRef(new Animated.Value(0)).current;
 
   const isBusiness = accountType === 'business';
+
+  // "My Uploads" — a private, paginated photo library per business, populated by the
+  // "Upload from device" button below and reusable across future posts too.
+  const [myUploads, setMyUploads] = useState<MediaItem[]>([]);
+  const [myUploadsLoading, setMyUploadsLoading] = useState<boolean>(false);
+  const [myUploadsHasMore, setMyUploadsHasMore] = useState<boolean>(false);
+  const [pickingPhoto, setPickingPhoto] = useState<boolean>(false);
+  const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
+
+  const loadMyUploads = useCallback(async (offset: number, replace: boolean) => {
+    setMyUploadsLoading(true);
+    try {
+      const { items, hasMore } = await fetchMyUploads(20, offset);
+      setMyUploads(prev => (replace ? items : [...prev, ...items]));
+      setMyUploadsHasMore(hasMore);
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Failed to load my uploads:', err);
+    } finally {
+      setMyUploadsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isBusiness) loadMyUploads(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBusiness]);
+
+  const handleLoadMoreUploads = useCallback(() => {
+    if (myUploadsLoading || !myUploadsHasMore) return;
+    loadMyUploads(myUploads.length, false);
+  }, [myUploadsLoading, myUploadsHasMore, myUploads.length, loadMyUploads]);
+
+  const handlePickFromDevice = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [600, 400],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const stable = await toDisplayUri(result.assets[0].uri);
+      setPickingPhoto(true);
+      const media = await uploadMedia(stable);
+      setMyUploads(prev => [media, ...prev]);
+      setSelectedImage(media.image_url);
+      setSelectedVideo('');
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Upload error:', err);
+      Alert.alert('Upload Failed', err instanceof Error ? err.message : 'Could not upload your photo. Please try again.');
+    } finally {
+      setPickingPhoto(false);
+    }
+  }, []);
+
+  const handleDeleteUpload = useCallback(async (id: string, imageUrl: string) => {
+    setMyUploads(prev => prev.filter(m => m.id !== id));
+    if (selectedImage === imageUrl) setSelectedImage('');
+    try {
+      await deleteMedia(id);
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Delete failed, reloading list:', err);
+      loadMyUploads(0, true);
+    }
+  }, [selectedImage, loadMyUploads]);
 
   const [showEventForm, setShowEventForm] = useState<boolean>(false);
   const [eventTitle, setEventTitle] = useState<string>('');
@@ -245,7 +340,7 @@ export default function CreatePostScreen() {
     ]);
   }, []);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!isFormValid) {
       Alert.alert('Missing Content', 'Please write something for your post.');
       return;
@@ -256,23 +351,33 @@ export default function CreatePostScreen() {
     }
 
     setIsSubmitting(true);
-    console.log('Creating post:', { content, selectedType, selectedImage, selectedVideo, addedVideoLinks, uploadedVideos });
+    try {
+      const trimmed = content.trim();
+      const title = trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+      const post = await createPost({ title, content: trimmed });
+      if (selectedImage) {
+        await updatePost(post.id, { image_url: selectedImage });
+      }
 
-    Animated.sequence([
-      Animated.timing(successAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.delay(800),
-    ]).start(() => {
-      Alert.alert(
-        'Post Published!',
-        'Your post is now live on the feed.',
-        [{ text: 'Great', onPress: () => router.back() }]
-      );
-    });
-  }, [isFormValid, content, selectedType, selectedImage, selectedVideo, addedVideoLinks, uploadedVideos, successAnim, router, charCount]);
+      Animated.sequence([
+        Animated.timing(successAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.delay(800),
+      ]).start(() => {
+        Alert.alert(
+          'Post Published!',
+          'Your post is now live on the feed.',
+          [{ text: 'Great', onPress: () => router.back() }]
+        );
+      });
+    } catch (err) {
+      setIsSubmitting(false);
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to publish your post. Please try again.');
+    }
+  }, [isFormValid, content, selectedImage, successAnim, router, charCount]);
 
   const isValidVideoUrl = useCallback((url: string): boolean => {
     const patterns = [
@@ -564,7 +669,18 @@ export default function CreatePostScreen() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Image source={{ uri: img }} style={styles.thumbImage} contentFit="cover" />
+                      {brokenImageUrls.has(img) ? (
+                        <View style={[styles.thumbImage, styles.thumbFallback]}>
+                          <ImagePlus size={18} color={Colors.textTertiary} />
+                        </View>
+                      ) : (
+                        <Image
+                          source={{ uri: img }}
+                          style={styles.thumbImage}
+                          contentFit="cover"
+                          onError={() => setBrokenImageUrls(prev => new Set(prev).add(img))}
+                        />
+                      )}
                       {selectedImage === img && (
                         <View style={styles.imageCheck}>
                           <Check size={14} color={Colors.navyDark} />
@@ -574,17 +690,92 @@ export default function CreatePostScreen() {
                   ))}
                 </ScrollView>
 
+                {isBusiness && (myUploads.length > 0 || myUploadsLoading) && (
+                  <>
+                    <Text style={styles.myUploadsLabel}>My Uploads</Text>
+                    <FlatList
+                      horizontal
+                      data={myUploads}
+                      keyExtractor={(item) => item.id}
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.imageRow}
+                      onEndReached={handleLoadMoreUploads}
+                      onEndReachedThreshold={0.5}
+                      ListFooterComponent={myUploadsLoading ? (
+                        <View style={styles.myUploadsLoadingWrap}>
+                          <ActivityIndicator size="small" color={Colors.textTertiary} />
+                        </View>
+                      ) : null}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={[styles.imageThumbnail, selectedImage === item.image_url && styles.imageThumbnailSelected]}
+                          onPress={() => {
+                            setSelectedImage(selectedImage === item.image_url ? '' : item.image_url);
+                            setSelectedVideo('');
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          {brokenImageUrls.has(item.image_url) ? (
+                            <View style={[styles.thumbImage, styles.thumbFallback]}>
+                              <ImagePlus size={18} color={Colors.textTertiary} />
+                            </View>
+                          ) : (
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={styles.thumbImage}
+                              contentFit="cover"
+                              onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                            />
+                          )}
+                          {selectedImage === item.image_url && (
+                            <View style={styles.imageCheck}>
+                              <Check size={14} color={Colors.navyDark} />
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            style={styles.uploadDeleteBtn}
+                            onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                            hitSlop={8}
+                          >
+                            <X size={12} color="#fff" />
+                          </TouchableOpacity>
+                        </TouchableOpacity>
+                      )}
+                    />
+                  </>
+                )}
+
                 {selectedImage ? (
                   <View style={styles.previewContainer}>
-                    <Image source={{ uri: selectedImage }} style={styles.previewImage} contentFit="cover" />
+                    {brokenImageUrls.has(selectedImage) ? (
+                      <View style={[styles.previewImage, styles.thumbFallback]}>
+                        <ImagePlus size={28} color={Colors.textTertiary} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: selectedImage }}
+                        style={styles.previewImage}
+                        contentFit="cover"
+                        onError={() => setBrokenImageUrls(prev => new Set(prev).add(selectedImage))}
+                      />
+                    )}
                     <TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage('')}>
                       <X size={16} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity style={styles.addImagePlaceholder} activeOpacity={0.7}>
-                    <Upload size={28} color={Colors.textTertiary} />
-                    <Text style={styles.addImageText}>Upload from device</Text>
+                  <TouchableOpacity
+                    style={styles.addImagePlaceholder}
+                    activeOpacity={0.7}
+                    onPress={handlePickFromDevice}
+                    disabled={pickingPhoto}
+                  >
+                    {pickingPhoto ? (
+                      <ActivityIndicator size="small" color={Colors.textTertiary} />
+                    ) : (
+                      <Upload size={28} color={Colors.textTertiary} />
+                    )}
+                    <Text style={styles.addImageText}>{pickingPhoto ? 'Uploading…' : 'Upload from device'}</Text>
                     <Text style={styles.addImageSubtext}>or select from a source above</Text>
                   </TouchableOpacity>
                 )}
@@ -1230,6 +1421,34 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+  },
+  myUploadsLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  myUploadsLoadingWrap: {
+    width: 44,
+    height: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadDeleteBtn: {
+    position: 'absolute' as const,
+    top: 3,
+    left: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },

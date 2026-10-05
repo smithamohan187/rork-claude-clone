@@ -14,6 +14,7 @@ const businessDirectoryRoutes = require('./modules/businessDirectory/businessDir
 const offersRoutes            = require('./modules/offers/offers.routes');
 const eventsRoutes            = require('./modules/events/events.routes');
 const postsRoutes             = require('./modules/posts/posts.routes');
+const businessMediaRoutes     = require('./modules/businessMedia/businessMedia.routes');
 const subscriptionRoutes      = require('./modules/subscriptions/subscription.routes');
 const reviewsRoutes           = require('./modules/reviews/reviews.routes');
 const savedBusinessRoutes     = require('./modules/savedBusinesses/savedBusiness.routes');
@@ -72,6 +73,7 @@ console.log('Done.');
 app.use('/offers',            offersRoutes);
 app.use('/events',            eventsRoutes);
 app.use('/posts',             postsRoutes);
+app.use('/business-media',    businessMediaRoutes);
 app.use('/subscriptions',     subscriptionRoutes);
 app.use('/reviews',           reviewsRoutes);
 app.use('/saved-businesses',  savedBusinessRoutes);
