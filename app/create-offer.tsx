@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   Animated,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -30,13 +31,15 @@ import {
   Check,
   Trash2,
   FileText,
+  Upload,
 } from 'lucide-react-native';
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
 import { usePosts } from '@/hooks/usePosts';
 import { uploadPostImage } from '@/api/services/postsService';
-import { createOffer, uploadOfferImage, type CreateOfferPayload } from '@/api/services/offersService';
+import { createOffer, uploadOfferImage, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
+import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
 import { useEvents } from '@/hooks/useEvents';
 import { uploadEventImage } from '@/api/services/eventsService';
 
@@ -67,7 +70,6 @@ const PURPLE_GLOW = 'rgba(83,52,183,0.35)';
 const CARD_SHADOW = 'rgba(26,92,53,0.08)';
 
 type TabMode = 'offer' | 'event' | 'post';
-type OfferType = 'promotion' | 'discount' | 'flash_sale';
 
 interface FormErrors {
   title?: string;
@@ -113,6 +115,90 @@ export default function CreateOfferScreen() {
   const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [publishing, setPublishing] = useState<boolean>(false);
+  const [offerOriginalPrice, setOfferOriginalPrice] = useState<string>('');
+  const [offerTerms, setOfferTerms] = useState<string>('');
+  const [offerTags, setOfferTags] = useState<string>('');
+  const [offerIsHot, setOfferIsHot] = useState<boolean>(false);
+  const [offerPromoCode, setOfferPromoCode] = useState<string>('');
+
+  // "My Uploads" — the same business-scoped photo library used by the Post tab in
+  // create-post.tsx, reused here for the Offer tab's cover image (upload-from-device
+  // + reuse-previous-photo; offers don't need a generic stock-photo grid).
+  const [myUploads, setMyUploads] = useState<MediaItem[]>([]);
+  const [myUploadsLoading, setMyUploadsLoading] = useState<boolean>(false);
+  const [myUploadsHasMore, setMyUploadsHasMore] = useState<boolean>(false);
+  const [pickingOfferPhoto, setPickingOfferPhoto] = useState<boolean>(false);
+  const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
+
+  const loadMyUploads = useCallback(async (offset: number, replace: boolean) => {
+    setMyUploadsLoading(true);
+    try {
+      const { items, hasMore } = await fetchMyUploads(20, offset);
+      setMyUploads(prev => (replace ? items : [...prev, ...items]));
+      setMyUploadsHasMore(hasMore);
+    } catch (err) {
+      if (__DEV__) console.log('[CreateOffer] Failed to load my uploads:', err);
+    } finally {
+      setMyUploadsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMyUploads(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLoadMoreUploads = useCallback(() => {
+    if (myUploadsLoading || !myUploadsHasMore) return;
+    loadMyUploads(myUploads.length, false);
+  }, [myUploadsLoading, myUploadsHasMore, myUploads.length, loadMyUploads]);
+
+  const handleOfferPickFromDevice = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const stable = await toDisplayUri(result.assets[0].uri);
+      setPickingOfferPhoto(true);
+      const media = await uploadMedia(stable);
+      setMyUploads(prev => [media, ...prev]);
+      setOfferImage(media.image_url);
+    } catch (err) {
+      if (__DEV__) console.log('[CreateOffer] Offer upload error:', err);
+      Alert.alert('Upload Failed', err instanceof Error ? err.message : 'Could not upload your photo. Please try again.');
+    } finally {
+      setPickingOfferPhoto(false);
+    }
+  }, []);
+
+  const handleDeleteUpload = useCallback((id: string, imageUrl: string) => {
+    Alert.alert('Delete Photo', 'Are you sure you want to delete this photo? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setMyUploads(prev => prev.filter(m => m.id !== id));
+          if (offerImage === imageUrl) setOfferImage('');
+          try {
+            await deleteMedia(id);
+          } catch (err) {
+            if (__DEV__) console.log('[CreateOffer] Delete failed, reloading list:', err);
+            loadMyUploads(0, true);
+          }
+        },
+      },
+    ]);
+  }, [offerImage, loadMyUploads]);
 
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDescription, setEventDescription] = useState<string>('');
@@ -145,11 +231,15 @@ export default function CreateOfferScreen() {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
       setDiscountPercent(''); setOfferStartDate(''); setOfferEndDate('');
       setIsActive(true);
+      setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
+      setOfferIsHot(false); setOfferPromoCode('');
       setPostTitle(''); setPostContent('');
     } else {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
       setDiscountPercent(''); setOfferStartDate(''); setOfferEndDate('');
       setIsActive(true);
+      setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
+      setOfferIsHot(false); setOfferPromoCode('');
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventEndDate(null);
     }
@@ -261,10 +351,13 @@ export default function CreateOfferScreen() {
       const payload: CreateOfferPayload = {
         title:          offerTitle.trim(),
         description:    offerDescription.trim() || null,
+        offer_type:     offerType,
         discount_type:  offerType === 'discount' ? 'percent' : null,
         discount_value: offerType === 'discount' && discountPercent
                           ? parseInt(discountPercent, 10)
                           : null,
+        original_price: parseFloat(offerOriginalPrice) || null,
+        terms:          offerTerms.trim() || null,
         starts_at:      offerStartDate
                           ? new Date(offerStartDate).toISOString()
                           : null,
@@ -272,6 +365,9 @@ export default function CreateOfferScreen() {
                           ? new Date(offerEndDate).toISOString()
                           : null,
         status:         isActive ? 'active' : 'disabled',
+        tags:           offerTags.split(',').map(t => t.trim()).filter(Boolean),
+        is_hot:         offerIsHot,
+        promo_code:     offerPromoCode.trim() || null,
       };
 
       try {
@@ -310,6 +406,7 @@ export default function CreateOfferScreen() {
     activeTab, validateOfferForm, validateEventForm, validatePostForm, router,
     offerTitle, offerDescription, offerType, discountPercent, offerImage,
     offerStartDate, offerEndDate, isActive,
+    offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
     eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, addEvent,
     postTitle, postContent, postImage, addPost,
   ]);
@@ -385,6 +482,21 @@ export default function CreateOfferScreen() {
           theme={{ colors: { background: '#fff' } }}
         />
         {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+
+        <TextInput
+          label="Terms & Conditions"
+          value={offerTerms}
+          onChangeText={setOfferTerms}
+          mode="outlined"
+          style={[styles.input, styles.multilineInput]}
+          outlineColor="#E8E4F0"
+          activeOutlineColor={PURPLE}
+          multiline
+          numberOfLines={3}
+          testID="offer-terms-input"
+          placeholder="Any restrictions or fine print for this offer..."
+          theme={{ colors: { background: '#fff' } }}
+        />
       </View>
 
       <View style={styles.section}>
@@ -421,6 +533,64 @@ export default function CreateOfferScreen() {
           </View>
         )}
         {errors.discount && <Text style={styles.errorText}>{errors.discount}</Text>}
+
+        <TextInput
+          label="Original Price"
+          value={offerOriginalPrice}
+          onChangeText={(t) => setOfferOriginalPrice(t.replace(/[^0-9.]/g, ''))}
+          mode="outlined"
+          style={[styles.input, { marginTop: 14 }]}
+          outlineColor="#E8E4F0"
+          activeOutlineColor={PURPLE}
+          keyboardType="decimal-pad"
+          testID="offer-original-price-input"
+          placeholder="e.g. 49.99"
+          left={<TextInput.Affix text="$" />}
+          theme={{ colors: { background: '#fff' } }}
+        />
+      </View>
+
+      <View style={styles.section}>
+        {renderSectionHeader(<Zap size={14} color="#fff" />, 'Boost & Tags')}
+
+        <TextInput
+          label="Tags"
+          value={offerTags}
+          onChangeText={setOfferTags}
+          mode="outlined"
+          style={styles.input}
+          outlineColor="#E8E4F0"
+          activeOutlineColor={PURPLE}
+          testID="offer-tags-input"
+          placeholder="Weekend, Members Only, Limited Time"
+          theme={{ colors: { background: '#fff' } }}
+        />
+
+        <TextInput
+          label="Promo Code"
+          value={offerPromoCode}
+          onChangeText={setOfferPromoCode}
+          mode="outlined"
+          style={[styles.input, { marginTop: 14 }]}
+          outlineColor="#E8E4F0"
+          activeOutlineColor={PURPLE}
+          autoCapitalize="characters"
+          testID="offer-promo-code-input"
+          placeholder="e.g. SAVE20"
+          theme={{ colors: { background: '#fff' } }}
+        />
+
+        <View style={styles.toggleRow}>
+          <Text style={styles.eventToggleLabel}>Mark as Hot</Text>
+          <TouchableOpacity
+            style={[styles.toggleTrack, offerIsHot && styles.toggleTrackOn]}
+            onPress={() => setOfferIsHot(!offerIsHot)}
+            activeOpacity={0.8}
+            testID="offer-hot-toggle"
+          >
+            <View style={[styles.toggleThumb, offerIsHot && styles.toggleThumbOn]} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -434,18 +604,72 @@ export default function CreateOfferScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.imageUploadArea}
-            onPress={handlePickImage}
-            activeOpacity={0.7}
-            testID="image-upload-area"
-          >
-            <View style={styles.imageUploadIconWrap}>
-              <ImagePlus size={26} color={PURPLE} />
-            </View>
-            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
-            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.addImagePlaceholder}
+              activeOpacity={0.7}
+              onPress={handleOfferPickFromDevice}
+              disabled={pickingOfferPhoto}
+              testID="image-upload-area"
+            >
+              {pickingOfferPhoto ? (
+                <ActivityIndicator size="small" color={Colors.textTertiary} />
+              ) : (
+                <Upload size={28} color={PURPLE} />
+              )}
+              <Text style={styles.imageUploadTitle}>{pickingOfferPhoto ? 'Uploading…' : 'Upload from device'}</Text>
+              <Text style={styles.imageUploadSub}>Add a new photo to your library</Text>
+            </TouchableOpacity>
+
+            {(myUploads.length > 0 || myUploadsLoading) && (
+              <FlatList
+                horizontal
+                data={myUploads}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imageRow}
+                onEndReached={handleLoadMoreUploads}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={myUploadsLoading ? (
+                  <View style={styles.myUploadsLoadingWrap}>
+                    <ActivityIndicator size="small" color={Colors.textTertiary} />
+                  </View>
+                ) : null}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.imageThumbnail, offerImage === item.image_url && styles.imageThumbnailSelected]}
+                    onPress={() => setOfferImage(offerImage === item.image_url ? '' : item.image_url)}
+                    activeOpacity={0.8}
+                  >
+                    {brokenImageUrls.has(item.image_url) ? (
+                      <View style={[styles.thumbImage, styles.thumbFallback]}>
+                        <ImagePlus size={18} color={Colors.textTertiary} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.thumbImage}
+                        contentFit="cover"
+                        onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                      />
+                    )}
+                    {offerImage === item.image_url && (
+                      <View style={styles.imageCheck}>
+                        <Check size={14} color={PURPLE} />
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.uploadDeleteBtn}
+                      onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                      hitSlop={8}
+                    >
+                      <X size={12} color="#fff" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </>
         )}
       </View>
 
@@ -1077,6 +1301,102 @@ const styles = StyleSheet.create({
   discountInput: {
     backgroundColor: '#fff',
     fontSize: 15,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  eventToggleLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1A1730',
+  },
+  toggleTrack: {
+    width: 46,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: PURPLE_LIGHT,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  toggleTrackOn: {
+    backgroundColor: PURPLE,
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+  },
+  toggleThumbOn: {
+    transform: [{ translateX: 20 }],
+  },
+  addImagePlaceholder: {
+    borderWidth: 2,
+    borderColor: PURPLE_LIGHT,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAF8FF',
+    marginBottom: 12,
+  },
+  imageRow: {
+    gap: 10,
+    paddingVertical: 4,
+  },
+  imageThumbnail: {
+    width: 90,
+    height: 70,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  imageThumbnailSelected: {
+    borderColor: PURPLE,
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PURPLE_LIGHT,
+  },
+  imageCheck: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadDeleteBtn: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myUploadsLoadingWrap: {
+    width: 60,
+    height: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   imageUploadArea: {
     borderWidth: 2,

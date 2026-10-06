@@ -27,24 +27,27 @@ async function getBusinessIdByUserId(userId) {
 async function insertOffer(client, data) {
   const {
     business_id, title, description, image_url,
-    discount_type, discount_value, original_price,
+    offer_type, discount_type, discount_value, original_price,
     terms, max_redemptions, starts_at, expires_at, status,
+    tags, is_hot, promo_code,
   } = data;
 
   const q = runner(client);
   const { rows } = await q(
     `INSERT INTO offers
        (business_id, title, description, image_url,
-        discount_type, discount_value, original_price,
-        terms, max_redemptions, starts_at, expires_at, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        offer_type, discount_type, discount_value, original_price,
+        terms, max_redemptions, starts_at, expires_at, status,
+        tags, is_hot, promo_code)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING *`,
     [
       business_id, title, description ?? null, image_url ?? null,
-      discount_type ?? null, discount_value ?? null, original_price ?? null,
+      offer_type ?? 'promotion', discount_type ?? null, discount_value ?? null, original_price ?? null,
       terms ?? null, max_redemptions ?? null,
       starts_at ?? null, expires_at ?? null,
       status ?? 'active',
+      tags ?? [], is_hot ?? false, promo_code ?? null,
     ]
   );
   return rows[0];
@@ -52,8 +55,9 @@ async function insertOffer(client, data) {
 
 async function updateOffer(offerId, data) {
   const {
-    title, description, image_url, discount_type, discount_value,
+    title, description, image_url, offer_type, discount_type, discount_value,
     original_price, terms, max_redemptions, starts_at, expires_at, status,
+    tags, is_hot, promo_code,
   } = data;
 
   const { rows } = await query(
@@ -69,6 +73,10 @@ async function updateOffer(offerId, data) {
        starts_at       = $9,
        expires_at      = $10,
        status          = COALESCE($11, status),
+       offer_type      = COALESCE($13, offer_type),
+       tags            = COALESCE($14, tags),
+       is_hot          = COALESCE($15, is_hot),
+       promo_code      = $16,
        updated_at      = NOW()
      WHERE id = $12
      RETURNING *`,
@@ -78,6 +86,8 @@ async function updateOffer(offerId, data) {
       terms ?? null, max_redemptions ?? null,
       starts_at ?? null, expires_at ?? null,
       status ?? null, offerId,
+      offer_type ?? null, tags ?? null, is_hot !== undefined ? is_hot : null,
+      promo_code ?? null,
     ]
   );
   return rows[0] ?? null;

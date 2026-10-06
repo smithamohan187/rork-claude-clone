@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import { File as ExpoFile } from 'expo-file-system';
 import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
+export type OfferType = 'promotion' | 'discount' | 'flash_sale';
+
 export interface Offer {
   id: string;
   type: 'offer';
@@ -10,10 +12,14 @@ export interface Offer {
   title: string;
   description: string | null;
   image_url: string | null;
+  offer_type: OfferType;
   discount_type: 'percent' | 'flat' | 'bogo' | 'freebie' | null;
   discount_value: number | null;
   original_price: number | null;
   terms: string | null;
+  tags: string[];
+  is_hot: boolean;
+  promo_code: string | null;
   status: 'active' | 'expired' | 'disabled';
   effective_status: 'active' | 'disabled' | 'expired';
   starts_at: string | null;
@@ -33,6 +39,7 @@ export interface CreateOfferPayload {
   title: string;
   description?: string | null;
   image_url?: string | null;
+  offer_type?: OfferType;
   discount_type?: 'percent' | 'flat' | 'bogo' | 'freebie' | null;
   discount_value?: number | null;
   original_price?: number | null;
@@ -41,6 +48,9 @@ export interface CreateOfferPayload {
   starts_at?: string | null;
   expires_at?: string | null;
   status?: 'active' | 'disabled';
+  tags?: string[];
+  is_hot?: boolean;
+  promo_code?: string | null;
 }
 
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');

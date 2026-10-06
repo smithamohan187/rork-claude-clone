@@ -49,7 +49,7 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { createPost, updatePost, uploadPostVideo } from '@/api/services/postsService';
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
-import { createOffer, uploadOfferImage, type CreateOfferPayload } from '@/api/services/offersService';
+import { createOffer, uploadOfferImage, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
 import { uploadEventImage, type EventCategory } from '@/api/services/eventsService';
 
@@ -78,7 +78,6 @@ async function toDisplayUri(uri: string): Promise<string> {
 
 type PostType = 'promotion' | 'announcement' | 'general';
 type TabMode = 'post' | 'event' | 'offer';
-type OfferType = 'promotion' | 'discount' | 'flash_sale';
 
 // A single pending video selection for the Post tab — either a pasted external
 // link or a device file picked but not yet uploaded. Only one may exist at a time.
@@ -175,6 +174,9 @@ export default function CreatePostScreen() {
   const [myUploadsHasMore, setMyUploadsHasMore] = useState<boolean>(false);
   const [pickingPhoto, setPickingPhoto] = useState<boolean>(false);
   const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
+  // Declared early (ahead of the rest of the Offer tab state block below) because
+  // handleDeleteUpload, defined just after this, references it.
+  const [offerImage, setOfferImage] = useState<string>('');
 
   const loadMyUploads = useCallback(async (offset: number, replace: boolean) => {
     setMyUploadsLoading(true);
@@ -236,6 +238,7 @@ export default function CreatePostScreen() {
         onPress: async () => {
           setMyUploads(prev => prev.filter(m => m.id !== id));
           if (selectedImage === imageUrl) setSelectedImage('');
+          if (offerImage === imageUrl) setOfferImage('');
           try {
             await deleteMedia(id);
           } catch (err) {
@@ -245,7 +248,37 @@ export default function CreatePostScreen() {
         },
       },
     ]);
-  }, [selectedImage, loadMyUploads]);
+  }, [selectedImage, offerImage, loadMyUploads]);
+
+  // Offer cover image reuses the same business-scoped "My Uploads" library as the
+  // Post tab's image picker — offers don't need generic stock photography, so this
+  // is upload-from-device + reuse-previous-photo only (no stock tab).
+  const handleOfferPickFromDevice = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const stable = await toDisplayUri(result.assets[0].uri);
+      setPickingOfferPhoto(true);
+      const media = await uploadMedia(stable);
+      setMyUploads(prev => [media, ...prev]);
+      setOfferImage(media.image_url);
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Offer upload error:', err);
+      Alert.alert('Upload Failed', err instanceof Error ? err.message : 'Could not upload your photo. Please try again.');
+    } finally {
+      setPickingOfferPhoto(false);
+    }
+  }, []);
 
   const isFormValid = content.trim().length > 0;
 
@@ -257,11 +290,16 @@ export default function CreatePostScreen() {
   const [offerDescription, setOfferDescription] = useState<string>('');
   const [offerType, setOfferType] = useState<OfferType>('promotion');
   const [discountPercent, setDiscountPercent] = useState<string>('');
-  const [offerImage, setOfferImage] = useState<string>('');
   const [offerStartDate, setOfferStartDate] = useState<string>('');
   const [offerEndDate, setOfferEndDate] = useState<string>('');
   const [offerPickerField, setOfferPickerField] = useState<'start' | 'end' | null>(null);
   const [offerIsActive, setOfferIsActive] = useState<boolean>(true);
+  const [offerOriginalPrice, setOfferOriginalPrice] = useState<string>('');
+  const [offerTerms, setOfferTerms] = useState<string>('');
+  const [offerTags, setOfferTags] = useState<string>('');
+  const [offerIsHot, setOfferIsHot] = useState<boolean>(false);
+  const [offerPromoCode, setOfferPromoCode] = useState<string>('');
+  const [pickingOfferPhoto, setPickingOfferPhoto] = useState<boolean>(false);
 
   // ---- Event tab state ----
   const [eventTitle, setEventTitle] = useState<string>('');
@@ -290,6 +328,8 @@ export default function CreatePostScreen() {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
       setDiscountPercent(''); setOfferImage(''); setOfferStartDate(''); setOfferEndDate('');
       setOfferIsActive(true);
+      setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
+      setOfferIsHot(false); setOfferPromoCode('');
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventEndDate(null); setEventImage('');
       setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
@@ -298,6 +338,8 @@ export default function CreatePostScreen() {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
       setDiscountPercent(''); setOfferImage(''); setOfferStartDate(''); setOfferEndDate('');
       setOfferIsActive(true);
+      setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
+      setOfferIsHot(false); setOfferPromoCode('');
     } else {
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventEndDate(null); setEventImage('');
@@ -343,7 +385,7 @@ export default function CreatePostScreen() {
     return Object.keys(newErrors).length === 0;
   }, [eventTitle, eventDate, eventEndDate]);
 
-  const handlePickCoverImage = useCallback(async (target: 'offer' | 'event') => {
+  const handlePickCoverImage = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -358,8 +400,7 @@ export default function CreatePostScreen() {
       });
       if (!result.canceled && result.assets?.[0]) {
         const stable = await toDisplayUri(result.assets[0].uri);
-        if (target === 'offer') setOfferImage(stable);
-        else setEventImage(stable);
+        setEventImage(stable);
       }
     } catch (err) {
       if (__DEV__) console.log('[CreatePost] Image picker error:', err);
@@ -414,11 +455,17 @@ export default function CreatePostScreen() {
       const payload: CreateOfferPayload = {
         title: offerTitle.trim(),
         description: offerDescription.trim() || null,
+        offer_type: offerType,
         discount_type: offerType === 'discount' ? 'percent' : null,
         discount_value: offerType === 'discount' && discountPercent ? parseInt(discountPercent, 10) : null,
+        original_price: parseFloat(offerOriginalPrice) || null,
+        terms: offerTerms.trim() || null,
         starts_at: offerStartDate ? new Date(offerStartDate).toISOString() : null,
         expires_at: offerEndDate ? new Date(offerEndDate).toISOString() : null,
         status: offerIsActive ? 'active' : 'disabled',
+        tags: offerTags.split(',').map(t => t.trim()).filter(Boolean),
+        is_hot: offerIsHot,
+        promo_code: offerPromoCode.trim() || null,
       };
 
       setIsSubmitting(true);
@@ -475,6 +522,7 @@ export default function CreatePostScreen() {
     activeTab, isFormValid, charCount, content, selectedImage, pendingVideo, successAnim, router,
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
+    offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
     validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, eventImage, addEvent,
     eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot,
   ]);
@@ -1019,6 +1067,21 @@ export default function CreatePostScreen() {
           theme={{ colors: { background: '#fff' } }}
         />
         {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+
+        <PaperInput
+          label="Terms & Conditions"
+          value={offerTerms}
+          onChangeText={setOfferTerms}
+          mode="outlined"
+          style={[styles.paperInput, styles.paperMultiline]}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          multiline
+          numberOfLines={3}
+          testID="offer-terms-input"
+          placeholder="Any restrictions or fine print for this offer..."
+          theme={{ colors: { background: '#fff' } }}
+        />
       </View>
 
       <View style={styles.formSection}>
@@ -1055,6 +1118,66 @@ export default function CreatePostScreen() {
           </View>
         )}
         {errors.discount && <Text style={styles.errorText}>{errors.discount}</Text>}
+
+        <PaperInput
+          label="Original Price"
+          value={offerOriginalPrice}
+          onChangeText={(t) => setOfferOriginalPrice(t.replace(/[^0-9.]/g, ''))}
+          mode="outlined"
+          style={[styles.paperInput, { marginTop: 14 }]}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          keyboardType="decimal-pad"
+          testID="offer-original-price-input"
+          placeholder="e.g. 49.99"
+          left={<PaperInput.Affix text="$" />}
+          theme={{ colors: { background: '#fff' } }}
+        />
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Zap size={14} color="#fff" />, 'Boost & Tags')}
+
+        <PaperInput
+          label="Tags"
+          value={offerTags}
+          onChangeText={setOfferTags}
+          mode="outlined"
+          style={styles.paperInput}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          testID="offer-tags-input"
+          placeholder="Weekend, Members Only, Limited Time"
+          theme={{ colors: { background: '#fff' } }}
+        />
+
+        <PaperInput
+          label="Promo Code"
+          value={offerPromoCode}
+          onChangeText={setOfferPromoCode}
+          mode="outlined"
+          style={[styles.paperInput, { marginTop: 14 }]}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          autoCapitalize="characters"
+          testID="offer-promo-code-input"
+          placeholder="e.g. SAVE20"
+          theme={{ colors: { background: '#fff' } }}
+        />
+
+        <View style={[styles.eventToggleRow, { marginTop: 14 }]}>
+          <View style={styles.eventToggleCol}>
+            <Text style={styles.eventToggleLabel}>Mark as Hot</Text>
+            <TouchableOpacity
+              style={[styles.eventToggleTrack, offerIsHot && styles.eventToggleTrackOn]}
+              onPress={() => setOfferIsHot(!offerIsHot)}
+              activeOpacity={0.8}
+              testID="offer-hot-toggle"
+            >
+              <View style={[styles.eventToggleThumb, offerIsHot && styles.eventToggleThumbOn]} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <View style={styles.formSection}>
@@ -1068,18 +1191,72 @@ export default function CreatePostScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.imageUploadArea}
-            onPress={() => handlePickCoverImage('offer')}
-            activeOpacity={0.7}
-            testID="offer-image-upload-area"
-          >
-            <View style={styles.imageUploadIconWrap}>
-              <ImagePlus size={26} color={Colors.navyDark} />
-            </View>
-            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
-            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.addImagePlaceholder}
+              activeOpacity={0.7}
+              onPress={handleOfferPickFromDevice}
+              disabled={pickingOfferPhoto}
+              testID="offer-image-upload-area"
+            >
+              {pickingOfferPhoto ? (
+                <ActivityIndicator size="small" color={Colors.textTertiary} />
+              ) : (
+                <Upload size={28} color={Colors.textTertiary} />
+              )}
+              <Text style={styles.addImageText}>{pickingOfferPhoto ? 'Uploading…' : 'Upload from device'}</Text>
+              <Text style={styles.addImageSubtext}>Add a new photo to your library</Text>
+            </TouchableOpacity>
+
+            {(myUploads.length > 0 || myUploadsLoading) && (
+              <FlatList
+                horizontal
+                data={myUploads}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imageRow}
+                onEndReached={handleLoadMoreUploads}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={myUploadsLoading ? (
+                  <View style={styles.myUploadsLoadingWrap}>
+                    <ActivityIndicator size="small" color={Colors.textTertiary} />
+                  </View>
+                ) : null}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.imageThumbnail, offerImage === item.image_url && styles.imageThumbnailSelected]}
+                    onPress={() => setOfferImage(offerImage === item.image_url ? '' : item.image_url)}
+                    activeOpacity={0.8}
+                  >
+                    {brokenImageUrls.has(item.image_url) ? (
+                      <View style={[styles.thumbImage, styles.thumbFallback]}>
+                        <ImagePlus size={18} color={Colors.textTertiary} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.thumbImage}
+                        contentFit="cover"
+                        onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                      />
+                    )}
+                    {offerImage === item.image_url && (
+                      <View style={styles.imageCheck}>
+                        <Check size={14} color={Colors.navyDark} />
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.uploadDeleteBtn}
+                      onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                      hitSlop={8}
+                    >
+                      <X size={12} color="#fff" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </>
         )}
       </View>
 
@@ -1163,32 +1340,6 @@ export default function CreatePostScreen() {
   const renderEventForm = () => (
     <>
       <View style={styles.formSection}>
-        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
-
-        {eventImage ? (
-          <View style={styles.imagePreviewWrap}>
-            <Image source={{ uri: eventImage }} style={styles.imagePreview} contentFit="cover" />
-            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setEventImage('')} activeOpacity={0.7}>
-              <Trash2 size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.imageUploadArea}
-            onPress={() => handlePickCoverImage('event')}
-            activeOpacity={0.7}
-            testID="event-image-upload-area"
-          >
-            <View style={styles.imageUploadIconWrap}>
-              <ImagePlus size={26} color={Colors.navyDark} />
-            </View>
-            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
-            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.formSection}>
         {renderSectionHeader(<Tag size={14} color="#fff" />, 'Event Details')}
 
         <PaperInput
@@ -1220,6 +1371,32 @@ export default function CreatePostScreen() {
           placeholder="Tell attendees what to expect..."
           theme={{ colors: { background: '#fff' } }}
         />
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
+
+        {eventImage ? (
+          <View style={styles.imagePreviewWrap}>
+            <Image source={{ uri: eventImage }} style={styles.imagePreview} contentFit="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setEventImage('')} activeOpacity={0.7}>
+              <Trash2 size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadArea}
+            onPress={handlePickCoverImage}
+            activeOpacity={0.7}
+            testID="event-image-upload-area"
+          >
+            <View style={styles.imageUploadIconWrap}>
+              <ImagePlus size={26} color={Colors.navyDark} />
+            </View>
+            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
+            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.formSection}>
