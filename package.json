@@ -48,6 +48,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.2",
     "expo-system-ui": "~57.0.3",
+    "expo-video": "~57.0.5",
     "expo-web-browser": "~57.0.2",
     "hono": "^4.12.15",
     "lucide-react-native": "^0.475.0",
@@ -63,6 +64,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.0",
+    "react-native-webview": "13.16.1",
     "react-native-worklets": "0.10.1",
     "socket.io-client": "^4.8.3",
     "zod": "^4.3.6",
@@ -78,4 +80,3 @@
   },
   "private": true
 }
- 

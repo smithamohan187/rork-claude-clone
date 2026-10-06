@@ -35,12 +35,16 @@ const EFFECTIVE_STATUS_CASE = `
 `;
 
 async function insertEvent(client, data) {
-  const { business_id, title, description, location, starts_at, ends_at, image_url, event_type } = data;
+  const {
+    business_id, title, description, location, starts_at, ends_at, image_url, event_type,
+    category, is_free, price, tags, is_hot,
+  } = data;
   const q = runner(client);
   const { rows } = await q(
     `INSERT INTO events
-       (business_id, title, description, location, starts_at, ends_at, image_url, event_type)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (business_id, title, description, location, starts_at, ends_at, image_url, event_type,
+        category, is_free, price, tags, is_hot)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
     [
       business_id,
@@ -51,6 +55,11 @@ async function insertEvent(client, data) {
       ends_at ?? null,
       image_url ?? null,
       event_type ?? 'In Person',
+      category ?? 'community',
+      is_free ?? true,
+      is_free === false ? (price ?? null) : null,
+      tags ?? [],
+      is_hot ?? false,
     ]
   );
   return rows[0];
@@ -100,7 +109,10 @@ async function getEventById(eventId, profileId) {
 }
 
 async function updateEvent(eventId, data) {
-  const { title, description, location, starts_at, ends_at, image_url, event_type } = data;
+  const {
+    title, description, location, starts_at, ends_at, image_url, event_type,
+    category, is_free, price, tags, is_hot,
+  } = data;
   const { rows } = await query(
     `UPDATE events SET
        title       = COALESCE($1, title),
@@ -110,6 +122,11 @@ async function updateEvent(eventId, data) {
        ends_at     = $5,
        image_url   = COALESCE($6, image_url),
        event_type  = COALESCE($7, event_type),
+       category    = COALESCE($9, category),
+       is_free     = COALESCE($10, is_free),
+       price       = CASE WHEN $10 = FALSE THEN $11 ELSE price END,
+       tags        = COALESCE($12, tags),
+       is_hot      = COALESCE($13, is_hot),
        updated_at  = NOW()
      WHERE id = $8
      RETURNING *, ${EFFECTIVE_STATUS_CASE}`,
@@ -122,6 +139,11 @@ async function updateEvent(eventId, data) {
       image_url ?? null,
       event_type ?? null,
       eventId,
+      category ?? null,
+      is_free !== undefined ? is_free : null,
+      price ?? null,
+      tags ?? null,
+      is_hot !== undefined ? is_hot : null,
     ]
   );
   return rows[0] ?? null;

@@ -9,10 +9,15 @@ import {
   Platform,
   LayoutAnimation,
   Linking,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image } from 'expo-image';
-import { Bookmark, MoreVertical, Edit3, Trash2 } from 'lucide-react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { WebView } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
+import { Bookmark, MoreVertical, Edit3, Trash2, Play } from 'lucide-react-native';
 import ExpandableText from '../ExpandableText';
 import { useRouter } from 'expo-router';
 import { usePosts } from '@/contexts/PostsContext';
@@ -24,6 +29,36 @@ import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 
 const PURPLE = '#1A5C35';
+
+// Matches the embed-id extraction logic used wherever we need a YouTube/Vimeo
+// inline player. Returns null for any other platform/link shape, which signals
+// the caller to fall back to the tap-to-open-browser card instead.
+function getEmbedVideoUrl(url: string): string | null {
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/i);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/i);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  return null;
+}
+
+// A post's video fields aren't yet threaded through the personalised-feed types
+// (PostFeedItem / BusinessPost) — see the handback report. Read them defensively
+// off whatever post-like object is passed in so this renders correctly the
+// moment that plumbing lands, and degrades to the image/no-media branches today.
+function getPostVideo(post: unknown): {
+  url: string | null;
+  type: 'upload' | 'link' | null;
+} {
+  const p = post as { video_url?: string | null; video_type?: 'upload' | 'link' | null };
+  return { url: p.video_url ?? null, type: p.video_type ?? null };
+}
+
+function InlineVideoPlayer({ uri, style }: { uri: string; style: StyleProp<ViewStyle> }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return <VideoView player={player} style={style} nativeControls contentFit="cover" />;
+}
 
 function easeNext() {
   if (Platform.OS !== 'web') {
@@ -166,6 +201,8 @@ export default function PostFeedCard({
   const _router = router;
 
   const showShare = panel === 'share';
+  const postVideo = getPostVideo(post);
+  const videoEmbedUrl = postVideo.type === 'link' && postVideo.url ? getEmbedVideoUrl(postVideo.url) : null;
 
   return (
     <View style={styles.card} testID={`post-card-${post.id}`}>
@@ -199,7 +236,37 @@ export default function PostFeedCard({
         <ExpandableText text={post.text} />
       ) : null}
 
-      {post.image_url ? (
+      {postVideo.url ? (
+        <View style={styles.imageWrap}>
+          {postVideo.type === 'upload' ? (
+            <InlineVideoPlayer uri={postVideo.url} style={styles.image} />
+          ) : videoEmbedUrl ? (
+            <WebView source={{ uri: videoEmbedUrl }} style={styles.image} allowsFullscreenVideo />
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.image, styles.videoFallback]}
+              onPress={() => WebBrowser.openBrowserAsync(postVideo.url!)}
+            >
+              <Play size={36} color="#fff" fill="#fff" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.saveOverlay}
+            onPress={(e) => { e.stopPropagation?.(); handleSave(); }}
+            onLongPress={() => { setSaveTooltip(true); setTimeout(() => setSaveTooltip(false), 1500); }}
+            hitSlop={6}
+            activeOpacity={0.7}
+          >
+            <Bookmark size={15} color={saved ? '#E53935' : '#fff'} fill={saved ? '#E53935' : 'transparent'} />
+          </TouchableOpacity>
+          {saveTooltip ? (
+            <View style={[styles.saveTooltip, { top: 40, right: 0 }]} pointerEvents="none">
+              <Text style={styles.saveTooltipText}>{saved ? 'Saved' : 'Save'}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : post.image_url ? (
         <TouchableOpacity onPress={onImagePress} activeOpacity={0.85} style={styles.imageWrap}>
           <Image source={{ uri: post.image_url }} style={styles.image} contentFit="cover" />
           <TouchableOpacity
@@ -419,6 +486,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 12,
     backgroundColor: '#EDE9F6',
+  },
+  videoFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#14241C',
   },
   menuBackdrop: {
     flex: 1,

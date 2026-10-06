@@ -10,6 +10,8 @@ export interface Post {
   title: string;
   content: string;
   image_url: string | null;
+  video_url: string | null;
+  video_type: 'upload' | 'link' | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -61,7 +63,11 @@ export async function createPost(payload: CreatePostPayload): Promise<Post> {
 
 export async function updatePost(
   id: string,
-  payload: Partial<CreatePostPayload> & { image_url?: string | null },
+  payload: Partial<CreatePostPayload> & {
+    image_url?: string | null;
+    video_url?: string | null;
+    video_type?: 'upload' | 'link' | null;
+  },
 ): Promise<Post> {
   const result = await apiClient.put<{ post: Post }>(`/posts/${id}`, payload);
   if (!result.success) throw new Error(result.error ?? 'Failed to update post');
@@ -103,5 +109,30 @@ export async function uploadPostImage(postId: string, uri: string): Promise<Post
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error ?? 'Image upload failed');
+  return resolvePost(data.data.post);
+}
+
+async function buildPostVideoFormData(uri: string): Promise<FormData> {
+  const form = new FormData();
+  if (Platform.OS === 'web') {
+    const blob = await fetch(uri).then((r) => r.blob());
+    form.append('video', new File([blob], 'post.mp4', { type: 'video/mp4' }));
+  } else {
+    const file = new ExpoFile(uri);
+    form.append('video', file, 'post.mp4');
+  }
+  return form;
+}
+
+export async function uploadPostVideo(postId: string, uri: string): Promise<Post> {
+  const token = getAccessToken();
+  const form = await buildPostVideoFormData(uri);
+  const response = await fetch(`${BASE_URL}/posts/${postId}/video`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error ?? 'Video upload failed');
   return resolvePost(data.data.post);
 }

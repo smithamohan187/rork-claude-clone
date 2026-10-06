@@ -5,11 +5,11 @@ const bucketName =
 	process.env.GCS_BUCKET_NAME || 'touchpoints-app-uploads';
 const bucket = storage.bucket(bucketName);
 
-async function uploadFileToGCS(file, folder) {
+async function uploadFileToGCS(file, folder, options = {}) {
 	const filename = `${folder}/${Date.now()}-${file.originalname}`;
 	const blob = bucket.file(filename);
 	const blobStream = blob.createWriteStream({
-		resumable: false,
+		resumable: options.resumable ?? false,
 		contentType: file.mimetype,
 	});
 

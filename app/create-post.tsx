@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   FlatList,
   Alert,
@@ -17,6 +18,7 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { TextInput as PaperInput, Switch } from 'react-native-paper';
 import {
   X,
   Check,
@@ -27,31 +29,31 @@ import {
   AlignLeft,
   ChevronDown,
   Video,
-  Camera,
   FolderOpen,
   Globe,
   Upload,
   Play,
   Film,
   Link,
-  ExternalLink,
   Trash2,
   Calendar,
-  Clock,
   MapPin,
   Tag,
-  DollarSign,
-  Users,
-  Flame,
-  Plus,
-  Edit3,
+  Percent,
+  Zap,
+  Sparkles,
 } from 'lucide-react-native';
-import type { LocalEvent } from '@/mocks/data';
-import { mockLocalEvents } from '@/mocks/data';
+import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
+import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { createPost, updatePost } from '@/api/services/postsService';
+import { createPost, updatePost, uploadPostVideo } from '@/api/services/postsService';
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
+import { createOffer, uploadOfferImage, type CreateOfferPayload } from '@/api/services/offersService';
+import { useEvents } from '@/hooks/useEvents';
+import { uploadEventImage, type EventCategory } from '@/api/services/eventsService';
+
+registerTranslation('en', en);
 
 // Converts a local image URI to a stable display URI immediately after picking.
 // On Expo web, ImagePicker returns a blob: URL that gets revoked between renders,
@@ -75,6 +77,14 @@ async function toDisplayUri(uri: string): Promise<string> {
 }
 
 type PostType = 'promotion' | 'announcement' | 'general';
+type TabMode = 'post' | 'event' | 'offer';
+type OfferType = 'promotion' | 'discount' | 'flash_sale';
+
+// A single pending video selection for the Post tab — either a pasted external
+// link or a device file picked but not yet uploaded. Only one may exist at a time.
+type PendingVideo =
+  | { kind: 'link'; url: string }
+  | { kind: 'upload'; uri: string; fileName: string; duration: number | null };
 
 const POST_TYPE_OPTIONS: { value: PostType; label: string; icon: 'megaphone' | 'bell' | 'file' }[] = [
   { value: 'promotion', label: 'Promotion', icon: 'megaphone' },
@@ -82,13 +92,28 @@ const POST_TYPE_OPTIONS: { value: PostType; label: string; icon: 'megaphone' | '
   { value: 'general', label: 'General', icon: 'file' },
 ];
 
-type MediaSource = 'stock' | 'products' | 'branding' | 'lifestyle';
+const OFFER_TYPES: { value: OfferType; label: string; icon: typeof Megaphone }[] = [
+  { value: 'promotion', label: 'Promotion', icon: Megaphone },
+  { value: 'discount', label: 'Discount', icon: Percent },
+  { value: 'flash_sale', label: 'Flash Sale', icon: Zap },
+];
 
-const MEDIA_SOURCES: { key: MediaSource; label: string; icon: 'globe' | 'folder' | 'camera' | 'image' }[] = [
+const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[] = [
+  { value: 'food', label: 'Food & Drink', emoji: '🍽️' },
+  { value: 'fitness', label: 'Fitness', emoji: '💪' },
+  { value: 'music', label: 'Music', emoji: '🎵' },
+  { value: 'art', label: 'Art & Culture', emoji: '🎨' },
+  { value: 'community', label: 'Community', emoji: '🤝' },
+  { value: 'wellness', label: 'Wellness', emoji: '🧘' },
+  { value: 'market', label: 'Market', emoji: '🛍️' },
+  { value: 'nightlife', label: 'Nightlife', emoji: '🌙' },
+];
+
+type MediaSource = 'stock' | 'uploads';
+
+const MEDIA_SOURCES: { key: MediaSource; label: string; icon: 'globe' | 'folder' }[] = [
   { key: 'stock', label: 'Stock Photos', icon: 'globe' },
-  { key: 'products', label: 'Product Shots', icon: 'camera' },
-  { key: 'branding', label: 'Branding', icon: 'folder' },
-  { key: 'lifestyle', label: 'Lifestyle', icon: 'image' },
+  { key: 'uploads', label: 'My Uploads', icon: 'folder' },
 ];
 
 const IMAGE_LIBRARY: Record<MediaSource, string[]> = {
@@ -98,48 +123,47 @@ const IMAGE_LIBRARY: Record<MediaSource, string[]> = {
     'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&h=400&fit=crop',
     'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=400&fit=crop',
   ],
-  products: [
-    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=600&h=400&fit=crop',
-  ],
-  branding: [
-    'https://images.unsplash.com/photo-1556740758-90de940e0603?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1556741533-411cf82e4e2d?w=600&h=400&fit=crop',
-  ],
-  lifestyle: [
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&h=400&fit=crop',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop',
-  ],
+  uploads: [],
 };
 
-const SAMPLE_VIDEOS = [
-  { id: 'v1', title: 'Product Showcase', duration: '0:30', thumbnail: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?w=300&h=200&fit=crop' },
-  { id: 'v2', title: 'Behind the Scenes', duration: '1:15', thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=300&h=200&fit=crop' },
-  { id: 'v3', title: 'Customer Testimonial', duration: '0:45', thumbnail: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=300&h=200&fit=crop' },
-  { id: 'v4', title: 'Brand Story', duration: '2:00', thumbnail: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=300&h=200&fit=crop' },
-];
+interface FormErrors {
+  title?: string;
+  description?: string;
+  discount?: string;
+  startDate?: string;
+  endDate?: string;
+  eventTitle?: string;
+  eventDate?: string;
+  eventEndDate?: string;
+}
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const { authUser, accountType } = useAuth();
+
+  // ---- Tab mode (Post / Event / Offer) ----
+  // Default is always 'post' — this screen is also reached from the dashboard
+  // checklist's "Add a post" step and must open straight into the Post tab.
+  const [activeTab, setActiveTab] = useState<TabMode>('post');
+  const [errors, setErrors] = useState<FormErrors>({});
+  const tabIndicatorAnim = useRef(
+    new Animated.Value(activeTab === 'post' ? 0 : activeTab === 'event' ? 1 : 2),
+  ).current;
+
+  // ---- Post tab state ----
   const [content, setContent] = useState<string>('');
   const [selectedType, setSelectedType] = useState<PostType>('general');
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [showTypePicker, setShowTypePicker] = useState<boolean>(false);
   const [activeMediaSource, setActiveMediaSource] = useState<MediaSource>('stock');
-  const [selectedVideo, setSelectedVideo] = useState<string>('');
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [videoLink, setVideoLink] = useState<string>('');
   const [videoLinkError, setVideoLinkError] = useState<string>('');
-  const [addedVideoLinks, setAddedVideoLinks] = useState<string[]>([]);
+  // At most one pending video can be attached to a post, mirroring the single
+  // image rule and the DB's single `video_url` column.
+  const [pendingVideo, setPendingVideo] = useState<PendingVideo | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [uploadedVideos, setUploadedVideos] = useState<{ uri: string; fileName: string; duration: number | null }[]>([]);
   const successAnim = useRef(new Animated.Value(0)).current;
 
   const isBusiness = accountType === 'business';
@@ -194,7 +218,7 @@ export default function CreatePostScreen() {
       const media = await uploadMedia(stable);
       setMyUploads(prev => [media, ...prev]);
       setSelectedImage(media.image_url);
-      setSelectedVideo('');
+      setPendingVideo(null);
     } catch (err) {
       if (__DEV__) console.log('[CreatePost] Upload error:', err);
       Alert.alert('Upload Failed', err instanceof Error ? err.message : 'Could not upload your photo. Please try again.');
@@ -203,181 +227,260 @@ export default function CreatePostScreen() {
     }
   }, []);
 
-  const handleDeleteUpload = useCallback(async (id: string, imageUrl: string) => {
-    setMyUploads(prev => prev.filter(m => m.id !== id));
-    if (selectedImage === imageUrl) setSelectedImage('');
-    try {
-      await deleteMedia(id);
-    } catch (err) {
-      if (__DEV__) console.log('[CreatePost] Delete failed, reloading list:', err);
-      loadMyUploads(0, true);
-    }
+  const handleDeleteUpload = useCallback((id: string, imageUrl: string) => {
+    Alert.alert('Delete Photo', 'Are you sure you want to delete this photo? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setMyUploads(prev => prev.filter(m => m.id !== id));
+          if (selectedImage === imageUrl) setSelectedImage('');
+          try {
+            await deleteMedia(id);
+          } catch (err) {
+            if (__DEV__) console.log('[CreatePost] Delete failed, reloading list:', err);
+            loadMyUploads(0, true);
+          }
+        },
+      },
+    ]);
   }, [selectedImage, loadMyUploads]);
-
-  const [showEventForm, setShowEventForm] = useState<boolean>(false);
-  const [eventTitle, setEventTitle] = useState<string>('');
-  const [eventDescription, setEventDescription] = useState<string>('');
-  const [eventDate, setEventDate] = useState<string>('');
-  const [eventTime, setEventTime] = useState<string>('');
-  const [eventLocation, setEventLocation] = useState<string>('');
-  const [eventCategory, setEventCategory] = useState<LocalEvent['category']>('community');
-  const [eventIsFree, setEventIsFree] = useState<boolean>(true);
-  const [eventPrice, setEventPrice] = useState<string>('');
-  const [eventTags, setEventTags] = useState<string>('');
-  const [eventIsHot, setEventIsHot] = useState<boolean>(false);
-  const [existingEvents, setExistingEvents] = useState<LocalEvent[]>(
-    mockLocalEvents.filter(e => e.host === authUser?.name).slice(0, 3)
-  );
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
 
   const isFormValid = content.trim().length > 0;
 
   const charCount = content.length;
   const MAX_CHARS = 500;
 
-  const EVENT_CATEGORIES: { value: LocalEvent['category']; label: string; emoji: string }[] = [
-    { value: 'food', label: 'Food & Drink', emoji: '🍽️' },
-    { value: 'fitness', label: 'Fitness', emoji: '💪' },
-    { value: 'music', label: 'Music', emoji: '🎵' },
-    { value: 'art', label: 'Art & Culture', emoji: '🎨' },
-    { value: 'community', label: 'Community', emoji: '🤝' },
-    { value: 'wellness', label: 'Wellness', emoji: '🧘' },
-    { value: 'market', label: 'Market', emoji: '🛍️' },
-    { value: 'nightlife', label: 'Nightlife', emoji: '🌙' },
-  ];
+  // ---- Offer tab state ----
+  const [offerTitle, setOfferTitle] = useState<string>('');
+  const [offerDescription, setOfferDescription] = useState<string>('');
+  const [offerType, setOfferType] = useState<OfferType>('promotion');
+  const [discountPercent, setDiscountPercent] = useState<string>('');
+  const [offerImage, setOfferImage] = useState<string>('');
+  const [offerStartDate, setOfferStartDate] = useState<string>('');
+  const [offerEndDate, setOfferEndDate] = useState<string>('');
+  const [offerPickerField, setOfferPickerField] = useState<'start' | 'end' | null>(null);
+  const [offerIsActive, setOfferIsActive] = useState<boolean>(true);
 
-  const EVENT_IMAGES: Record<LocalEvent['category'], string> = {
-    food: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=600&h=400&fit=crop',
-    fitness: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=600&h=400&fit=crop',
-    music: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600&h=400&fit=crop',
-    art: 'https://images.unsplash.com/photo-1523694576729-dc99ef1b0632?w=600&h=400&fit=crop',
-    community: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=600&h=400&fit=crop',
-    wellness: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=600&h=400&fit=crop',
-    market: 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=600&h=400&fit=crop',
-    nightlife: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600&h=400&fit=crop',
-  };
+  // ---- Event tab state ----
+  const [eventTitle, setEventTitle] = useState<string>('');
+  const [eventDescription, setEventDescription] = useState<string>('');
+  const [eventLocation, setEventLocation] = useState<string>('');
+  const [eventDate, setEventDate] = useState<Date | null>(null);
+  const [eventEndDate, setEventEndDate] = useState<Date | null>(null);
+  const [eventDateOpen, setEventDateOpen] = useState<boolean>(false);
+  const [eventEndDateOpen, setEventEndDateOpen] = useState<boolean>(false);
+  const [eventImage, setEventImage] = useState<string>('');
+  const [eventCategory, setEventCategory] = useState<EventCategory>('community');
+  const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
+  const [eventIsFree, setEventIsFree] = useState<boolean>(true);
+  const [eventIsHot, setEventIsHot] = useState<boolean>(false);
+  const [eventPrice, setEventPrice] = useState<string>('');
+  const [eventTags, setEventTags] = useState<string>('');
 
-  const resetEventForm = useCallback(() => {
-    setEventTitle('');
-    setEventDescription('');
-    setEventDate('');
-    setEventTime('');
-    setEventLocation('');
-    setEventCategory('community');
-    setEventIsFree(true);
-    setEventPrice('');
-    setEventTags('');
-    setEventIsHot(false);
-    setEditingEventId(null);
-  }, []);
+  const { addEvent } = useEvents();
 
-  const handleSaveEvent = useCallback(() => {
-    if (!eventTitle.trim() || !eventDate.trim() || !eventTime.trim() || !eventLocation.trim()) {
-      Alert.alert('Missing Fields', 'Please fill in the event title, date, time, and location.');
-      return;
-    }
+  const clearErrors = useCallback(() => setErrors({}), []);
 
-    const tagsArray = eventTags.split(',').map(t => t.trim()).filter(Boolean);
-    const newEvent: LocalEvent = {
-      id: editingEventId || `evt_new_${Date.now()}`,
-      title: eventTitle.trim(),
-      description: eventDescription.trim(),
-      image: EVENT_IMAGES[eventCategory],
-      date: eventDate.trim(),
-      time: eventTime.trim(),
-      location: eventLocation.trim(),
-      category: eventCategory,
-      host: authUser?.name ?? 'You',
-      hostAvatar: authUser?.avatar ?? '',
-      attendees: editingEventId ? (existingEvents.find(e => e.id === editingEventId)?.attendees ?? 0) : 0,
-      isFree: eventIsFree,
-      price: eventIsFree ? undefined : eventPrice.trim(),
-      tags: tagsArray.length > 0 ? tagsArray : [EVENT_CATEGORIES.find(c => c.value === eventCategory)?.label ?? 'Event'],
-      isHot: eventIsHot,
-    };
-
-    if (editingEventId) {
-      setExistingEvents(prev => prev.map(e => e.id === editingEventId ? newEvent : e));
-      console.log('Updated event:', newEvent);
-      Alert.alert('Event Updated', `"${newEvent.title}" has been updated and will appear on the community newsfeed.`);
+  const handleTabChange = useCallback((value: TabMode) => {
+    setActiveTab(value);
+    clearErrors();
+    if (value === 'post') {
+      setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
+      setDiscountPercent(''); setOfferImage(''); setOfferStartDate(''); setOfferEndDate('');
+      setOfferIsActive(true);
+      setEventTitle(''); setEventDescription(''); setEventLocation('');
+      setEventDate(null); setEventEndDate(null); setEventImage('');
+      setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
+      setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
+    } else if (value === 'event') {
+      setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
+      setDiscountPercent(''); setOfferImage(''); setOfferStartDate(''); setOfferEndDate('');
+      setOfferIsActive(true);
     } else {
-      setExistingEvents(prev => [newEvent, ...prev]);
-      console.log('Created new event:', newEvent);
-      Alert.alert('Event Created', `"${newEvent.title}" will now appear on the community newsfeed.`);
+      setEventTitle(''); setEventDescription(''); setEventLocation('');
+      setEventDate(null); setEventEndDate(null); setEventImage('');
+      setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
+      setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     }
+    Animated.spring(tabIndicatorAnim, {
+      toValue: value === 'post' ? 0 : value === 'event' ? 1 : 2,
+      useNativeDriver: false,
+      speed: 20,
+      bounciness: 2,
+    }).start();
+  }, [clearErrors, tabIndicatorAnim]);
 
-    resetEventForm();
-    setShowEventForm(false);
-  }, [eventTitle, eventDescription, eventDate, eventTime, eventLocation, eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot, editingEventId, existingEvents, authUser, resetEventForm]);
+  const validateOfferForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
+    if (!offerTitle.trim()) newErrors.title = 'Title is required';
+    if (!offerDescription.trim()) newErrors.description = 'Description is required';
+    if (offerType === 'discount') {
+      const num = parseInt(discountPercent, 10);
+      if (!discountPercent.trim()) {
+        newErrors.discount = 'Discount percentage is required';
+      } else if (isNaN(num) || num < 1 || num > 100) {
+        newErrors.discount = 'Enter a value between 1 and 100';
+      }
+    }
+    if (!offerStartDate.trim()) newErrors.startDate = 'Start date is required';
+    if (!offerEndDate.trim()) newErrors.endDate = 'End date is required';
+    if (offerStartDate && offerEndDate && new Date(offerEndDate) < new Date(offerStartDate))
+      newErrors.endDate = 'End date must be after start date';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [offerTitle, offerDescription, offerType, discountPercent, offerStartDate, offerEndDate]);
 
-  const handleEditEvent = useCallback((event: LocalEvent) => {
-    setEditingEventId(event.id);
-    setEventTitle(event.title);
-    setEventDescription(event.description);
-    setEventDate(event.date);
-    setEventTime(event.time);
-    setEventLocation(event.location);
-    setEventCategory(event.category);
-    setEventIsFree(event.isFree);
-    setEventPrice(event.price ?? '');
-    setEventTags(event.tags.join(', '));
-    setEventIsHot(event.isHot ?? false);
-    setShowEventForm(true);
-  }, []);
+  const validateEventForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
+    if (!eventTitle.trim()) newErrors.eventTitle = 'Event title is required';
+    if (!eventDate) newErrors.eventDate = 'Event date is required';
+    if (eventDate && eventEndDate && eventEndDate <= eventDate) {
+      newErrors.eventEndDate = 'End date must be after event date';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [eventTitle, eventDate, eventEndDate]);
 
-  const handleDeleteEvent = useCallback((eventId: string) => {
-    Alert.alert('Delete Event', 'Are you sure you want to remove this event from the newsfeed?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          setExistingEvents(prev => prev.filter(e => e.id !== eventId));
-          console.log('Deleted event:', eventId);
-        },
-      },
-    ]);
+  const handlePickCoverImage = useCallback(async (target: 'offer' | 'event') => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const stable = await toDisplayUri(result.assets[0].uri);
+        if (target === 'offer') setOfferImage(stable);
+        else setEventImage(stable);
+      }
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Image picker error:', err);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!isFormValid) {
-      Alert.alert('Missing Content', 'Please write something for your post.');
-      return;
-    }
-    if (charCount > MAX_CHARS) {
-      Alert.alert('Too Long', `Please keep your post under ${MAX_CHARS} characters.`);
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const trimmed = content.trim();
-      const title = trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-      const post = await createPost({ title, content: trimmed });
-      if (selectedImage) {
-        await updatePost(post.id, { image_url: selectedImage });
+    if (activeTab === 'post') {
+      if (!isFormValid) {
+        Alert.alert('Missing Content', 'Please write something for your post.');
+        return;
+      }
+      if (charCount > MAX_CHARS) {
+        Alert.alert('Too Long', `Please keep your post under ${MAX_CHARS} characters.`);
+        return;
       }
 
+      setIsSubmitting(true);
+      try {
+        const trimmed = content.trim();
+        const title = trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+        const post = await createPost({ title, content: trimmed });
+        if (selectedImage) {
+          await updatePost(post.id, { image_url: selectedImage });
+        } else if (pendingVideo) {
+          if (pendingVideo.kind === 'link') {
+            await updatePost(post.id, { video_url: pendingVideo.url, video_type: 'link' });
+          } else {
+            await uploadPostVideo(post.id, pendingVideo.uri);
+          }
+        }
+
+        Animated.sequence([
+          Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.delay(800),
+        ]).start(() => {
+          Alert.alert('Post Published!', 'Your post is now live on the feed.', [
+            { text: 'Great', onPress: () => router.back() },
+          ]);
+        });
+      } catch (err) {
+        setIsSubmitting(false);
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to publish your post. Please try again.');
+      }
+      return;
+    }
+
+    if (activeTab === 'offer') {
+      if (!validateOfferForm()) return;
+
+      const payload: CreateOfferPayload = {
+        title: offerTitle.trim(),
+        description: offerDescription.trim() || null,
+        discount_type: offerType === 'discount' ? 'percent' : null,
+        discount_value: offerType === 'discount' && discountPercent ? parseInt(discountPercent, 10) : null,
+        starts_at: offerStartDate ? new Date(offerStartDate).toISOString() : null,
+        expires_at: offerEndDate ? new Date(offerEndDate).toISOString() : null,
+        status: offerIsActive ? 'active' : 'disabled',
+      };
+
+      setIsSubmitting(true);
+      try {
+        const offer = await createOffer(payload);
+        if (offerImage) await uploadOfferImage(offer.id, offerImage);
+
+        Animated.sequence([
+          Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.delay(800),
+        ]).start(() => {
+          Alert.alert('Offer Created!', `"${offer.title}" is now live for your subscribers.`, [
+            { text: 'Great', onPress: () => router.back() },
+          ]);
+        });
+      } catch (err) {
+        setIsSubmitting(false);
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create your offer. Please try again.');
+      }
+      return;
+    }
+
+    // activeTab === 'event'
+    if (!validateEventForm()) return;
+    setIsSubmitting(true);
+    try {
+      const event = await addEvent({
+        title: eventTitle.trim(),
+        description: eventDescription.trim() || null,
+        location: eventLocation.trim() || null,
+        starts_at: eventDate!.toISOString(),
+        ends_at: eventEndDate ? eventEndDate.toISOString() : null,
+        category: eventCategory,
+        is_free: eventIsFree,
+        price: eventIsFree ? null : (eventPrice.trim() || null),
+        tags: eventTags.split(',').map(t => t.trim()).filter(Boolean),
+        is_hot: eventIsHot,
+      });
+      if (eventImage) await uploadEventImage(event.id, eventImage);
+
       Animated.sequence([
-        Animated.timing(successAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
+        Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         Animated.delay(800),
       ]).start(() => {
-        Alert.alert(
-          'Post Published!',
-          'Your post is now live on the feed.',
-          [{ text: 'Great', onPress: () => router.back() }]
-        );
+        Alert.alert('Event Created!', `"${event.title}" will now appear on the community newsfeed.`, [
+          { text: 'Great', onPress: () => router.back() },
+        ]);
       });
     } catch (err) {
       setIsSubmitting(false);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to publish your post. Please try again.');
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create your event. Please try again.');
     }
-  }, [isFormValid, content, selectedImage, successAnim, router, charCount]);
+  }, [
+    activeTab, isFormValid, charCount, content, selectedImage, pendingVideo, successAnim, router,
+    validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
+    offerStartDate, offerEndDate, offerIsActive, offerImage,
+    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, eventImage, addEvent,
+    eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot,
+  ]);
+
+  const isSubmitDisabled = activeTab === 'post' ? !isFormValid : isSubmitting;
+  const submitLabel = activeTab === 'post' ? 'Post' : activeTab === 'event' ? 'Create Event' : 'Create Offer';
 
   const isValidVideoUrl = useCallback((url: string): boolean => {
     const patterns = [
@@ -413,20 +516,13 @@ export default function CreatePostScreen() {
       setVideoLinkError('Enter a valid video URL (YouTube, Vimeo, TikTok, etc.)');
       return;
     }
-    if (addedVideoLinks.includes(trimmed)) {
-      setVideoLinkError('This video has already been added');
-      return;
-    }
-    setAddedVideoLinks((prev) => [...prev, trimmed]);
+    // Replaces any existing pending video (link or upload) — only one video
+    // may be attached to a post at a time, matching the DB's single video_url column.
+    setPendingVideo({ kind: 'link', url: trimmed });
     setVideoLink('');
     setVideoLinkError('');
-    setSelectedVideo('');
-    console.log('Added video link:', trimmed);
-  }, [videoLink, addedVideoLinks, isValidVideoUrl]);
-
-  const handleRemoveVideoLink = useCallback((url: string) => {
-    setAddedVideoLinks((prev) => prev.filter((l) => l !== url));
-  }, []);
+    setSelectedImage('');
+  }, [videoLink, isValidVideoUrl]);
 
   const handleUploadVideo = useCallback(async () => {
     try {
@@ -447,18 +543,19 @@ export default function CreatePostScreen() {
         const asset = result.assets[0];
         const fileName = asset.fileName || asset.uri.split('/').pop() || 'video';
         const duration = asset.duration ? Math.round(asset.duration / 1000) : null;
-        setUploadedVideos((prev) => [...prev, { uri: asset.uri, fileName, duration }]);
-        setSelectedVideo('');
-        console.log('Uploaded video from device:', { uri: asset.uri, fileName, duration });
+        // Replaces any existing pending video (link or upload) — only one video
+        // may be attached to a post at a time.
+        setPendingVideo({ kind: 'upload', uri: asset.uri, fileName, duration });
+        setSelectedImage('');
       }
     } catch (error) {
-      console.log('Video upload error:', error);
+      if (__DEV__) console.log('Video upload error:', error);
       Alert.alert('Upload Failed', 'Something went wrong while selecting the video. Please try again.');
     }
   }, []);
 
-  const handleRemoveUploadedVideo = useCallback((uri: string) => {
-    setUploadedVideos((prev) => prev.filter((v) => v.uri !== uri));
+  const handleRemovePendingVideo = useCallback(() => {
+    setPendingVideo(null);
   }, []);
 
   const formatDuration = useCallback((seconds: number | null): string => {
@@ -507,6 +604,823 @@ export default function CreatePostScreen() {
   };
 
   const selectedTypeOption = POST_TYPE_OPTIONS.find((o) => o.value === selectedType);
+  const selectedEventCategory = EVENT_CATEGORIES.find((o) => o.value === eventCategory);
+
+  const renderSectionHeader = (icon: React.ReactNode, title: string) => (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionIconBadge}>{icon}</View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+
+  const renderPostForm = () => (
+    <>
+      <View style={styles.authorRow}>
+        <Image source={{ uri: authUser?.avatar }} style={styles.authorAvatar} />
+        <View style={styles.authorMeta}>
+          <Text style={styles.authorName}>{authUser?.name}</Text>
+          <TouchableOpacity
+            style={[styles.typeBadge, getTypeBadgeStyle(selectedType)]}
+            onPress={() => setShowTypePicker(!showTypePicker)}
+            activeOpacity={0.7}
+          >
+            {getTypeIcon(selectedType)}
+            <Text style={[styles.typeBadgeText, { color: getTypeLabelColor(selectedType) }]}>
+              {selectedTypeOption?.label}
+            </Text>
+            <ChevronDown size={14} color={getTypeLabelColor(selectedType)} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {showTypePicker && (
+        <View style={styles.typePickerCard}>
+          {POST_TYPE_OPTIONS.map((option) => {
+            const isActive = selectedType === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.typeOption, isActive && styles.typeOptionActive]}
+                onPress={() => {
+                  setSelectedType(option.value);
+                  setShowTypePicker(false);
+                }}
+                activeOpacity={0.7}
+              >
+                {getTypeIcon(option.value)}
+                <Text style={[styles.typeOptionText, isActive && styles.typeOptionTextActive]}>
+                  {option.label}
+                </Text>
+                {isActive && <Check size={16} color={Colors.accent} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={styles.contentBox}>
+        <TextInput
+          style={styles.contentInput}
+          placeholder="What's happening with your business?"
+          placeholderTextColor={Colors.textTertiary}
+          value={content}
+          onChangeText={setContent}
+          multiline
+          textAlignVertical="top"
+          testID="post-content-input"
+          maxLength={MAX_CHARS + 50}
+        />
+        <View style={styles.charCountRow}>
+          <AlignLeft size={14} color={Colors.textTertiary} />
+          <Text style={[styles.charCount, charCount > MAX_CHARS && styles.charCountOver]}>
+            {charCount}/{MAX_CHARS}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.mediaTabRow}>
+        <TouchableOpacity
+          style={[styles.mediaTabBtn, mediaTab === 'images' && styles.mediaTabBtnActive]}
+          onPress={() => setMediaTab('images')}
+          activeOpacity={0.7}
+        >
+          <ImagePlus size={16} color={mediaTab === 'images' ? Colors.navyDark : Colors.textTertiary} />
+          <Text style={[styles.mediaTabText, mediaTab === 'images' && styles.mediaTabTextActive]}>Images</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.mediaTabBtn, mediaTab === 'videos' && styles.mediaTabBtnActive]}
+          onPress={() => setMediaTab('videos')}
+          activeOpacity={0.7}
+        >
+          <Film size={16} color={mediaTab === 'videos' ? Colors.navyDark : Colors.textTertiary} />
+          <Text style={[styles.mediaTabText, mediaTab === 'videos' && styles.mediaTabTextActive]}>Videos</Text>
+        </TouchableOpacity>
+      </View>
+
+      {mediaTab === 'images' && (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sourceRow}>
+            {MEDIA_SOURCES.map((source) => {
+              const isActive = activeMediaSource === source.key;
+              const SourceIcon = source.icon === 'globe' ? Globe : FolderOpen;
+              return (
+                <TouchableOpacity
+                  key={source.key}
+                  style={[styles.sourceChip, isActive && styles.sourceChipActive]}
+                  onPress={() => setActiveMediaSource(source.key)}
+                  activeOpacity={0.7}
+                >
+                  <SourceIcon size={14} color={isActive ? Colors.navyDark : Colors.textSecondary} />
+                  <Text style={[styles.sourceChipText, isActive && styles.sourceChipTextActive]}>{source.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {activeMediaSource === 'stock' && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
+              {IMAGE_LIBRARY.stock.map((img) => (
+                <TouchableOpacity
+                  key={img}
+                  style={[styles.imageThumbnail, selectedImage === img && styles.imageThumbnailSelected]}
+                  onPress={() => {
+                    setSelectedImage(selectedImage === img ? '' : img);
+                    setPendingVideo(null);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {brokenImageUrls.has(img) ? (
+                    <View style={[styles.thumbImage, styles.thumbFallback]}>
+                      <ImagePlus size={18} color={Colors.textTertiary} />
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: img }}
+                      style={styles.thumbImage}
+                      contentFit="cover"
+                      onError={() => setBrokenImageUrls(prev => new Set(prev).add(img))}
+                    />
+                  )}
+                  {selectedImage === img && (
+                    <View style={styles.imageCheck}>
+                      <Check size={14} color={Colors.navyDark} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          {activeMediaSource === 'uploads' && isBusiness && (
+            <>
+              <TouchableOpacity
+                style={styles.addImagePlaceholder}
+                activeOpacity={0.7}
+                onPress={handlePickFromDevice}
+                disabled={pickingPhoto}
+              >
+                {pickingPhoto ? (
+                  <ActivityIndicator size="small" color={Colors.textTertiary} />
+                ) : (
+                  <Upload size={28} color={Colors.textTertiary} />
+                )}
+                <Text style={styles.addImageText}>{pickingPhoto ? 'Uploading…' : 'Upload from device'}</Text>
+                <Text style={styles.addImageSubtext}>Add a new photo to your library</Text>
+              </TouchableOpacity>
+
+              {(myUploads.length > 0 || myUploadsLoading) && (
+                <FlatList
+                  horizontal
+                  data={myUploads}
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.imageRow}
+                  onEndReached={handleLoadMoreUploads}
+                  onEndReachedThreshold={0.5}
+                  ListFooterComponent={myUploadsLoading ? (
+                    <View style={styles.myUploadsLoadingWrap}>
+                      <ActivityIndicator size="small" color={Colors.textTertiary} />
+                    </View>
+                  ) : null}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.imageThumbnail, selectedImage === item.image_url && styles.imageThumbnailSelected]}
+                      onPress={() => {
+                        setSelectedImage(selectedImage === item.image_url ? '' : item.image_url);
+                        setPendingVideo(null);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      {brokenImageUrls.has(item.image_url) ? (
+                        <View style={[styles.thumbImage, styles.thumbFallback]}>
+                          <ImagePlus size={18} color={Colors.textTertiary} />
+                        </View>
+                      ) : (
+                        <Image
+                          source={{ uri: item.image_url }}
+                          style={styles.thumbImage}
+                          contentFit="cover"
+                          onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                        />
+                      )}
+                      {selectedImage === item.image_url && (
+                        <View style={styles.imageCheck}>
+                          <Check size={14} color={Colors.navyDark} />
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        style={styles.uploadDeleteBtn}
+                        onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                        hitSlop={8}
+                      >
+                        <X size={12} color="#fff" />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </>
+          )}
+
+          {selectedImage ? (
+            <View style={styles.previewContainer}>
+              {brokenImageUrls.has(selectedImage) ? (
+                <View style={[styles.previewImage, styles.thumbFallback]}>
+                  <ImagePlus size={28} color={Colors.textTertiary} />
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: selectedImage }}
+                  style={styles.previewImage}
+                  contentFit="cover"
+                  onError={() => setBrokenImageUrls(prev => new Set(prev).add(selectedImage))}
+                />
+              )}
+              <TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage('')}>
+                <X size={16} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </>
+      )}
+
+      {mediaTab === 'videos' && (
+        <>
+          <View style={styles.videoLinkSection}>
+            <View style={styles.videoLinkHeader}>
+              <Link size={18} color={Colors.accent} />
+              <Text style={styles.videoLinkTitle}>Add Video Link</Text>
+            </View>
+            <Text style={styles.videoLinkDesc}>Paste a link from YouTube, Vimeo, TikTok, Instagram, or any direct video URL</Text>
+            <View style={styles.videoLinkInputRow}>
+              <TextInput
+                style={styles.videoLinkInput}
+                placeholder="https://www.youtube.com/watch?v=..."
+                placeholderTextColor={Colors.textTertiary}
+                value={videoLink}
+                onChangeText={(t) => {
+                  setVideoLink(t);
+                  if (videoLinkError) setVideoLinkError('');
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                testID="video-link-input"
+              />
+              <TouchableOpacity
+                style={[styles.videoLinkAddBtn, !videoLink.trim() && styles.videoLinkAddBtnDisabled]}
+                onPress={handleAddVideoLink}
+                activeOpacity={0.7}
+                testID="add-video-link-btn"
+              >
+                <Check size={18} color={videoLink.trim() ? Colors.navyDark : Colors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+            {videoLinkError ? <Text style={styles.videoLinkError}>{videoLinkError}</Text> : null}
+            <View style={styles.supportedPlatforms}>
+              <Text style={styles.supportedLabel}>Supported:</Text>
+              {['YouTube', 'Vimeo', 'TikTok', 'Instagram', 'Facebook', 'MP4/MOV'].map((p) => (
+                <View key={p} style={styles.platformBadge}>
+                  <Text style={styles.platformBadgeText}>{p}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {pendingVideo?.kind === 'link' && (
+            <View style={styles.addedLinksSection}>
+              <Text style={styles.addedLinksTitle}>Added Video</Text>
+              <View style={styles.addedLinkCard}>
+                <View style={styles.addedLinkIconWrap}>
+                  <Play size={16} color="#fff" fill="#fff" />
+                </View>
+                <View style={styles.addedLinkMeta}>
+                  <Text style={styles.addedLinkPlatform}>{getVideoPlatform(pendingVideo.url)}</Text>
+                  <Text style={styles.addedLinkUrl} numberOfLines={1}>{pendingVideo.url}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.addedLinkRemoveBtn}
+                  onPress={handleRemovePendingVideo}
+                  activeOpacity={0.7}
+                >
+                  <Trash2 size={15} color={Colors.error} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {pendingVideo?.kind === 'upload' && (
+            <View style={styles.uploadedVideosSection}>
+              <Text style={styles.addedLinksTitle}>Uploaded from Device</Text>
+              <View style={styles.uploadedVideoCard}>
+                <View style={styles.uploadedVideoIconWrap}>
+                  <Film size={16} color="#fff" />
+                </View>
+                <View style={styles.addedLinkMeta}>
+                  <Text style={styles.addedLinkPlatform} numberOfLines={1}>{pendingVideo.fileName}</Text>
+                  <Text style={styles.addedLinkUrl}>Duration: {formatDuration(pendingVideo.duration)}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.addedLinkRemoveBtn}
+                  onPress={handleRemovePendingVideo}
+                  activeOpacity={0.7}
+                >
+                  <Trash2 size={15} color={Colors.error} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.uploadVideoBtn} activeOpacity={0.7} onPress={handleUploadVideo} testID="upload-video-btn">
+            <Video size={22} color={Colors.accent} />
+            <View style={styles.uploadVideoTextWrap}>
+              <Text style={styles.uploadVideoTitle}>Upload from Device</Text>
+              <Text style={styles.uploadVideoSubtext}>Select MP4, MOV from your laptop, iPad, phone, or PC</Text>
+            </View>
+            <Upload size={18} color={Colors.accent} />
+          </TouchableOpacity>
+        </>
+      )}
+
+      <View style={styles.tipsCard}>
+        <Text style={styles.tipsTitle}>Posting Tips</Text>
+        <View style={styles.tipRow}>
+          <View style={styles.tipDot} />
+          <Text style={styles.tipText}>Promotions reach more users with eye-catching images</Text>
+        </View>
+        <View style={styles.tipRow}>
+          <View style={styles.tipDot} />
+          <Text style={styles.tipText}>Announcements are great for events and updates</Text>
+        </View>
+        <View style={styles.tipRow}>
+          <View style={styles.tipDot} />
+          <Text style={styles.tipText}>Use emojis and hashtags to boost engagement</Text>
+        </View>
+      </View>
+    </>
+  );
+
+  const renderOfferTypePills = () => (
+    <View style={styles.pillRow}>
+      {OFFER_TYPES.map((item) => {
+        const isSelected = offerType === item.value;
+        const IconComp = item.icon;
+        return (
+          <Pressable
+            key={item.value}
+            style={[styles.pill, isSelected && styles.pillSelected]}
+            onPress={() => {
+              setOfferType(item.value);
+              if (item.value !== 'discount') setErrors(prev => ({ ...prev, discount: undefined }));
+            }}
+            testID={`offer-type-${item.value}`}
+          >
+            <IconComp size={14} color={isSelected ? '#fff' : Colors.navyDark} />
+            <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>{item.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  const renderOfferForm = () => (
+    <>
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Tag size={14} color="#fff" />, 'Offer Details')}
+
+        <PaperInput
+          label="Title"
+          value={offerTitle}
+          onChangeText={(t) => { setOfferTitle(t); if (errors.title) setErrors(prev => ({ ...prev, title: undefined })); }}
+          mode="outlined"
+          style={styles.paperInput}
+          outlineColor={errors.title ? Colors.error : Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          error={!!errors.title}
+          testID="offer-title-input"
+          placeholder="e.g. Summer Special 20% Off"
+          theme={{ colors: { background: '#fff' } }}
+        />
+        {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+
+        <PaperInput
+          label="Description"
+          value={offerDescription}
+          onChangeText={(t) => { setOfferDescription(t); if (errors.description) setErrors(prev => ({ ...prev, description: undefined })); }}
+          mode="outlined"
+          style={[styles.paperInput, styles.paperMultiline]}
+          outlineColor={errors.description ? Colors.error : Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          error={!!errors.description}
+          multiline
+          numberOfLines={4}
+          testID="offer-description-input"
+          placeholder="Describe your offer..."
+          theme={{ colors: { background: '#fff' } }}
+        />
+        {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Sparkles size={14} color="#fff" />, 'Offer Type')}
+        {renderOfferTypePills()}
+
+        {offerType === 'discount' && (
+          <View style={styles.discountRow}>
+            <View style={styles.discountIconWrap}>
+              <Percent size={18} color="#fff" />
+            </View>
+            <View style={styles.discountInputWrap}>
+              <PaperInput
+                label="Discount %"
+                value={discountPercent}
+                onChangeText={(t) => {
+                  const cleaned = t.replace(/[^0-9]/g, '');
+                  setDiscountPercent(cleaned);
+                  if (errors.discount) setErrors(prev => ({ ...prev, discount: undefined }));
+                }}
+                mode="outlined"
+                style={styles.paperInput}
+                outlineColor={errors.discount ? Colors.error : Colors.borderLight}
+                activeOutlineColor={Colors.accent}
+                error={!!errors.discount}
+                keyboardType="numeric"
+                maxLength={3}
+                testID="discount-percent-input"
+                placeholder="e.g. 25"
+                right={<PaperInput.Affix text="%" />}
+                theme={{ colors: { background: '#fff' } }}
+              />
+            </View>
+          </View>
+        )}
+        {errors.discount && <Text style={styles.errorText}>{errors.discount}</Text>}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
+
+        {offerImage ? (
+          <View style={styles.imagePreviewWrap}>
+            <Image source={{ uri: offerImage }} style={styles.imagePreview} contentFit="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setOfferImage('')} activeOpacity={0.7}>
+              <Trash2 size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadArea}
+            onPress={() => handlePickCoverImage('offer')}
+            activeOpacity={0.7}
+            testID="offer-image-upload-area"
+          >
+            <View style={styles.imageUploadIconWrap}>
+              <ImagePlus size={26} color={Colors.navyDark} />
+            </View>
+            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
+            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Calendar size={14} color="#fff" />, 'Schedule')}
+
+        <View style={styles.dateRow}>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.startDate && styles.dateBtnError]}
+              onPress={() => setOfferPickerField('start')}
+              testID="offer-start-date"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !offerStartDate && styles.dateBtnPlaceholder]}>
+                {offerStartDate ? format(new Date(offerStartDate), 'd MMM yyyy') : 'Start Date'}
+              </Text>
+            </TouchableOpacity>
+            {errors.startDate && <Text style={styles.errorText}>{errors.startDate}</Text>}
+          </View>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.endDate && styles.dateBtnError]}
+              onPress={() => setOfferPickerField('end')}
+              testID="offer-end-date"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !offerEndDate && styles.dateBtnPlaceholder]}>
+                {offerEndDate ? format(new Date(offerEndDate), 'd MMM yyyy') : 'End Date'}
+              </Text>
+            </TouchableOpacity>
+            {errors.endDate && <Text style={styles.errorText}>{errors.endDate}</Text>}
+          </View>
+        </View>
+
+        <DatePickerModal
+          locale="en"
+          mode="single"
+          visible={offerPickerField !== null}
+          onDismiss={() => setOfferPickerField(null)}
+          date={
+            offerPickerField === 'start'
+              ? (offerStartDate ? new Date(offerStartDate) : undefined)
+              : (offerEndDate ? new Date(offerEndDate) : undefined)
+          }
+          onConfirm={({ date }) => {
+            if (!date) { setOfferPickerField(null); return; }
+            const iso = date.toISOString();
+            if (offerPickerField === 'start') {
+              setOfferStartDate(iso);
+              setErrors(prev => ({ ...prev, startDate: undefined }));
+            } else {
+              setOfferEndDate(iso);
+              setErrors(prev => ({ ...prev, endDate: undefined }));
+            }
+            setOfferPickerField(null);
+          }}
+          validRange={offerPickerField === 'end' && offerStartDate ? { startDate: new Date(offerStartDate) } : undefined}
+        />
+      </View>
+
+      <View style={styles.formSection}>
+        <View style={styles.activeToggleRow}>
+          <View style={styles.activeToggleLeft}>
+            <View style={[styles.activeToggleDot, offerIsActive && styles.activeToggleDotOn]} />
+            <View>
+              <Text style={styles.activeToggleLabel}>Active</Text>
+              <Text style={styles.activeToggleSub}>
+                {offerIsActive ? 'Offer is visible to subscribers' : 'Offer is saved as draft'}
+              </Text>
+            </View>
+          </View>
+          <Switch value={offerIsActive} onValueChange={setOfferIsActive} color={Colors.accent} testID="offer-active-toggle" />
+        </View>
+      </View>
+    </>
+  );
+
+  const renderEventForm = () => (
+    <>
+      <View style={styles.formSection}>
+        {renderSectionHeader(<ImagePlus size={14} color="#fff" />, 'Cover Image')}
+
+        {eventImage ? (
+          <View style={styles.imagePreviewWrap}>
+            <Image source={{ uri: eventImage }} style={styles.imagePreview} contentFit="cover" />
+            <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setEventImage('')} activeOpacity={0.7}>
+              <Trash2 size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadArea}
+            onPress={() => handlePickCoverImage('event')}
+            activeOpacity={0.7}
+            testID="event-image-upload-area"
+          >
+            <View style={styles.imageUploadIconWrap}>
+              <ImagePlus size={26} color={Colors.navyDark} />
+            </View>
+            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
+            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Tag size={14} color="#fff" />, 'Event Details')}
+
+        <PaperInput
+          label="Title *"
+          value={eventTitle}
+          onChangeText={(t) => { setEventTitle(t); if (errors.eventTitle) setErrors(prev => ({ ...prev, eventTitle: undefined })); }}
+          mode="outlined"
+          style={styles.paperInput}
+          outlineColor={errors.eventTitle ? Colors.error : Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          error={!!errors.eventTitle}
+          testID="event-title-input"
+          placeholder="e.g. Grand Opening Celebration"
+          theme={{ colors: { background: '#fff' } }}
+        />
+        {errors.eventTitle && <Text style={styles.errorText}>{errors.eventTitle}</Text>}
+
+        <PaperInput
+          label="Description"
+          value={eventDescription}
+          onChangeText={setEventDescription}
+          mode="outlined"
+          style={[styles.paperInput, styles.paperMultiline]}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          multiline
+          numberOfLines={4}
+          testID="event-description-input"
+          placeholder="Tell attendees what to expect..."
+          theme={{ colors: { background: '#fff' } }}
+        />
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<MapPin size={14} color="#fff" />, 'Location')}
+
+        <PaperInput
+          label="Location"
+          value={eventLocation}
+          onChangeText={setEventLocation}
+          mode="outlined"
+          style={styles.paperInput}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          testID="event-location-input"
+          placeholder="Venue name or address"
+          left={<PaperInput.Icon icon={() => <MapPin size={15} color={Colors.textSecondary} />} />}
+          theme={{ colors: { background: '#fff' } }}
+        />
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Calendar size={14} color="#fff" />, 'Date & Time')}
+
+        <View style={styles.dateRow}>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventDate && styles.dateBtnError]}
+              onPress={() => setEventDateOpen(true)}
+              testID="event-start-date-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventDate && styles.dateBtnPlaceholder]}>
+                {eventDate ? format(eventDate, 'EEE, MMM d') : 'Date *'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventDate && styles.dateBtnError]}
+              onPress={() => setEventDateOpen(true)}
+              testID="event-start-time-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventDate && styles.dateBtnPlaceholder]}>
+                {eventDate ? format(eventDate, 'h:mm a') : 'Time *'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
+
+        <TouchableOpacity
+          style={[styles.dateBtn, { marginTop: 10 }, !!errors.eventEndDate && styles.dateBtnError]}
+          onPress={() => setEventEndDateOpen(true)}
+          testID="event-end-date-btn"
+          activeOpacity={0.7}
+        >
+          <Calendar size={15} color={Colors.textSecondary} />
+          <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+            {eventEndDate ? format(eventEndDate, 'd MMM yyyy, HH:mm') : 'End date & time (optional)'}
+          </Text>
+        </TouchableOpacity>
+        {eventEndDate && (
+          <TouchableOpacity onPress={() => { setEventEndDate(null); setErrors(p => ({ ...p, eventEndDate: undefined })); }} style={styles.clearDateBtn}>
+            <X size={14} color={Colors.textSecondary} />
+            <Text style={styles.clearDateText}>Clear end date</Text>
+          </TouchableOpacity>
+        )}
+        {errors.eventEndDate && <Text style={styles.errorText}>{errors.eventEndDate}</Text>}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Sparkles size={14} color="#fff" />, 'Category')}
+
+        <TouchableOpacity
+          style={styles.dateBtn}
+          onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+          activeOpacity={0.7}
+          testID="event-category-trigger"
+        >
+          <Text style={styles.categoryEmoji}>{selectedEventCategory?.emoji}</Text>
+          <Text style={styles.dateBtnText}>{selectedEventCategory?.label}</Text>
+          <ChevronDown size={16} color={Colors.textSecondary} />
+        </TouchableOpacity>
+
+        {showCategoryPicker && (
+          <View style={[styles.typePickerCard, { marginTop: 10, marginBottom: 0 }]}>
+            {EVENT_CATEGORIES.map((option) => {
+              const isActive = eventCategory === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.typeOption, isActive && styles.typeOptionActive]}
+                  onPress={() => {
+                    setEventCategory(option.value);
+                    setShowCategoryPicker(false);
+                  }}
+                  activeOpacity={0.7}
+                  testID={`event-category-${option.value}`}
+                >
+                  <Text style={styles.categoryEmoji}>{option.emoji}</Text>
+                  <Text style={[styles.typeOptionText, isActive && styles.typeOptionTextActive]}>
+                    {option.label}
+                  </Text>
+                  {isActive && <Check size={16} color={Colors.accent} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.formSection}>
+        <View style={styles.eventToggleRow}>
+          <View style={styles.eventToggleCol}>
+            <Text style={styles.eventToggleLabel}>Free Event</Text>
+            <TouchableOpacity
+              style={[styles.eventToggleTrack, eventIsFree && styles.eventToggleTrackOn]}
+              onPress={() => setEventIsFree(!eventIsFree)}
+              activeOpacity={0.8}
+              testID="event-free-toggle"
+            >
+              <View style={[styles.eventToggleThumb, eventIsFree && styles.eventToggleThumbOn]} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.eventToggleCol}>
+            <Text style={styles.eventToggleLabel}>Mark as Hot</Text>
+            <TouchableOpacity
+              style={[styles.eventToggleTrack, eventIsHot && styles.eventToggleTrackOn]}
+              onPress={() => setEventIsHot(!eventIsHot)}
+              activeOpacity={0.8}
+              testID="event-hot-toggle"
+            >
+              <View style={[styles.eventToggleThumb, eventIsHot && styles.eventToggleThumbOn]} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {!eventIsFree && (
+          <PaperInput
+            label="Ticket Price"
+            value={eventPrice}
+            onChangeText={setEventPrice}
+            mode="outlined"
+            style={[styles.paperInput, { marginTop: 14 }]}
+            outlineColor={Colors.borderLight}
+            activeOutlineColor={Colors.accent}
+            testID="event-price-input"
+            placeholder="e.g. $15"
+            theme={{ colors: { background: '#fff' } }}
+          />
+        )}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Tag size={14} color="#fff" />, 'Tags')}
+
+        <PaperInput
+          label="Tags"
+          value={eventTags}
+          onChangeText={setEventTags}
+          mode="outlined"
+          style={styles.paperInput}
+          outlineColor={Colors.borderLight}
+          activeOutlineColor={Colors.accent}
+          testID="event-tags-input"
+          placeholder="Food, Live Music, Outdoor"
+          theme={{ colors: { background: '#fff' } }}
+        />
+      </View>
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={eventDateOpen}
+        onDismiss={() => setEventDateOpen(false)}
+        date={eventDate ?? undefined}
+        onConfirm={({ date }) => {
+          if (date) { setEventDate(date); setErrors(p => ({ ...p, eventDate: undefined })); }
+          setEventDateOpen(false);
+        }}
+        saveLabel="Confirm"
+      />
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={eventEndDateOpen}
+        onDismiss={() => setEventEndDateOpen(false)}
+        date={eventEndDate ?? undefined}
+        validRange={eventDate ? { startDate: eventDate } : undefined}
+        onConfirm={({ date }) => {
+          if (date) { setEventEndDate(date); setErrors(p => ({ ...p, eventEndDate: undefined })); }
+          setEventEndDateOpen(false);
+        }}
+        saveLabel="Confirm"
+      />
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -515,15 +1429,8 @@ export default function CreatePostScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn} testID="close-create-post">
             <X size={22} color={Colors.bannerText} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Post</Text>
-          <TouchableOpacity
-            style={[styles.publishBtn, !isFormValid && styles.publishBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={!isFormValid || isSubmitting}
-            testID="publish-post"
-          >
-            <Text style={[styles.publishText, !isFormValid && styles.publishTextDisabled]}>Post</Text>
-          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Create Content</Text>
+          <View style={styles.headerRightSpacer} />
         </View>
       </SafeAreaView>
 
@@ -532,702 +1439,62 @@ export default function CreatePostScreen() {
           <Animated.View style={[styles.successCircle, { transform: [{ scale: successScale }] }]}>
             <Check size={48} color={Colors.navyDark} />
           </Animated.View>
-          <Text style={styles.successText}>Publishing your post...</Text>
+          <Text style={styles.successText}>
+            {activeTab === 'post' ? 'Publishing your post…' : activeTab === 'event' ? 'Creating your event…' : 'Creating your offer…'}
+          </Text>
         </View>
       ) : (
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
             style={styles.flex}
             contentContainerStyle={styles.form}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.authorRow}>
-              <Image source={{ uri: authUser?.avatar }} style={styles.authorAvatar} />
-              <View style={styles.authorMeta}>
-                <Text style={styles.authorName}>{authUser?.name}</Text>
-                <TouchableOpacity
-                  style={[styles.typeBadge, getTypeBadgeStyle(selectedType)]}
-                  onPress={() => setShowTypePicker(!showTypePicker)}
-                  activeOpacity={0.7}
-                >
-                  {getTypeIcon(selectedType)}
-                  <Text style={[styles.typeBadgeText, { color: getTypeLabelColor(selectedType) }]}>
-                    {selectedTypeOption?.label}
-                  </Text>
-                  <ChevronDown size={14} color={getTypeLabelColor(selectedType)} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {showTypePicker && (
-              <View style={styles.typePickerCard}>
-                {POST_TYPE_OPTIONS.map((option) => {
-                  const isActive = selectedType === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.typeOption, isActive && styles.typeOptionActive]}
-                      onPress={() => {
-                        setSelectedType(option.value);
-                        setShowTypePicker(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      {getTypeIcon(option.value)}
-                      <Text style={[styles.typeOptionText, isActive && styles.typeOptionTextActive]}>
-                        {option.label}
-                      </Text>
-                      {isActive && <Check size={16} color={Colors.accent} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
-            <View style={styles.contentBox}>
-              <TextInput
-                style={styles.contentInput}
-                placeholder="What's happening with your business?"
-                placeholderTextColor={Colors.textTertiary}
-                value={content}
-                onChangeText={setContent}
-                multiline
-                textAlignVertical="top"
-                testID="post-content-input"
-                maxLength={MAX_CHARS + 50}
+            <View style={styles.tabToggleContainer}>
+              <Animated.View
+                style={[
+                  styles.tabIndicator,
+                  {
+                    left: tabIndicatorAnim.interpolate({
+                      inputRange: [0, 1, 2],
+                      outputRange: ['1%', '34%', '67%'],
+                    }),
+                  },
+                ]}
               />
-              <View style={styles.charCountRow}>
-                <AlignLeft size={14} color={Colors.textTertiary} />
-                <Text style={[
-                  styles.charCount,
-                  charCount > MAX_CHARS && styles.charCountOver,
-                ]}>
-                  {charCount}/{MAX_CHARS}
-                </Text>
-              </View>
+              <Pressable style={styles.tabBtn} onPress={() => handleTabChange('post')} testID="tab-post">
+                <FileText size={14} color={activeTab === 'post' ? '#fff' : Colors.navyDark} />
+                <Text style={[styles.tabBtnText, activeTab === 'post' && styles.tabBtnTextActive]}>Post</Text>
+              </Pressable>
+              <Pressable style={styles.tabBtn} onPress={() => handleTabChange('event')} testID="tab-event">
+                <Calendar size={14} color={activeTab === 'event' ? '#fff' : Colors.navyDark} />
+                <Text style={[styles.tabBtnText, activeTab === 'event' && styles.tabBtnTextActive]}>Event</Text>
+              </Pressable>
+              <Pressable style={styles.tabBtn} onPress={() => handleTabChange('offer')} testID="tab-offer">
+                <Tag size={14} color={activeTab === 'offer' ? '#fff' : Colors.navyDark} />
+                <Text style={[styles.tabBtnText, activeTab === 'offer' && styles.tabBtnTextActive]}>Offer</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.mediaTabRow}>
-              <TouchableOpacity
-                style={[styles.mediaTabBtn, mediaTab === 'images' && styles.mediaTabBtnActive]}
-                onPress={() => setMediaTab('images')}
-                activeOpacity={0.7}
-              >
-                <ImagePlus size={16} color={mediaTab === 'images' ? Colors.navyDark : Colors.textTertiary} />
-                <Text style={[styles.mediaTabText, mediaTab === 'images' && styles.mediaTabTextActive]}>Images</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mediaTabBtn, mediaTab === 'videos' && styles.mediaTabBtnActive]}
-                onPress={() => setMediaTab('videos')}
-                activeOpacity={0.7}
-              >
-                <Film size={16} color={mediaTab === 'videos' ? Colors.navyDark : Colors.textTertiary} />
-                <Text style={[styles.mediaTabText, mediaTab === 'videos' && styles.mediaTabTextActive]}>Videos</Text>
-              </TouchableOpacity>
-            </View>
-
-            {mediaTab === 'images' && (
-              <>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.sourceRow}
-                >
-                  {MEDIA_SOURCES.map((source) => {
-                    const isActive = activeMediaSource === source.key;
-                    const SourceIcon = source.icon === 'globe' ? Globe : source.icon === 'folder' ? FolderOpen : source.icon === 'camera' ? Camera : ImagePlus;
-                    return (
-                      <TouchableOpacity
-                        key={source.key}
-                        style={[styles.sourceChip, isActive && styles.sourceChipActive]}
-                        onPress={() => setActiveMediaSource(source.key)}
-                        activeOpacity={0.7}
-                      >
-                        <SourceIcon size={14} color={isActive ? Colors.navyDark : Colors.textSecondary} />
-                        <Text style={[styles.sourceChipText, isActive && styles.sourceChipTextActive]}>{source.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.imageRow}
-                >
-                  {IMAGE_LIBRARY[activeMediaSource].map((img) => (
-                    <TouchableOpacity
-                      key={img}
-                      style={[styles.imageThumbnail, selectedImage === img && styles.imageThumbnailSelected]}
-                      onPress={() => {
-                        setSelectedImage(selectedImage === img ? '' : img);
-                        setSelectedVideo('');
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      {brokenImageUrls.has(img) ? (
-                        <View style={[styles.thumbImage, styles.thumbFallback]}>
-                          <ImagePlus size={18} color={Colors.textTertiary} />
-                        </View>
-                      ) : (
-                        <Image
-                          source={{ uri: img }}
-                          style={styles.thumbImage}
-                          contentFit="cover"
-                          onError={() => setBrokenImageUrls(prev => new Set(prev).add(img))}
-                        />
-                      )}
-                      {selectedImage === img && (
-                        <View style={styles.imageCheck}>
-                          <Check size={14} color={Colors.navyDark} />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                {isBusiness && (myUploads.length > 0 || myUploadsLoading) && (
-                  <>
-                    <Text style={styles.myUploadsLabel}>My Uploads</Text>
-                    <FlatList
-                      horizontal
-                      data={myUploads}
-                      keyExtractor={(item) => item.id}
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.imageRow}
-                      onEndReached={handleLoadMoreUploads}
-                      onEndReachedThreshold={0.5}
-                      ListFooterComponent={myUploadsLoading ? (
-                        <View style={styles.myUploadsLoadingWrap}>
-                          <ActivityIndicator size="small" color={Colors.textTertiary} />
-                        </View>
-                      ) : null}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={[styles.imageThumbnail, selectedImage === item.image_url && styles.imageThumbnailSelected]}
-                          onPress={() => {
-                            setSelectedImage(selectedImage === item.image_url ? '' : item.image_url);
-                            setSelectedVideo('');
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          {brokenImageUrls.has(item.image_url) ? (
-                            <View style={[styles.thumbImage, styles.thumbFallback]}>
-                              <ImagePlus size={18} color={Colors.textTertiary} />
-                            </View>
-                          ) : (
-                            <Image
-                              source={{ uri: item.image_url }}
-                              style={styles.thumbImage}
-                              contentFit="cover"
-                              onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
-                            />
-                          )}
-                          {selectedImage === item.image_url && (
-                            <View style={styles.imageCheck}>
-                              <Check size={14} color={Colors.navyDark} />
-                            </View>
-                          )}
-                          <TouchableOpacity
-                            style={styles.uploadDeleteBtn}
-                            onPress={() => handleDeleteUpload(item.id, item.image_url)}
-                            hitSlop={8}
-                          >
-                            <X size={12} color="#fff" />
-                          </TouchableOpacity>
-                        </TouchableOpacity>
-                      )}
-                    />
-                  </>
-                )}
-
-                {selectedImage ? (
-                  <View style={styles.previewContainer}>
-                    {brokenImageUrls.has(selectedImage) ? (
-                      <View style={[styles.previewImage, styles.thumbFallback]}>
-                        <ImagePlus size={28} color={Colors.textTertiary} />
-                      </View>
-                    ) : (
-                      <Image
-                        source={{ uri: selectedImage }}
-                        style={styles.previewImage}
-                        contentFit="cover"
-                        onError={() => setBrokenImageUrls(prev => new Set(prev).add(selectedImage))}
-                      />
-                    )}
-                    <TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage('')}>
-                      <X size={16} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.addImagePlaceholder}
-                    activeOpacity={0.7}
-                    onPress={handlePickFromDevice}
-                    disabled={pickingPhoto}
-                  >
-                    {pickingPhoto ? (
-                      <ActivityIndicator size="small" color={Colors.textTertiary} />
-                    ) : (
-                      <Upload size={28} color={Colors.textTertiary} />
-                    )}
-                    <Text style={styles.addImageText}>{pickingPhoto ? 'Uploading…' : 'Upload from device'}</Text>
-                    <Text style={styles.addImageSubtext}>or select from a source above</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-
-            {mediaTab === 'videos' && (
-              <>
-                <View style={styles.videoLinkSection}>
-                  <View style={styles.videoLinkHeader}>
-                    <Link size={18} color={Colors.accent} />
-                    <Text style={styles.videoLinkTitle}>Add Video Link</Text>
-                  </View>
-                  <Text style={styles.videoLinkDesc}>Paste a link from YouTube, Vimeo, TikTok, Instagram, or any direct video URL</Text>
-                  <View style={styles.videoLinkInputRow}>
-                    <TextInput
-                      style={styles.videoLinkInput}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      placeholderTextColor={Colors.textTertiary}
-                      value={videoLink}
-                      onChangeText={(t) => {
-                        setVideoLink(t);
-                        if (videoLinkError) setVideoLinkError('');
-                      }}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                      testID="video-link-input"
-                    />
-                    <TouchableOpacity
-                      style={[styles.videoLinkAddBtn, !videoLink.trim() && styles.videoLinkAddBtnDisabled]}
-                      onPress={handleAddVideoLink}
-                      activeOpacity={0.7}
-                      testID="add-video-link-btn"
-                    >
-                      <Check size={18} color={videoLink.trim() ? Colors.navyDark : Colors.textTertiary} />
-                    </TouchableOpacity>
-                  </View>
-                  {videoLinkError ? (
-                    <Text style={styles.videoLinkError}>{videoLinkError}</Text>
-                  ) : null}
-                  <View style={styles.supportedPlatforms}>
-                    <Text style={styles.supportedLabel}>Supported:</Text>
-                    {['YouTube', 'Vimeo', 'TikTok', 'Instagram', 'Facebook', 'MP4/MOV'].map((p) => (
-                      <View key={p} style={styles.platformBadge}>
-                        <Text style={styles.platformBadgeText}>{p}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {addedVideoLinks.length > 0 && (
-                  <View style={styles.addedLinksSection}>
-                    <Text style={styles.addedLinksTitle}>Added Videos ({addedVideoLinks.length})</Text>
-                    {addedVideoLinks.map((link) => (
-                      <View key={link} style={styles.addedLinkCard}>
-                        <View style={styles.addedLinkIconWrap}>
-                          <Play size={16} color="#fff" fill="#fff" />
-                        </View>
-                        <View style={styles.addedLinkMeta}>
-                          <Text style={styles.addedLinkPlatform}>{getVideoPlatform(link)}</Text>
-                          <Text style={styles.addedLinkUrl} numberOfLines={1}>{link}</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.addedLinkRemoveBtn}
-                          onPress={() => handleRemoveVideoLink(link)}
-                          activeOpacity={0.7}
-                        >
-                          <Trash2 size={15} color={Colors.error} />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <View style={styles.videoDivider}>
-                  <View style={styles.videoDividerLine} />
-                  <Text style={styles.videoDividerText}>or choose a sample</Text>
-                  <View style={styles.videoDividerLine} />
-                </View>
-
-                <View style={styles.videoGrid}>
-                  {SAMPLE_VIDEOS.map((video) => {
-                    const isActive = selectedVideo === video.id;
-                    return (
-                      <TouchableOpacity
-                        key={video.id}
-                        style={[styles.videoCard, isActive && styles.videoCardActive]}
-                        onPress={() => {
-                          setSelectedVideo(isActive ? '' : video.id);
-                          setSelectedImage('');
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <View style={styles.videoThumbWrap}>
-                          <Image source={{ uri: video.thumbnail }} style={styles.videoThumb} contentFit="cover" />
-                          <View style={styles.videoPlayOverlay}>
-                            <Play size={20} color="#fff" fill="#fff" />
-                          </View>
-                          <View style={styles.videoDurationBadge}>
-                            <Text style={styles.videoDurationText}>{video.duration}</Text>
-                          </View>
-                          {isActive && (
-                            <View style={styles.videoCheckOverlay}>
-                              <Check size={20} color={Colors.navyDark} />
-                            </View>
-                          )}
-                        </View>
-                        <Text style={[styles.videoTitle, isActive && styles.videoTitleActive]} numberOfLines={1}>{video.title}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {uploadedVideos.length > 0 && (
-                  <View style={styles.uploadedVideosSection}>
-                    <Text style={styles.addedLinksTitle}>Uploaded from Device ({uploadedVideos.length})</Text>
-                    {uploadedVideos.map((vid) => (
-                      <View key={vid.uri} style={styles.uploadedVideoCard}>
-                        <View style={styles.uploadedVideoIconWrap}>
-                          <Film size={16} color="#fff" />
-                        </View>
-                        <View style={styles.addedLinkMeta}>
-                          <Text style={styles.addedLinkPlatform} numberOfLines={1}>{vid.fileName}</Text>
-                          <Text style={styles.addedLinkUrl}>Duration: {formatDuration(vid.duration)}</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.addedLinkRemoveBtn}
-                          onPress={() => handleRemoveUploadedVideo(vid.uri)}
-                          activeOpacity={0.7}
-                        >
-                          <Trash2 size={15} color={Colors.error} />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <TouchableOpacity style={styles.uploadVideoBtn} activeOpacity={0.7} onPress={handleUploadVideo} testID="upload-video-btn">
-                  <Video size={22} color={Colors.accent} />
-                  <View style={styles.uploadVideoTextWrap}>
-                    <Text style={styles.uploadVideoTitle}>Upload from Device</Text>
-                    <Text style={styles.uploadVideoSubtext}>Select MP4, MOV from your laptop, iPad, phone, or PC</Text>
-                  </View>
-                  <Upload size={18} color={Colors.accent} />
-                </TouchableOpacity>
-              </>
-            )}
-
-            {isBusiness && (
-              <View style={styles.eventSection}>
-                <View style={styles.eventSectionHeader}>
-                  <View style={styles.eventSectionTitleRow}>
-                    <View style={styles.eventIconCircle}>
-                      <Calendar size={18} color="#fff" />
-                    </View>
-                    <View>
-                      <Text style={styles.eventSectionTitle}>Upcoming Events</Text>
-                      <Text style={styles.eventSectionSubtitle}>Manage events on the community newsfeed</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.eventAddBtn}
-                    onPress={() => {
-                      resetEventForm();
-                      setShowEventForm(!showEventForm);
-                    }}
-                    activeOpacity={0.7}
-                    testID="toggle-event-form"
-                  >
-                    {showEventForm ? (
-                      <X size={18} color={Colors.textSecondary} />
-                    ) : (
-                      <Plus size={18} color="#fff" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                {existingEvents.length > 0 && !showEventForm && (
-                  <View style={styles.existingEventsList}>
-                    {existingEvents.map((event) => {
-                      const catInfo = EVENT_CATEGORIES.find(c => c.value === event.category);
-                      return (
-                        <View key={event.id} style={styles.existingEventCard}>
-                          <Image source={{ uri: event.image }} style={styles.existingEventImage} contentFit="cover" />
-                          <View style={styles.existingEventContent}>
-                            <View style={styles.existingEventTopRow}>
-                              <Text style={styles.existingEventTitle} numberOfLines={1}>{event.title}</Text>
-                              {event.isHot && (
-                                <View style={styles.hotBadgeMini}>
-                                  <Flame size={10} color="#F59E0B" />
-                                </View>
-                              )}
-                            </View>
-                            <View style={styles.existingEventMeta}>
-                              <Calendar size={11} color={Colors.textTertiary} />
-                              <Text style={styles.existingEventMetaText}>{event.date}</Text>
-                              <MapPin size={11} color={Colors.textTertiary} />
-                              <Text style={styles.existingEventMetaText} numberOfLines={1}>{event.location}</Text>
-                            </View>
-                            <View style={styles.existingEventBottom}>
-                              <View style={styles.existingEventCatBadge}>
-                                <Text style={styles.existingEventCatText}>{catInfo?.emoji} {catInfo?.label}</Text>
-                              </View>
-                              <View style={styles.existingEventActions}>
-                                <TouchableOpacity
-                                  style={styles.existingEventEditBtn}
-                                  onPress={() => handleEditEvent(event)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Edit3 size={13} color={Colors.navyDark} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={styles.existingEventDeleteBtn}
-                                  onPress={() => handleDeleteEvent(event.id)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Trash2 size={13} color={Colors.error} />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-
-                {showEventForm && (
-                  <View style={styles.eventFormCard}>
-                    <Text style={styles.eventFormTitle}>
-                      {editingEventId ? 'Edit Event' : 'Create New Event'}
-                    </Text>
-
-                    <View style={styles.eventFieldGroup}>
-                      <Text style={styles.eventFieldLabel}>Event Title *</Text>
-                      <TextInput
-                        style={styles.eventInput}
-                        placeholder="e.g. Weekend Brunch Special"
-                        placeholderTextColor={Colors.textTertiary}
-                        value={eventTitle}
-                        onChangeText={setEventTitle}
-                        testID="event-title-input"
-                      />
-                    </View>
-
-                    <View style={styles.eventFieldGroup}>
-                      <Text style={styles.eventFieldLabel}>Description</Text>
-                      <TextInput
-                        style={[styles.eventInput, styles.eventInputMultiline]}
-                        placeholder="Tell people what to expect..."
-                        placeholderTextColor={Colors.textTertiary}
-                        value={eventDescription}
-                        onChangeText={setEventDescription}
-                        multiline
-                        textAlignVertical="top"
-                        testID="event-description-input"
-                      />
-                    </View>
-
-                    <View style={styles.eventFieldRow}>
-                      <View style={[styles.eventFieldGroup, { flex: 1 }]}>
-                        <Text style={styles.eventFieldLabel}>Date *</Text>
-                        <View style={styles.eventInputWithIcon}>
-                          <Calendar size={15} color={Colors.textTertiary} />
-                          <TextInput
-                            style={styles.eventInputInner}
-                            placeholder="Sat, Mar 15"
-                            placeholderTextColor={Colors.textTertiary}
-                            value={eventDate}
-                            onChangeText={setEventDate}
-                            testID="event-date-input"
-                          />
-                        </View>
-                      </View>
-                      <View style={[styles.eventFieldGroup, { flex: 1 }]}>
-                        <Text style={styles.eventFieldLabel}>Time *</Text>
-                        <View style={styles.eventInputWithIcon}>
-                          <Clock size={15} color={Colors.textTertiary} />
-                          <TextInput
-                            style={styles.eventInputInner}
-                            placeholder="6:00 PM – 9:00 PM"
-                            placeholderTextColor={Colors.textTertiary}
-                            value={eventTime}
-                            onChangeText={setEventTime}
-                            testID="event-time-input"
-                          />
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.eventFieldGroup}>
-                      <Text style={styles.eventFieldLabel}>Location *</Text>
-                      <View style={styles.eventInputWithIcon}>
-                        <MapPin size={15} color={Colors.textTertiary} />
-                        <TextInput
-                          style={styles.eventInputInner}
-                          placeholder="Your venue or address"
-                          placeholderTextColor={Colors.textTertiary}
-                          value={eventLocation}
-                          onChangeText={setEventLocation}
-                          testID="event-location-input"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.eventFieldGroup}>
-                      <Text style={styles.eventFieldLabel}>Category</Text>
-                      <TouchableOpacity
-                        style={styles.eventCategoryPicker}
-                        onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.eventCategoryPickerText}>
-                          {EVENT_CATEGORIES.find(c => c.value === eventCategory)?.emoji}{' '}
-                          {EVENT_CATEGORIES.find(c => c.value === eventCategory)?.label}
-                        </Text>
-                        <ChevronDown size={16} color={Colors.textSecondary} />
-                      </TouchableOpacity>
-                      {showCategoryPicker && (
-                        <View style={styles.eventCategoryDropdown}>
-                          {EVENT_CATEGORIES.map((cat) => (
-                            <TouchableOpacity
-                              key={cat.value}
-                              style={[
-                                styles.eventCategoryOption,
-                                eventCategory === cat.value && styles.eventCategoryOptionActive,
-                              ]}
-                              onPress={() => {
-                                setEventCategory(cat.value);
-                                setShowCategoryPicker(false);
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={styles.eventCategoryOptionEmoji}>{cat.emoji}</Text>
-                              <Text style={[
-                                styles.eventCategoryOptionText,
-                                eventCategory === cat.value && styles.eventCategoryOptionTextActive,
-                              ]}>{cat.label}</Text>
-                              {eventCategory === cat.value && <Check size={14} color={Colors.navyDark} />}
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.eventToggleRow}>
-                      <View style={styles.eventToggleGroup}>
-                        <Text style={styles.eventToggleLabel}>Free Event</Text>
-                        <TouchableOpacity
-                          style={[styles.eventToggle, eventIsFree && styles.eventToggleOn]}
-                          onPress={() => setEventIsFree(!eventIsFree)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.eventToggleThumb, eventIsFree && styles.eventToggleThumbOn]} />
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.eventToggleGroup}>
-                        <View style={styles.eventToggleLabelRow}>
-                          <Flame size={14} color="#F59E0B" />
-                          <Text style={styles.eventToggleLabel}>Mark as Hot</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={[styles.eventToggle, eventIsHot && styles.eventToggleOnHot]}
-                          onPress={() => setEventIsHot(!eventIsHot)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.eventToggleThumb, eventIsHot && styles.eventToggleThumbOnHot]} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {!eventIsFree && (
-                      <View style={styles.eventFieldGroup}>
-                        <Text style={styles.eventFieldLabel}>Ticket Price</Text>
-                        <View style={styles.eventInputWithIcon}>
-                          <DollarSign size={15} color={Colors.textTertiary} />
-                          <TextInput
-                            style={styles.eventInputInner}
-                            placeholder="25"
-                            placeholderTextColor={Colors.textTertiary}
-                            value={eventPrice}
-                            onChangeText={setEventPrice}
-                            keyboardType="numeric"
-                            testID="event-price-input"
-                          />
-                        </View>
-                      </View>
-                    )}
-
-                    <View style={styles.eventFieldGroup}>
-                      <Text style={styles.eventFieldLabel}>Tags (comma separated)</Text>
-                      <View style={styles.eventInputWithIcon}>
-                        <Tag size={15} color={Colors.textTertiary} />
-                        <TextInput
-                          style={styles.eventInputInner}
-                          placeholder="Food, Live Music, Outdoor"
-                          placeholderTextColor={Colors.textTertiary}
-                          value={eventTags}
-                          onChangeText={setEventTags}
-                          testID="event-tags-input"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.eventFormActions}>
-                      <TouchableOpacity
-                        style={styles.eventCancelBtn}
-                        onPress={() => {
-                          resetEventForm();
-                          setShowEventForm(false);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.eventCancelText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.eventSaveBtn}
-                        onPress={handleSaveEvent}
-                        activeOpacity={0.7}
-                        testID="save-event-btn"
-                      >
-                        <Calendar size={16} color="#fff" />
-                        <Text style={styles.eventSaveText}>
-                          {editingEventId ? 'Update Event' : 'Publish Event'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-
-            <View style={styles.tipsCard}>
-              <Text style={styles.tipsTitle}>Posting Tips</Text>
-              <View style={styles.tipRow}>
-                <View style={styles.tipDot} />
-                <Text style={styles.tipText}>Promotions reach more users with eye-catching images</Text>
-              </View>
-              <View style={styles.tipRow}>
-                <View style={styles.tipDot} />
-                <Text style={styles.tipText}>Announcements are great for events and updates</Text>
-              </View>
-              <View style={styles.tipRow}>
-                <View style={styles.tipDot} />
-                <Text style={styles.tipText}>Use emojis and hashtags to boost engagement</Text>
-              </View>
-            </View>
-
-            <View style={{ height: 40 }} />
+            {activeTab === 'post' ? renderPostForm() : activeTab === 'event' ? renderEventForm() : renderOfferForm()}
           </ScrollView>
         </KeyboardAvoidingView>
+      )}
+
+      {!isSubmitting && (
+        <SafeAreaView edges={['bottom']} style={styles.bottomBarSafe}>
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              style={[styles.publishBtnFull, isSubmitDisabled && styles.publishBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={isSubmitDisabled}
+              testID="publish-post"
+            >
+              <Text style={[styles.publishTextFull, isSubmitDisabled && styles.publishTextDisabled]}>{submitLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       )}
     </View>
   );
@@ -1265,18 +1532,32 @@ const styles = StyleSheet.create({
     color: Colors.bannerText,
     letterSpacing: -0.2,
   },
-  publishBtn: {
+  headerRightSpacer: {
+    width: 36,
+  },
+  bottomBarSafe: {
+    backgroundColor: Colors.background,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  publishBtnFull: {
     backgroundColor: Colors.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 9,
-    borderRadius: 20,
+    paddingVertical: 15,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   publishBtnDisabled: {
     backgroundColor: Colors.surfaceAlt,
   },
-  publishText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
+  publishTextFull: {
+    fontSize: 16,
+    fontWeight: '700' as const,
     color: Colors.navyDark,
     letterSpacing: 0.1,
   },
@@ -1285,6 +1566,44 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 20,
+    paddingBottom: 110,
+  },
+  tabToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 3,
+    position: 'relative',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 3,
+    bottom: 3,
+    width: '32%',
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    zIndex: 0,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
+    zIndex: 1,
+  },
+  tabBtnText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.navyDark,
+    letterSpacing: -0.2,
+  },
+  tabBtnTextActive: {
+    color: '#fff',
   },
   authorRow: {
     flexDirection: 'row',
@@ -1386,14 +1705,6 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontWeight: '600' as const,
   },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-    marginBottom: 10,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.3,
-  },
   imageRow: {
     gap: 10,
     paddingBottom: 14,
@@ -1428,12 +1739,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surface,
-  },
-  myUploadsLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-    marginBottom: 8,
   },
   myUploadsLoadingWrap: {
     width: 44,
@@ -1482,7 +1787,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
     borderStyle: 'dashed' as const,
     paddingVertical: 28,
-    marginBottom: 20,
+    marginBottom: 14,
     gap: 8,
   },
   addImageText: {
@@ -1553,78 +1858,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textTertiary,
     marginTop: -2,
-  },
-  videoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 14,
-  },
-  videoCard: {
-    width: '48%' as unknown as number,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-  },
-  videoCardActive: {
-    borderColor: Colors.accent,
-  },
-  videoThumbWrap: {
-    width: '100%',
-    height: 100,
-    position: 'relative' as const,
-  },
-  videoThumb: {
-    width: '100%',
-    height: '100%',
-  },
-  videoPlayOverlay: {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  videoDurationBadge: {
-    position: 'absolute' as const,
-    bottom: 6,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  videoDurationText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
-  videoCheckOverlay: {
-    position: 'absolute' as const,
-    top: 6,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoTitle: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.text,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
-  videoTitleActive: {
-    fontWeight: '600' as const,
-    color: Colors.navyDark,
   },
   uploadedVideosSection: {
     marginBottom: 14,
@@ -1808,22 +2041,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  videoDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  videoDividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.borderLight,
-  },
-  videoDividerText: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    fontWeight: '500' as const,
-  },
   tipsCard: {
     backgroundColor: Colors.accentLight,
     borderRadius: 14,
@@ -1877,333 +2094,249 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     letterSpacing: 0,
   },
-  eventSection: {
+  // ---- Offer / Event form sections (adapted from create-offer.tsx) ----
+  formSection: {
+    marginBottom: 16,
     backgroundColor: Colors.surface,
     borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
     borderColor: Colors.borderLight,
-    marginBottom: 20,
-    overflow: 'hidden',
   },
-  eventSectionHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    gap: 10,
+    marginBottom: 14,
   },
-  eventSectionTitleRow: {
+  sectionIconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: Colors.navyDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase' as const,
+  },
+  paperInput: {
+    backgroundColor: '#fff',
+    marginBottom: 4,
+    fontSize: 15,
+  },
+  paperMultiline: {
+    minHeight: 100,
+  },
+  errorText: {
+    fontSize: 12,
+    color: Colors.error,
+    marginTop: 2,
+    marginBottom: 6,
+    marginLeft: 4,
+    fontWeight: '500' as const,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  pillSelected: {
+    backgroundColor: Colors.navyDark,
+    borderColor: Colors.navyDark,
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.navyDark,
+  },
+  pillTextSelected: {
+    color: '#fff',
+  },
+  discountRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 14,
+  },
+  discountIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: Colors.navyDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountInputWrap: {
     flex: 1,
   },
-  eventIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#1B6B4A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eventSectionTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: -0.2,
-  },
-  eventSectionSubtitle: {
-    fontSize: 11,
-    color: Colors.textTertiary,
-    marginTop: 1,
-  },
-  eventAddBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#1B6B4A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  existingEventsList: {
-    padding: 12,
-    gap: 10,
-  },
-  existingEventCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+  imageUploadArea: {
+    borderWidth: 2,
     borderColor: Colors.borderLight,
-  },
-  existingEventImage: {
-    width: 80,
-    height: 90,
-  },
-  existingEventContent: {
-    flex: 1,
-    padding: 10,
-    justifyContent: 'space-between',
-  },
-  existingEventTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  existingEventTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    flex: 1,
-  },
-  hotBadgeMini: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FEF3C7',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.background,
   },
-  existingEventMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  existingEventMetaText: {
-    fontSize: 11,
-    color: Colors.textTertiary,
-    marginRight: 6,
-  },
-  existingEventBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  existingEventCatBadge: {
-    backgroundColor: Colors.surfaceAlt,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  existingEventCatText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-  existingEventActions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  existingEventEditBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+  imageUploadIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: Colors.accentLight,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 12,
   },
-  existingEventDeleteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
+  imageUploadTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  imageUploadSub: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 3,
+  },
+  imagePreviewWrap: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+  },
+  imageRemoveBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  eventFormCard: {
-    padding: 16,
-  },
-  eventFormTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    marginBottom: 16,
-    letterSpacing: -0.2,
-  },
-  eventFieldGroup: {
-    marginBottom: 14,
-  },
-  eventFieldLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-    marginBottom: 6,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.4,
-  },
-  eventInput: {
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: Colors.text,
-  },
-  eventInputMultiline: {
-    minHeight: 80,
-    textAlignVertical: 'top' as const,
-  },
-  eventFieldRow: {
+  dateRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
-  eventInputWithIcon: {
+  dateField: {
+    flex: 1,
+  },
+  dateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: 10,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: Colors.borderLight,
-    paddingHorizontal: 12,
-    gap: 8,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    minHeight: 56,
   },
-  eventInputInner: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: Colors.text,
+  dateBtnError: { borderColor: Colors.error },
+  dateBtnText: { fontSize: 14, color: Colors.text, flex: 1 },
+  dateBtnPlaceholder: { color: Colors.textTertiary },
+  clearDateBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    alignSelf: 'flex-start' as const,
+    paddingVertical: 4,
+    marginTop: 6,
   },
-  eventCategoryPicker: {
+  clearDateText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  activeToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
   },
-  eventCategoryPickerText: {
-    fontSize: 14,
-    color: Colors.text,
-    fontWeight: '500' as const,
-  },
-  eventCategoryDropdown: {
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  eventCategoryOption: {
+  activeToggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    gap: 12,
   },
-  eventCategoryOptionActive: {
-    backgroundColor: '#E8F5EE',
+  activeToggleDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.textTertiary,
+    borderWidth: 2,
+    borderColor: Colors.borderLight,
   },
-  eventCategoryOptionEmoji: {
-    fontSize: 16,
+  activeToggleDotOn: {
+    backgroundColor: '#22C55E',
+    borderColor: '#BBF7D0',
   },
-  eventCategoryOptionText: {
-    flex: 1,
-    fontSize: 14,
+  activeToggleLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
     color: Colors.text,
   },
-  eventCategoryOptionTextActive: {
-    fontWeight: '600' as const,
-    color: '#1B6B4A',
+  activeToggleSub: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  categoryEmoji: {
+    fontSize: 16,
   },
   eventToggleRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 14,
+    gap: 20,
   },
-  eventToggleGroup: {
+  eventToggleCol: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignItems: 'flex-start',
+    gap: 10,
   },
   eventToggleLabel: {
-    fontSize: 13,
-    fontWeight: '500' as const,
+    fontSize: 14,
+    fontWeight: '600' as const,
     color: Colors.text,
   },
-  eventToggleLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  eventToggle: {
-    width: 44,
+  eventToggleTrack: {
+    width: 46,
     height: 26,
     borderRadius: 13,
     backgroundColor: Colors.borderLight,
+    padding: 3,
     justifyContent: 'center',
-    paddingHorizontal: 2,
   },
-  eventToggleOn: {
-    backgroundColor: '#1B6B4A',
-  },
-  eventToggleOnHot: {
-    backgroundColor: '#F59E0B',
+  eventToggleTrackOn: {
+    backgroundColor: Colors.accent,
   },
   eventToggleThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#fff',
+    alignSelf: 'flex-start',
   },
   eventToggleThumbOn: {
-    alignSelf: 'flex-end' as const,
-  },
-  eventToggleThumbOnHot: {
-    alignSelf: 'flex-end' as const,
-  },
-  eventFormActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  eventCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eventCancelText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-  eventSaveBtn: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#1B6B4A',
-    gap: 8,
-  },
-  eventSaveText: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: '#fff',
-    letterSpacing: 0.1,
+    alignSelf: 'flex-end',
   },
 });
-

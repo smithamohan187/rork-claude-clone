@@ -66,6 +66,8 @@ export interface PostFeedItem {
   title: string;
   text: string;
   image_url: string | null;
+  video_url: string | null;
+  video_type: 'upload' | 'link' | null;
   created_at: string;
   likes: number;
   comments: [];
@@ -138,6 +140,8 @@ function mapToPost(item: FeedApiItem): PostFeedItem {
     title: item.title,
     text: item.content ?? '',
     image_url: item.image_url,
+    video_url: item.video_url,
+    video_type: item.video_type,
     created_at: item.created_at,
     likes: item.like_count ?? 0,
     comments: [],

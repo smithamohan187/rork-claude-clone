@@ -5,6 +5,7 @@ import { File as ExpoFile } from 'expo-file-system';
 import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
 export type EventType = 'In Person' | 'Online' | 'Hybrid';
+export type EventCategory = 'food' | 'fitness' | 'music' | 'art' | 'community' | 'wellness' | 'market' | 'nightlife';
 
 export interface Event {
   id: string;
@@ -17,6 +18,11 @@ export interface Event {
   starts_at: string;
   ends_at: string | null;
   event_type: EventType;
+  category: EventCategory;
+  is_free: boolean;
+  price: string | null;
+  tags: string[];
+  is_hot: boolean;
   status: 'upcoming' | 'ongoing' | 'past' | 'cancelled';
   effective_status: 'upcoming' | 'past' | 'cancelled';
   created_at: string;
@@ -35,6 +41,11 @@ export interface CreateEventPayload {
   starts_at: string;
   ends_at?: string | null;
   event_type?: EventType;
+  category?: EventCategory;
+  is_free?: boolean;
+  price?: string | null;
+  tags?: string[];
+  is_hot?: boolean;
 }
 
 export type UpdateEventPayload = Partial<CreateEventPayload> & { image_url?: string | null };

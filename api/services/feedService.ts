@@ -10,6 +10,8 @@ export interface FeedApiItem {
   title: string;
   content: string | null;
   image_url: string | null;
+  video_url: string | null;
+  video_type: 'upload' | 'link' | null;
   created_at: string;
   relevant_date: string | null;
   is_saved?: boolean;

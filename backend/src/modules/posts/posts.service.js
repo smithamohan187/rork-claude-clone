@@ -29,7 +29,21 @@ async function createPost(userId, payload) {
 async function editPost(userId, postId, payload) {
   await verifyPostOwnership(userId, postId);
   const hasImageUrl = Object.prototype.hasOwnProperty.call(payload, 'image_url');
-  const updated = await postsModel.updatePost(postId, payload, hasImageUrl);
+  const hasVideoUrl = Object.prototype.hasOwnProperty.call(payload, 'video_url');
+  // A post carries at most one of image/video — setting one clears the other.
+  const finalPayload = { ...payload };
+  if (hasImageUrl && payload.image_url) {
+    finalPayload.video_url = null;
+    finalPayload.video_type = null;
+  } else if (hasVideoUrl && payload.video_url) {
+    finalPayload.image_url = null;
+  }
+  const updated = await postsModel.updatePost(
+    postId,
+    finalPayload,
+    hasImageUrl || (hasVideoUrl && payload.video_url),
+    hasVideoUrl || (hasImageUrl && payload.image_url),
+  );
   if (!updated) throw new Error('Post not found');
   return updated;
 }
@@ -92,6 +106,11 @@ async function uploadPostImage(userId, postId, imageUrl) {
   return postsModel.updatePostImageUrl(postId, imageUrl);
 }
 
+async function uploadPostVideo(userId, postId, videoUrl) {
+  await verifyPostOwnership(userId, postId);
+  return postsModel.updatePostVideo(postId, videoUrl, 'upload');
+}
+
 module.exports = {
   createPost,
   editPost,
@@ -101,4 +120,5 @@ module.exports = {
   getPostsForBusiness,
   deletePost,
   uploadPostImage,
+  uploadPostVideo,
 };

@@ -24,6 +24,14 @@ async function insertPost(businessId, { title, content, image_url }) {
   return rows[0];
 }
 
+async function updatePostVideo(id, videoUrl, videoType) {
+  const { rows } = await query(
+    `UPDATE posts SET video_url = $1, video_type = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+    [videoUrl, videoType, id]
+  );
+  return rows[0] ?? null;
+}
+
 async function getPostById(id, profileId) {
   const { rows } = await query(
     `SELECT posts.*,
@@ -67,12 +75,14 @@ async function getPostsByBusinessId(businessId, isActive, profileId) {
   return rows;
 }
 
-async function updatePost(id, { title, content, image_url, is_active }, hasImageUrl = false) {
+async function updatePost(id, { title, content, image_url, video_url, video_type, is_active }, hasImageUrl = false, hasVideoUrl = false) {
   const { rows } = await query(
     `UPDATE posts SET
        title      = COALESCE($1, title),
        content    = COALESCE($2, content),
        image_url  = CASE WHEN $3 THEN $4 ELSE image_url END,
+       video_url  = CASE WHEN $7 THEN $8 ELSE video_url END,
+       video_type = CASE WHEN $7 THEN $9 ELSE video_type END,
        is_active  = COALESCE($5, is_active),
        updated_at = NOW()
      WHERE id = $6
@@ -84,6 +94,9 @@ async function updatePost(id, { title, content, image_url, is_active }, hasImage
       image_url ?? null,
       is_active !== undefined ? is_active : null,
       id,
+      hasVideoUrl,
+      video_url ?? null,
+      video_type ?? null,
     ]
   );
   return rows[0] ?? null;
@@ -113,5 +126,6 @@ module.exports = {
   getPostsByBusinessId,
   updatePost,
   updatePostImageUrl,
+  updatePostVideo,
   deletePost,
 };

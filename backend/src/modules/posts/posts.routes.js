@@ -14,6 +14,7 @@ const {
   toggleStatusHandler,
   deletePostHandler,
   uploadPostImageHandler,
+  uploadPostVideoHandler,
 } = require('./posts.controller');
 
 //const uploadDir = path.join(__dirname, '../../../../uploads/posts');
@@ -26,6 +27,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });*/
 const upload = multer({ storage: multer.memoryStorage() });
+const uploadVideo = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -39,5 +41,6 @@ router.put('/:id',         authenticate, validateRequest(updatePostSchema), upda
 router.patch('/:id/status', authenticate, validateRequest(toggleStatusSchema), toggleStatusHandler);
 router.delete('/:id',      authenticate, deletePostHandler);
 router.post('/:id/image',  authenticate, upload.single('image'), uploadPostImageHandler);
+router.post('/:id/video',  authenticate, uploadVideo.single('video'), uploadPostVideoHandler);
 
 module.exports = router;

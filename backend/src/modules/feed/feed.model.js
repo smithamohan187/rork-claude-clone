@@ -11,7 +11,7 @@ async function getUserActiveProfileId(userId) {
 async function getSubscribedFeed(profileId, category, limit, offset) {
   const { rows } = await query(
     `SELECT item_type, item_id, business_id, business_name, business_logo,
-            title, content, image_url, created_at, relevant_date, is_saved,
+            title, content, image_url, video_url, video_type, created_at, relevant_date, is_saved,
             like_count, liked_by_me, is_owner, comment_count
      FROM (
        SELECT
@@ -23,6 +23,8 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          o.title,
          o.description AS content,
          o.image_url,
+         NULL::text    AS video_url,
+         NULL::text    AS video_type,
          o.created_at,
          o.expires_at  AS relevant_date,
          (so.offer_id IS NOT NULL) AS is_saved,
@@ -56,6 +58,8 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          e.title,
          e.description AS content,
          e.image_url,
+         NULL::text    AS video_url,
+         NULL::text    AS video_type,
          e.created_at,
          e.starts_at   AS relevant_date,
          (se.event_id IS NOT NULL) AS is_saved,
@@ -89,6 +93,8 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          p.title,
          p.content,
          p.image_url,
+         p.video_url,
+         p.video_type,
          p.created_at,
          NULL          AS relevant_date,
          (sp.post_id IS NOT NULL) AS is_saved,

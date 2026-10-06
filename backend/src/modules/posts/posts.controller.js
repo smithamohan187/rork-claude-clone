@@ -87,6 +87,13 @@ const uploadPostImageHandler = asyncHandler(async (req, res) => {
   res.json(ok({ post }));
 });
 
+const uploadPostVideoHandler = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json(fail('No file uploaded'));
+  const videoUrl = await uploadFileToGCS(req.file, 'posts-video', { resumable: true });
+  const post = await postsService.uploadPostVideo(req.user.userId, req.params.id, videoUrl);
+  res.json(ok({ post }));
+});
+
 module.exports = {
   getPostsHandler,
   getPostByIdHandler,
@@ -96,4 +103,5 @@ module.exports = {
   toggleStatusHandler,
   deletePostHandler,
   uploadPostImageHandler,
+  uploadPostVideoHandler,
 };

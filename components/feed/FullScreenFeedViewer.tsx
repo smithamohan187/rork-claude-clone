@@ -17,6 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Modal as PaperModal, Portal, Snackbar } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { WebView } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
 import {
   X,
   ChevronUp,
@@ -29,6 +32,7 @@ import {
   Tag,
   Calendar,
   MapPin,
+  Play,
 } from 'lucide-react-native';
 
 import type { FeedItem, PostFeedItem } from '@/hooks/usePersonalisedFeed';
@@ -57,6 +61,29 @@ interface Props {
 
 const SCREEN = Dimensions.get('window');
 const PRIMARY = '#1A5C35';
+
+// Extracts a YouTube/Vimeo embed URL for inline WebView playback; null for any
+// other platform/link shape, signalling the caller to fall back to a
+// tap-to-open-browser card instead.
+function getEmbedVideoUrl(url: string): string | null {
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/i);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/i);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  return null;
+}
+
+// Post video fields aren't yet threaded through PostFeedItem (see the handback
+// report) — read them defensively off whatever post-like object is passed in
+// so this renders correctly the moment that plumbing lands, and degrades to
+// the existing image/gradient fallback today.
+function getPostVideo(post: unknown): {
+  url: string | null;
+  type: 'upload' | 'link' | null;
+} {
+  const p = post as { video_url?: string | null; video_type?: 'upload' | 'link' | null };
+  return { url: p.video_url ?? null, type: p.video_type ?? null };
+}
 
 export function FullScreenFeedViewer({
   visible,
@@ -354,6 +381,7 @@ function PostPage({
 
   const description = post.text ?? '';
   const coverUri = post.image_url;
+  const postVideo = getPostVideo(post);
 
   return (
     <PageShell
@@ -361,6 +389,8 @@ function PostPage({
       screenH={screenH}
       insetTop={insetTop}
       coverUri={coverUri ?? undefined}
+      videoUrl={postVideo.url}
+      videoType={postVideo.type}
       logoUri={post.business_logo}
       typeLabel="Post"
       typeColor="#00B246"
@@ -755,10 +785,26 @@ interface PageShellProps {
   screenH: number;
   insetTop: number;
   coverUri?: string;
+  videoUrl?: string | null;
+  videoType?: 'upload' | 'link' | null;
   logoUri?: string;
   typeLabel: string;
   typeColor: string;
   children: React.ReactNode;
+}
+
+function FullScreenInlineVideo({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      nativeControls
+      contentFit="cover"
+    />
+  );
 }
 
 function PageShell({
@@ -766,16 +812,35 @@ function PageShell({
   screenH,
   insetTop,
   coverUri,
+  videoUrl,
+  videoType,
   logoUri,
   typeLabel,
   typeColor,
   children,
 }: PageShellProps) {
   const [imgFailed, setImgFailed] = useState<boolean>(false);
-  const showImage = !!coverUri && !imgFailed;
+  const showImage = !videoUrl && !!coverUri && !imgFailed;
+  const videoEmbedUrl = videoUrl && videoType === 'link' ? getEmbedVideoUrl(videoUrl) : null;
   return (
     <View style={[styles.page, { width: screenW, height: screenH }]}>
-      {showImage ? (
+      {videoUrl ? (
+        videoType === 'upload' ? (
+          <FullScreenInlineVideo uri={videoUrl} />
+        ) : videoEmbedUrl ? (
+          <WebView source={{ uri: videoEmbedUrl }} style={StyleSheet.absoluteFill} allowsFullscreenVideo />
+        ) : (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => WebBrowser.openBrowserAsync(videoUrl)}
+          >
+            <LinearGradient colors={['#1A5C35', '#1A5C35', '#1A5C35']} style={StyleSheet.absoluteFill} />
+            <View style={styles.videoFallbackPlay} pointerEvents="none">
+              <Play size={44} color="#fff" fill="#fff" />
+            </View>
+          </Pressable>
+        )
+      ) : showImage ? (
         <Image
           source={{ uri: coverUri }}
           style={StyleSheet.absoluteFill}
@@ -1109,6 +1174,15 @@ const styles = StyleSheet.create({
   typePillText: { color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
 
   fallbackLogoWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoFallbackPlay: {
     position: 'absolute',
     top: 0,
     left: 0,

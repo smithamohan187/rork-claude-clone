@@ -13,6 +13,8 @@ export interface BusinessPost {
   business_logo: string;
   text: string;
   image_url: string | null;
+  video_url?: string | null;
+  video_type?: 'upload' | 'link' | null;
   created_at: string;
   likes: number;
   comments: PostComment[];
