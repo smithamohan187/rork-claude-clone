@@ -83,6 +83,7 @@ import { useSavedBusiness } from '@/hooks/useSavedBusiness';
 import { useBusinessScanCode } from '@/hooks/useBusinessScanCode';
 import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
 import MembersTab from '@/components/MembersTab';
+import { PostMedia } from '@/components/feed/PostMedia';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ACCENT = '#1A5C35';
@@ -1817,13 +1818,12 @@ function PostsTab({
               <TouchableOpacity onPress={() => openPost(post.id)} activeOpacity={0.8} testID={`post-open-${post.id}`}>
                 <Text style={styles.postText}>{post.content}</Text>
 
-                {post.image_url ? (
-                  <Image
-                    source={{ uri: post.image_url }}
-                    style={styles.postImage}
-                    contentFit="cover"
-                  />
-                ) : null}
+                <PostMedia
+                  videoUrl={post.video_url}
+                  videoType={post.video_type}
+                  imageUrl={post.image_url}
+                  style={styles.postImage}
+                />
               </TouchableOpacity>
 
               <Text

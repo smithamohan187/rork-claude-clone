@@ -29,6 +29,7 @@ import {
   FileText,
   X,
   XCircle,
+  Play,
 } from 'lucide-react-native';
 import {
   useManageContent,
@@ -550,6 +551,10 @@ export default function ManageContentScreen() {
       >
         {post.image_url ? (
           <Image source={{ uri: post.image_url }} style={styles.thumb} />
+        ) : post.video_url ? (
+          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+            <Play size={22} color={PURPLE} fill={PURPLE} />
+          </View>
         ) : (
           <View style={[styles.thumb, styles.thumbPlaceholder]}>
             <Text style={styles.thumbEmoji}>📝</Text>

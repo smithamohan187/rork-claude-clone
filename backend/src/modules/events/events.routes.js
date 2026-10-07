@@ -1,7 +1,7 @@
 // events.routes.js — route definitions and Multer config for the events module.
 const { Router } = require('express');
-const path = require('path');
-const fs = require('fs');
+//const path = require('path');
+//onst fs = require('fs');
 const multer = require('multer');
 const { authenticate, optionalAuthenticate } = require('../../middleware/authenticate');
 const { validateRequest } = require('../../middleware/validateRequest');
@@ -18,14 +18,15 @@ const {
 } = require('./events.controller');
 
 //const uploadDir = path.join(__dirname, '../../../../uploads/events');
-const uploadDir = path.join('/tmp', 'uploads', 'events');
+/*const uploadDir = path.join('/tmp', 'uploads', 'events');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
-const upload = multer({ storage });
+const upload = multer({ storage });*/
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 

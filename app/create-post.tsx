@@ -43,7 +43,7 @@ import {
   Zap,
   Sparkles,
 } from 'lucide-react-native';
-import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
+import { DatePickerModal, TimePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -309,6 +309,8 @@ export default function CreatePostScreen() {
   const [eventEndDate, setEventEndDate] = useState<Date | null>(null);
   const [eventDateOpen, setEventDateOpen] = useState<boolean>(false);
   const [eventEndDateOpen, setEventEndDateOpen] = useState<boolean>(false);
+  const [eventTimeOpen, setEventTimeOpen] = useState<boolean>(false);
+  const [eventEndTimeOpen, setEventEndTimeOpen] = useState<boolean>(false);
   const [eventImage, setEventImage] = useState<string>('');
   const [eventCategory, setEventCategory] = useState<EventCategory>('community');
   const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
@@ -1304,7 +1306,7 @@ export default function CreatePostScreen() {
               ? (offerStartDate ? new Date(offerStartDate) : undefined)
               : (offerEndDate ? new Date(offerEndDate) : undefined)
           }
-          onConfirm={({ date }) => {
+          onChange={({ date }) => {
             if (!date) { setOfferPickerField(null); return; }
             const iso = date.toISOString();
             if (offerPickerField === 'start') {
@@ -1316,6 +1318,7 @@ export default function CreatePostScreen() {
             }
             setOfferPickerField(null);
           }}
+          onConfirm={() => setOfferPickerField(null)}
           validRange={offerPickerField === 'end' && offerStartDate ? { startDate: new Date(offerStartDate) } : undefined}
         />
       </View>
@@ -1437,7 +1440,7 @@ export default function CreatePostScreen() {
           <View style={styles.dateField}>
             <TouchableOpacity
               style={[styles.dateBtn, !!errors.eventDate && styles.dateBtnError]}
-              onPress={() => setEventDateOpen(true)}
+              onPress={() => setEventTimeOpen(true)}
               testID="event-start-time-btn"
               activeOpacity={0.7}
             >
@@ -1450,17 +1453,34 @@ export default function CreatePostScreen() {
         </View>
         {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
 
-        <TouchableOpacity
-          style={[styles.dateBtn, { marginTop: 10 }, !!errors.eventEndDate && styles.dateBtnError]}
-          onPress={() => setEventEndDateOpen(true)}
-          testID="event-end-date-btn"
-          activeOpacity={0.7}
-        >
-          <Calendar size={15} color={Colors.textSecondary} />
-          <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
-            {eventEndDate ? format(eventEndDate, 'd MMM yyyy, HH:mm') : 'End date & time (optional)'}
-          </Text>
-        </TouchableOpacity>
+        <View style={[styles.dateRow, { marginTop: 10 }]}>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
+              onPress={() => setEventEndDateOpen(true)}
+              testID="event-end-date-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+                {eventEndDate ? format(eventEndDate, 'd MMM yyyy') : 'End Date'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
+              onPress={() => setEventEndTimeOpen(true)}
+              testID="event-end-time-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+                {eventEndDate ? format(eventEndDate, 'h:mm a') : 'End Time'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         {eventEndDate && (
           <TouchableOpacity onPress={() => { setEventEndDate(null); setErrors(p => ({ ...p, eventEndDate: undefined })); }} style={styles.clearDateBtn}>
             <X size={14} color={Colors.textSecondary} />
@@ -1576,11 +1596,32 @@ export default function CreatePostScreen() {
         visible={eventDateOpen}
         onDismiss={() => setEventDateOpen(false)}
         date={eventDate ?? undefined}
-        onConfirm={({ date }) => {
-          if (date) { setEventDate(date); setErrors(p => ({ ...p, eventDate: undefined })); }
+        onChange={({ date }) => {
+          if (date) {
+            const merged = eventDate
+              ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), eventDate.getHours(), eventDate.getMinutes())
+              : date;
+            setEventDate(merged);
+            setErrors(p => ({ ...p, eventDate: undefined }));
+          }
           setEventDateOpen(false);
         }}
-        saveLabel="Confirm"
+        onConfirm={() => setEventDateOpen(false)}
+      />
+
+      <TimePickerModal
+        locale="en"
+        visible={eventTimeOpen}
+        onDismiss={() => setEventTimeOpen(false)}
+        hours={eventDate ? eventDate.getHours() : new Date().getHours()}
+        minutes={eventDate ? eventDate.getMinutes() : new Date().getMinutes()}
+        onConfirm={({ hours, minutes }) => {
+          const base = eventDate ?? new Date();
+          const merged = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+          setEventDate(merged);
+          setErrors(p => ({ ...p, eventDate: undefined }));
+          setEventTimeOpen(false);
+        }}
       />
 
       <DatePickerModal
@@ -1590,11 +1631,32 @@ export default function CreatePostScreen() {
         onDismiss={() => setEventEndDateOpen(false)}
         date={eventEndDate ?? undefined}
         validRange={eventDate ? { startDate: eventDate } : undefined}
-        onConfirm={({ date }) => {
-          if (date) { setEventEndDate(date); setErrors(p => ({ ...p, eventEndDate: undefined })); }
+        onChange={({ date }) => {
+          if (date) {
+            const merged = eventEndDate
+              ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), eventEndDate.getHours(), eventEndDate.getMinutes())
+              : date;
+            setEventEndDate(merged);
+            setErrors(p => ({ ...p, eventEndDate: undefined }));
+          }
           setEventEndDateOpen(false);
         }}
-        saveLabel="Confirm"
+        onConfirm={() => setEventEndDateOpen(false)}
+      />
+
+      <TimePickerModal
+        locale="en"
+        visible={eventEndTimeOpen}
+        onDismiss={() => setEventEndTimeOpen(false)}
+        hours={eventEndDate ? eventEndDate.getHours() : new Date().getHours()}
+        minutes={eventEndDate ? eventEndDate.getMinutes() : new Date().getMinutes()}
+        onConfirm={({ hours, minutes }) => {
+          const base = eventEndDate ?? eventDate ?? new Date();
+          const merged = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+          setEventEndDate(merged);
+          setErrors(p => ({ ...p, eventEndDate: undefined }));
+          setEventEndTimeOpen(false);
+        }}
       />
     </>
   );
