@@ -84,6 +84,11 @@ type PendingVideo =
   | { kind: 'link'; url: string }
   | { kind: 'upload'; uri: string; fileName: string; duration: number | null };
 
+// Mirrors the multer fileSize limit on the video upload route (backend/src/modules/posts/posts.routes.js).
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const VIDEO_TOO_LARGE_TITLE = 'Video Too Large';
+const VIDEO_TOO_LARGE_MESSAGE = 'This video is over 100MB. Please choose a shorter video or compress it before uploading.';
+
 const POST_TYPE_OPTIONS: { value: PostType; label: string; icon: 'megaphone' | 'bell' | 'file' }[] = [
   { value: 'promotion', label: 'Promotion', icon: 'megaphone' },
   { value: 'announcement', label: 'Announcement', icon: 'bell' },
@@ -132,7 +137,6 @@ interface FormErrors {
   endDate?: string;
   eventTitle?: string;
   eventDate?: string;
-  eventEndDate?: string;
 }
 
 export default function CreatePostScreen() {
@@ -279,6 +283,33 @@ export default function CreatePostScreen() {
     }
   }, []);
 
+  const handleEventPickFromDevice = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const stable = await toDisplayUri(result.assets[0].uri);
+      setPickingEventPhoto(true);
+      const media = await uploadMedia(stable);
+      setMyUploads(prev => [media, ...prev]);
+      setEventImage(media.image_url);
+    } catch (err) {
+      if (__DEV__) console.log('[CreatePost] Event upload error:', err);
+      Alert.alert('Upload Failed', err instanceof Error ? err.message : 'Could not upload your photo. Please try again.');
+    } finally {
+      setPickingEventPhoto(false);
+    }
+  }, []);
+
   const isFormValid = content.trim().length > 0;
 
   const charCount = content.length;
@@ -299,17 +330,15 @@ export default function CreatePostScreen() {
   const [offerIsHot, setOfferIsHot] = useState<boolean>(false);
   const [offerPromoCode, setOfferPromoCode] = useState<string>('');
   const [pickingOfferPhoto, setPickingOfferPhoto] = useState<boolean>(false);
+  const [pickingEventPhoto, setPickingEventPhoto] = useState<boolean>(false);
 
   // ---- Event tab state ----
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDescription, setEventDescription] = useState<string>('');
   const [eventLocation, setEventLocation] = useState<string>('');
   const [eventDate, setEventDate] = useState<Date | null>(null);
-  const [eventEndDate, setEventEndDate] = useState<Date | null>(null);
   const [eventDateOpen, setEventDateOpen] = useState<boolean>(false);
-  const [eventEndDateOpen, setEventEndDateOpen] = useState<boolean>(false);
   const [eventTimeOpen, setEventTimeOpen] = useState<boolean>(false);
-  const [eventEndTimeOpen, setEventEndTimeOpen] = useState<boolean>(false);
   const [eventImage, setEventImage] = useState<string>('');
   const [eventCategory, setEventCategory] = useState<EventCategory>('community');
   const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
@@ -332,7 +361,7 @@ export default function CreatePostScreen() {
       setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
       setOfferIsHot(false); setOfferPromoCode('');
       setEventTitle(''); setEventDescription(''); setEventLocation('');
-      setEventDate(null); setEventEndDate(null); setEventImage('');
+      setEventDate(null); setEventImage('');
       setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     } else if (value === 'event') {
@@ -343,7 +372,7 @@ export default function CreatePostScreen() {
       setOfferIsHot(false); setOfferPromoCode('');
     } else {
       setEventTitle(''); setEventDescription(''); setEventLocation('');
-      setEventDate(null); setEventEndDate(null); setEventImage('');
+      setEventDate(null); setEventImage('');
       setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     }
@@ -379,35 +408,9 @@ export default function CreatePostScreen() {
     const newErrors: FormErrors = {};
     if (!eventTitle.trim()) newErrors.eventTitle = 'Event title is required';
     if (!eventDate) newErrors.eventDate = 'Event date is required';
-    if (eventDate && eventEndDate && eventEndDate <= eventDate) {
-      newErrors.eventEndDate = 'End date must be after event date';
-    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [eventTitle, eventDate, eventEndDate]);
-
-  const handlePickCoverImage = useCallback(async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant photo library access to upload images.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        const stable = await toDisplayUri(result.assets[0].uri);
-        setEventImage(stable);
-      }
-    } catch (err) {
-      if (__DEV__) console.log('[CreatePost] Image picker error:', err);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
-    }
-  }, []);
+  }, [eventTitle, eventDate]);
 
   const handleSubmit = useCallback(async () => {
     if (activeTab === 'post') {
@@ -445,7 +448,12 @@ export default function CreatePostScreen() {
         });
       } catch (err) {
         setIsSubmitting(false);
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to publish your post. Please try again.');
+        const message = err instanceof Error ? err.message : '';
+        if (/file too large/i.test(message)) {
+          Alert.alert(VIDEO_TOO_LARGE_TITLE, VIDEO_TOO_LARGE_MESSAGE);
+        } else {
+          Alert.alert('Error', message || 'Failed to publish your post. Please try again.');
+        }
       }
       return;
     }
@@ -498,7 +506,7 @@ export default function CreatePostScreen() {
         description: eventDescription.trim() || null,
         location: eventLocation.trim() || null,
         starts_at: eventDate!.toISOString(),
-        ends_at: eventEndDate ? eventEndDate.toISOString() : null,
+        ends_at: null,
         category: eventCategory,
         is_free: eventIsFree,
         price: eventIsFree ? null : (eventPrice.trim() || null),
@@ -524,7 +532,7 @@ export default function CreatePostScreen() {
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
-    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, eventImage, addEvent,
+    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventImage, addEvent,
     eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot,
   ]);
 
@@ -590,6 +598,10 @@ export default function CreatePostScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
+          Alert.alert(VIDEO_TOO_LARGE_TITLE, VIDEO_TOO_LARGE_MESSAGE);
+          return;
+        }
         const fileName = asset.fileName || asset.uri.split('/').pop() || 'video';
         const duration = asset.duration ? Math.round(asset.duration / 1000) : null;
         // Replaces any existing pending video (link or upload) — only one video
@@ -1402,18 +1414,72 @@ export default function CreatePostScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.imageUploadArea}
-            onPress={handlePickCoverImage}
-            activeOpacity={0.7}
-            testID="event-image-upload-area"
-          >
-            <View style={styles.imageUploadIconWrap}>
-              <ImagePlus size={26} color={Colors.navyDark} />
-            </View>
-            <Text style={styles.imageUploadTitle}>Tap to upload image</Text>
-            <Text style={styles.imageUploadSub}>JPG, PNG up to 10MB</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.addImagePlaceholder}
+              activeOpacity={0.7}
+              onPress={handleEventPickFromDevice}
+              disabled={pickingEventPhoto}
+              testID="event-image-upload-area"
+            >
+              {pickingEventPhoto ? (
+                <ActivityIndicator size="small" color={Colors.textTertiary} />
+              ) : (
+                <Upload size={28} color={Colors.textTertiary} />
+              )}
+              <Text style={styles.addImageText}>{pickingEventPhoto ? 'Uploading…' : 'Upload from device'}</Text>
+              <Text style={styles.addImageSubtext}>Add a new photo to your library</Text>
+            </TouchableOpacity>
+
+            {(myUploads.length > 0 || myUploadsLoading) && (
+              <FlatList
+                horizontal
+                data={myUploads}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imageRow}
+                onEndReached={handleLoadMoreUploads}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={myUploadsLoading ? (
+                  <View style={styles.myUploadsLoadingWrap}>
+                    <ActivityIndicator size="small" color={Colors.textTertiary} />
+                  </View>
+                ) : null}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.imageThumbnail, eventImage === item.image_url && styles.imageThumbnailSelected]}
+                    onPress={() => setEventImage(eventImage === item.image_url ? '' : item.image_url)}
+                    activeOpacity={0.8}
+                  >
+                    {brokenImageUrls.has(item.image_url) ? (
+                      <View style={[styles.thumbImage, styles.thumbFallback]}>
+                        <ImagePlus size={18} color={Colors.textTertiary} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.thumbImage}
+                        contentFit="cover"
+                        onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                      />
+                    )}
+                    {eventImage === item.image_url && (
+                      <View style={styles.imageCheck}>
+                        <Check size={14} color={Colors.navyDark} />
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.uploadDeleteBtn}
+                      onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                      hitSlop={8}
+                    >
+                      <X size={12} color="#fff" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </>
         )}
       </View>
 
@@ -1467,42 +1533,6 @@ export default function CreatePostScreen() {
           </View>
         </View>
         {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
-
-        <View style={[styles.dateRow, { marginTop: 10 }]}>
-          <View style={styles.dateField}>
-            <TouchableOpacity
-              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
-              onPress={() => setEventEndDateOpen(true)}
-              testID="event-end-date-btn"
-              activeOpacity={0.7}
-            >
-              <Calendar size={15} color={Colors.textSecondary} />
-              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
-                {eventEndDate ? format(eventEndDate, 'd MMM yyyy') : 'End Date'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.dateField}>
-            <TouchableOpacity
-              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
-              onPress={() => setEventEndTimeOpen(true)}
-              testID="event-end-time-btn"
-              activeOpacity={0.7}
-            >
-              <Calendar size={15} color={Colors.textSecondary} />
-              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
-                {eventEndDate ? format(eventEndDate, 'h:mm a') : 'End Time'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        {eventEndDate && (
-          <TouchableOpacity onPress={() => { setEventEndDate(null); setErrors(p => ({ ...p, eventEndDate: undefined })); }} style={styles.clearDateBtn}>
-            <X size={14} color={Colors.textSecondary} />
-            <Text style={styles.clearDateText}>Clear end date</Text>
-          </TouchableOpacity>
-        )}
-        {errors.eventEndDate && <Text style={styles.errorText}>{errors.eventEndDate}</Text>}
       </View>
 
       <View style={styles.formSection}>
@@ -1639,40 +1669,6 @@ export default function CreatePostScreen() {
         }}
       />
 
-      <DatePickerModal
-        locale="en"
-        mode="single"
-        visible={eventEndDateOpen}
-        onDismiss={() => setEventEndDateOpen(false)}
-        date={eventEndDate ?? undefined}
-        validRange={eventDate ? { startDate: eventDate } : undefined}
-        onChange={({ date }) => {
-          if (date) {
-            const merged = eventEndDate
-              ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), eventEndDate.getHours(), eventEndDate.getMinutes())
-              : date;
-            setEventEndDate(merged);
-            setErrors(p => ({ ...p, eventEndDate: undefined }));
-          }
-          setEventEndDateOpen(false);
-        }}
-        onConfirm={() => setEventEndDateOpen(false)}
-      />
-
-      <TimePickerModal
-        locale="en"
-        visible={eventEndTimeOpen}
-        onDismiss={() => setEventEndTimeOpen(false)}
-        hours={eventEndDate ? eventEndDate.getHours() : new Date().getHours()}
-        minutes={eventEndDate ? eventEndDate.getMinutes() : new Date().getMinutes()}
-        onConfirm={({ hours, minutes }) => {
-          const base = eventEndDate ?? eventDate ?? new Date();
-          const merged = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
-          setEventEndDate(merged);
-          setErrors(p => ({ ...p, eventEndDate: undefined }));
-          setEventEndTimeOpen(false);
-        }}
-      />
     </>
   );
 
@@ -2462,35 +2458,6 @@ const styles = StyleSheet.create({
   discountInputWrap: {
     flex: 1,
   },
-  imageUploadArea: {
-    borderWidth: 2,
-    borderColor: Colors.borderLight,
-    borderStyle: 'dashed',
-    borderRadius: 16,
-    paddingVertical: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.background,
-  },
-  imageUploadIconWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: Colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  imageUploadTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  imageUploadSub: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    marginTop: 3,
-  },
   imagePreviewWrap: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -2534,18 +2501,6 @@ const styles = StyleSheet.create({
   dateBtnError: { borderColor: Colors.error },
   dateBtnText: { fontSize: 14, color: Colors.text, flex: 1 },
   dateBtnPlaceholder: { color: Colors.textTertiary },
-  clearDateBtn: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
-    alignSelf: 'flex-start' as const,
-    paddingVertical: 4,
-    marginTop: 6,
-  },
-  clearDateText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
   activeToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

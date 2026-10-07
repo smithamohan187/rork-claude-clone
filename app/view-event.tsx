@@ -52,12 +52,9 @@ function formatEventDate(iso: string): string {
   }
 }
 
-function formatEventTime(start: string, end: string | null): string {
+function formatEventTime(start: string): string {
   try {
-    const s = new Date(start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    if (!end) return s;
-    const e = new Date(end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    return `${s} – ${e}`;
+    return new Date(start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '—';
   }
@@ -136,7 +133,7 @@ export default function ViewEventScreen() {
   const buildShareText = useCallback(() => {
     if (!event) return '';
     const date = formatEventDate(event.starts_at);
-    const time = formatEventTime(event.starts_at, event.ends_at);
+    const time = formatEventTime(event.starts_at);
     const loc = event.location ? ` at ${event.location}` : '';
     const biz = business ? ` by ${business.name}` : '';
     return `${event.title}${biz} on ${date} at ${time}${loc}. Check it out on TouchPoints!`;
@@ -348,7 +345,7 @@ export default function ViewEventScreen() {
             <View style={styles.metaText}>
               <Text style={styles.metaLabel}>Date & time</Text>
               <Text style={styles.metaValue}>
-                {formatEventDate(event.starts_at)} · {formatEventTime(event.starts_at, event.ends_at)}
+                {formatEventDate(event.starts_at)} · {formatEventTime(event.starts_at)}
               </Text>
             </View>
           </View>

@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { ArrowLeft, Check, CreditCard } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { fetchPlans, type SubscriptionPlan } from '@/api/services/billingService';
+import { fetchPlans, fetchMySubscription, type SubscriptionPlan, type BusinessSubscription } from '@/api/services/billingService';
 import { useSubscriptionCheckout } from '@/hooks/useSubscriptionCheckout';
 
 // Entry point for the dashboard checklist's "Start Stripe Trial" step. Deliberately a small,
@@ -24,13 +24,19 @@ export default function BusinessStartTrialScreen() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<BusinessSubscription | null>(null);
 
   useEffect(() => {
     fetchPlans()
       .then(setPlans)
       .catch(() => {})
       .finally(() => setPlansLoading(false));
+    fetchMySubscription()
+      .then(setSubscription)
+      .catch(() => {});
   }, []);
+
+  const isActive = subscription?.status === 'active' || subscription?.status === 'trial';
 
   const handleSelect = useCallback(async (planId: string) => {
     setSelectingId(planId);
@@ -59,6 +65,28 @@ export default function BusinessStartTrialScreen() {
       </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {isActive && subscription ? (
+          <View style={styles.currentCard}>
+            <View style={styles.currentCardIcon}>
+              <CreditCard size={22} color={Colors.navyDark} />
+            </View>
+            <View style={styles.currentCardInfo}>
+              <Text style={styles.currentCardLabel}>Current plan</Text>
+              <Text style={styles.currentCardName}>{subscription.plan_name}</Text>
+              {subscription.current_period_end && (
+                <Text style={styles.currentCardMeta}>
+                  Renews {new Date(subscription.current_period_end).toLocaleDateString()}
+                </Text>
+              )}
+            </View>
+            <View style={[styles.statusBadge, styles.statusBadgeActive]}>
+              <Text style={[styles.statusBadgeText, styles.statusBadgeTextActive]}>
+                {subscription.status}
+              </Text>
+            </View>
+          </View>
+        ) : (
+        <>
         <Text style={styles.introText}>
           Pick a plan to start your 30-day trial. You won't be charged until the trial ends, and posting offers/events and inviting customers unlock right away.
         </Text>
@@ -98,6 +126,8 @@ export default function BusinessStartTrialScreen() {
             <Text style={styles.errorText}>{checkoutError}</Text>
           </View>
         )}
+        </>
+        )}
       </ScrollView>
     </View>
   );
@@ -118,6 +148,61 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '700' as const, color: Colors.text, flex: 1, textAlign: 'center' },
   scrollContent: { padding: 20, paddingBottom: 48 },
   introText: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19, marginBottom: 20 },
+  currentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 16,
+    padding: 16,
+  },
+  currentCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.navyDark + '10',
+  },
+  currentCardInfo: {
+    flex: 1,
+  },
+  currentCardLabel: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: Colors.textTertiary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  currentCardName: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginTop: 2,
+  },
+  currentCardMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  statusBadgeActive: {
+    backgroundColor: Colors.success + '15',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    textTransform: 'capitalize' as const,
+  },
+  statusBadgeTextActive: {
+    color: Colors.success,
+  },
   planCard: {
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 16,
     padding: 16, marginBottom: 14,

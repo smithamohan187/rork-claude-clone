@@ -2,6 +2,7 @@ const postsModel = require('./posts.model');
 const likesModel = require('../likes/likes.model');
 const commentsModel = require('../comments/comments.model');
 const businessService = require('../businesses/business.service');
+const subscriptionModel = require('../subscriptions/subscription.model');
 
 async function verifyPostOwnership(userId, postId) {
   const businessId = await postsModel.getBusinessIdByUserId(userId);
@@ -92,6 +93,8 @@ async function getPostsForBusiness(businessId, filter, profileId) {
   // Non-owners always get active-only, regardless of filter — including the default
   // 'all' filter, which would otherwise silently include disabled posts too.
   if (!isOwner) {
+    const sub = await subscriptionModel.getSubscription(profileId, businessId);
+    if (!sub?.is_active) return [];
     return postsModel.getPostsByBusinessId(businessId, true, profileId);
   }
   const isActive =

@@ -2,6 +2,7 @@
 const eventsModel = require('./events.model');
 const notificationsService = require('../notifications/notifications.service');
 const businessService = require('../businesses/business.service');
+const subscriptionModel = require('../subscriptions/subscription.model');
 const { getClient } = require('../../config/database');
 
 async function verifyEventOwnership(userId, eventId) {
@@ -77,6 +78,11 @@ async function cancelEvent(userId, eventId) {
 }
 
 async function getEventsForBusiness(businessId, filter, profileId) {
+  const isOwner = await eventsModel.isBusinessOwnedByProfile(businessId, profileId);
+  if (!isOwner) {
+    const sub = await subscriptionModel.getSubscription(profileId, businessId);
+    if (!sub?.is_active) return [];
+  }
   return eventsModel.getEventsByBusiness(businessId, filter, profileId);
 }
 

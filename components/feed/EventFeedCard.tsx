@@ -12,7 +12,7 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
-import { EventHotBadge, EventPriceBadge, EventTagChips, formatEventDateRange } from '@/components/events/EventExtras';
+import { EventHotBadge, EventPriceBadge, EventTagChips, formatEventDate } from '@/components/events/EventExtras';
 
 interface Props {
   event: EventFeedItem;
@@ -173,7 +173,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
               <MapPin size={12} color="#1A5C35" />
               <Text style={styles.venue} numberOfLines={1}>{event.venue}</Text>
             </View>
-            <Text style={styles.dateRange}>{formatEventDateRange(event.startDate, event.endDate)}</Text>
+            <Text style={styles.dateRange}>{formatEventDate(event.startDate)}</Text>
             <View style={styles.badgeRow}>
               {event.isHot && <EventHotBadge />}
               <EventPriceBadge isFree={event.isFree} price={event.price} />

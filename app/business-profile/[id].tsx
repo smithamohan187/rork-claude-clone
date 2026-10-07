@@ -834,20 +834,55 @@ export default function BusinessProfileScreen() {
         </View>
 
         <View style={styles.tabContent}>
-          {activeTab === 'offers' && <OffersTab offers={businessOffers} isLoading={offersLoading} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwner={isOwner} onRequestToggle={handleRequestToggle} />}
+          {activeTab === 'offers' && (
+            isOwner || isSubscribed ? (
+              <OffersTab offers={businessOffers} isLoading={offersLoading} savedOffers={savedOffers} onSave={handleSaveOffer} onShare={handleShareOffer} onOpen={handleOpenOffer} filter={offerFilter} onFilterChange={setOfferFilter} isOwner={isOwner} onRequestToggle={handleRequestToggle} />
+            ) : (
+              <EmptyState
+                icon={<Lock size={40} color={ACCENT} strokeWidth={1.5} />}
+                title="Offers locked"
+                subtitle="Subscribe to this business to see its offers."
+                actionLabel="Subscribe"
+                onAction={handleSubscribe}
+                testID="offers-tab-locked"
+              />
+            )
+          )}
           {activeTab === 'events' && (
-            <EventsTab
-              businessId={id ?? ''}
-              isOwner={isOwner}
-              onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
-            />
+            isOwner || isSubscribed ? (
+              <EventsTab
+                businessId={id ?? ''}
+                isOwner={isOwner}
+                onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
+              />
+            ) : (
+              <EmptyState
+                icon={<Lock size={40} color={ACCENT} strokeWidth={1.5} />}
+                title="Events locked"
+                subtitle="Subscribe to this business to see its events."
+                actionLabel="Subscribe"
+                onAction={handleSubscribe}
+                testID="events-tab-locked"
+              />
+            )
           )}
           {activeTab === 'posts' && (
-            <PostsTab
-              business={business}
-              isOwner={isOwner}
-              onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
-            />
+            isOwner || isSubscribed ? (
+              <PostsTab
+                business={business}
+                isOwner={isOwner}
+                onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
+              />
+            ) : (
+              <EmptyState
+                icon={<Lock size={40} color={ACCENT} strokeWidth={1.5} />}
+                title="Posts locked"
+                subtitle="Subscribe to this business to see its posts."
+                actionLabel="Subscribe"
+                onAction={handleSubscribe}
+                testID="posts-tab-locked"
+              />
+            )
           )}
           {activeTab === 'about' && (
             <AboutTab
@@ -1532,9 +1567,7 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                 </View>
                 <View style={styles.eventMeta}>
                   <Clock size={11} color="#9CA3AF" />
-                  <Text style={styles.eventMetaText}>
-                    {formatTime(event.starts_at)}{event.ends_at ? ` – ${formatTime(event.ends_at)}` : ''}
-                  </Text>
+                  <Text style={styles.eventMetaText}>{formatTime(event.starts_at)}</Text>
                 </View>
                 <View style={styles.eventMeta}>
                   <MapPin size={11} color="#9CA3AF" />

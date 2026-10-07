@@ -3,6 +3,7 @@ const notificationsService = require('../notifications/notifications.service');
 const likesModel = require('../likes/likes.model');
 const commentsModel = require('../comments/comments.model');
 const businessService = require('../businesses/business.service');
+const subscriptionModel = require('../subscriptions/subscription.model');
 const { getClient } = require('../../config/database');
 
 async function verifyOfferOwnership(userId, offerId) {
@@ -92,6 +93,11 @@ async function getActiveOffersForBusiness(businessId) {
 }
 
 async function getBusinessOffers(businessId, filter, profileId) {
+  const isOwner = await offersModel.isBusinessOwnedByProfile(businessId, profileId);
+  if (!isOwner) {
+    const sub = await subscriptionModel.getSubscription(profileId, businessId);
+    if (!sub?.is_active) return [];
+  }
   return offersModel.getOffersByBusinessId(businessId, filter, profileId);
 }
 

@@ -71,6 +71,11 @@ export default function BusinessCompleteProfileScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.typeHelperText}>
+              {businessType === 'goodwill'
+                ? 'Post offers and events and build loyalty through genuine connection — no points or rewards system.'
+                : 'Reward customers with points, tiers, and a redeemable rewards catalog to drive repeat visits.'}
+            </Text>
 
             <Text style={styles.sectionLabel}>PHOTOS</Text>
             <View style={styles.uploadSection}>
@@ -258,6 +263,7 @@ const styles = StyleSheet.create({
   typeOptionSelected: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   typeOptionText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
   typeOptionTextSelected: { color: Colors.primaryDark },
+  typeHelperText: { fontSize: 12, color: Colors.textTertiary, marginBottom: 8, lineHeight: 16 },
   inputGroup: { marginBottom: 14 },
   inputLabel: { fontSize: 13, fontWeight: '600' as const, color: Colors.text, marginBottom: 6 },
   input: {

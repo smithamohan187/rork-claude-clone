@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
+import { getEmbedVideoUrl } from '@/components/feed/PostMedia';
 import {
   X,
   ChevronUp,
@@ -62,21 +63,6 @@ interface Props {
 const SCREEN = Dimensions.get('window');
 const PRIMARY = '#1A5C35';
 
-// Extracts a YouTube/Vimeo embed URL for inline WebView playback; null for any
-// other platform/link shape, signalling the caller to fall back to a
-// tap-to-open-browser card instead.
-function getEmbedVideoUrl(url: string): string | null {
-  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/i);
-  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
-  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/i);
-  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-  return null;
-}
-
-// Post video fields aren't yet threaded through PostFeedItem (see the handback
-// report) — read them defensively off whatever post-like object is passed in
-// so this renders correctly the moment that plumbing lands, and degrades to
-// the existing image/gradient fallback today.
 function getPostVideo(post: unknown): {
   url: string | null;
   type: 'upload' | 'link' | null;

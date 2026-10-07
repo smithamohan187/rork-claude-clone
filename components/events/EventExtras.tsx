@@ -47,16 +47,13 @@ export function EventTagChips({ tags }: { tags: string[] | null | undefined }) {
   );
 }
 
-export function formatEventDateRange(startsAt: string | null, endsAt: string | null): string {
+export function formatEventDate(startsAt: string | null): string {
   if (!startsAt) return '—';
   try {
     const start = new Date(startsAt);
     const dateLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const startTime = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    if (!endsAt) return `${dateLabel}, ${startTime}`;
-    const end = new Date(endsAt);
-    const endTime = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    return `${dateLabel}, ${startTime} – ${endTime}`;
+    return `${dateLabel}, ${startTime}`;
   } catch {
     return '—';
   }

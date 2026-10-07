@@ -82,9 +82,6 @@ function validateDraft(d: DraftEvent): Errors {
   const e: Errors = {};
   if (!d.title.trim()) e.title = 'Title is required';
   if (!d.starts_at) e.starts_at = 'Event date is required';
-  if (d.starts_at && d.ends_at && d.ends_at <= d.starts_at) {
-    e.ends_at = 'End date must be after start date';
-  }
   return e;
 }
 
@@ -101,7 +98,7 @@ export default function EditEventScreen() {
   const [errors, setErrors]         = useState<Errors>({});
   const [discardVisible, setDiscardVisible] = useState(false);
   const [saving, setSaving]         = useState(false);
-  const [pickerOpen, setPickerOpen] = useState<'starts' | 'ends' | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (original && !draft) setDraft(eventToDraft(original));
@@ -251,7 +248,7 @@ export default function EditEventScreen() {
 
           <TouchableOpacity
             style={[styles.dateBtn, !!errors.starts_at && styles.dateBtnError]}
-            onPress={() => setPickerOpen('starts')}
+            onPress={() => setPickerOpen(true)}
             activeOpacity={0.7}
             testID="event-start-date-btn"
           >
@@ -264,54 +261,18 @@ export default function EditEventScreen() {
             </View>
           </TouchableOpacity>
           <HelperText type="error" visible={!!errors.starts_at}>{errors.starts_at}</HelperText>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, !!errors.ends_at && styles.dateBtnError]}
-            onPress={() => setPickerOpen('ends')}
-            activeOpacity={0.7}
-            testID="event-end-date-btn"
-          >
-            <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
-            <View>
-              <Text style={styles.dateBtnLabel}>End Date & Time (optional)</Text>
-              <Text style={[styles.dateBtnValue, !draft.ends_at && styles.dateBtnPlaceholder]}>
-                {draft.ends_at ? format(new Date(draft.ends_at), 'd MMM yyyy, HH:mm') : 'Select end date & time'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-          {draft.ends_at && (
-            <TouchableOpacity onPress={() => { set('ends_at', null); setErrors(e => ({ ...e, ends_at: undefined })); }} style={styles.clearBtn}>
-              <Text style={styles.clearBtnText}>Clear end date</Text>
-            </TouchableOpacity>
-          )}
-          <HelperText type="error" visible={!!errors.ends_at}>{errors.ends_at}</HelperText>
         </ScrollView>
 
         <DatePickerModal
           locale="en"
           mode="single"
-          visible={pickerOpen === 'starts'}
-          onDismiss={() => setPickerOpen(null)}
+          visible={pickerOpen}
+          onDismiss={() => setPickerOpen(false)}
           date={draft.starts_at ? new Date(draft.starts_at) : undefined}
           onConfirm={({ date }) => {
             if (date) set('starts_at', date.toISOString());
-            setPickerOpen(null);
+            setPickerOpen(false);
           }}
-          saveLabel="Confirm"
-        />
-
-        <DatePickerModal
-          locale="en"
-          mode="single"
-          visible={pickerOpen === 'ends'}
-          onDismiss={() => setPickerOpen(null)}
-          date={draft.ends_at ? new Date(draft.ends_at) : undefined}
-          onConfirm={({ date }) => {
-            if (date) set('ends_at', date.toISOString());
-            setErrors(e => ({ ...e, ends_at: undefined }));
-            setPickerOpen(null);
-          }}
-          validRange={draft.starts_at ? { startDate: new Date(draft.starts_at) } : undefined}
           saveLabel="Confirm"
         />
       </KeyboardAvoidingView>
@@ -452,6 +413,4 @@ const styles = StyleSheet.create({
   dateBtnLabel: { fontSize: 12, color: TEXT_MUTED, marginBottom: 2 },
   dateBtnValue: { fontSize: 15, color: TEXT_DARK },
   dateBtnPlaceholder: { color: '#C4C4CC' },
-  clearBtn: { alignSelf: 'flex-start', paddingVertical: 2, paddingHorizontal: 4 },
-  clearBtnText: { fontSize: 12, color: TEXT_MUTED },
 });

@@ -24,6 +24,15 @@ async function getBusinessIdByUserId(userId) {
   return rows[0]?.business_id ?? null;
 }
 
+async function isBusinessOwnedByProfile(businessId, profileId) {
+  if (!profileId) return false;
+  const { rows } = await query(
+    'SELECT 1 FROM businesses WHERE id = $1 AND profile_id = $2',
+    [businessId, profileId]
+  );
+  return rows.length > 0;
+}
+
 async function insertOffer(client, data) {
   const {
     business_id, title, description, image_url,
@@ -210,6 +219,7 @@ async function updateOfferImageUrl(offerId, imageUrl) {
 module.exports = {
   getBusinessIdByUserId,
   getBusinessNameById,
+  isBusinessOwnedByProfile,
   insertOffer,
   updateOffer,
   updateOfferImageUrl,
