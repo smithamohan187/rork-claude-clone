@@ -29,7 +29,6 @@ import {
   AlignLeft,
   ChevronDown,
   Video,
-  FolderOpen,
   Globe,
   Upload,
   Play,
@@ -110,9 +109,9 @@ const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[]
 
 type MediaSource = 'stock' | 'uploads';
 
-const MEDIA_SOURCES: { key: MediaSource; label: string; icon: 'globe' | 'folder' }[] = [
+const MEDIA_SOURCES: { key: MediaSource; label: string; icon: 'globe' | 'upload' }[] = [
+  { key: 'uploads', label: 'Upload Photo', icon: 'upload' },
   { key: 'stock', label: 'Stock Photos', icon: 'globe' },
-  { key: 'uploads', label: 'My Uploads', icon: 'folder' },
 ];
 
 const IMAGE_LIBRARY: Record<MediaSource, string[]> = {
@@ -154,7 +153,7 @@ export default function CreatePostScreen() {
   const [selectedType, setSelectedType] = useState<PostType>('general');
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [showTypePicker, setShowTypePicker] = useState<boolean>(false);
-  const [activeMediaSource, setActiveMediaSource] = useState<MediaSource>('stock');
+  const [activeMediaSource, setActiveMediaSource] = useState<MediaSource>('uploads');
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [videoLink, setVideoLink] = useState<string>('');
   const [videoLinkError, setVideoLinkError] = useState<string>('');
@@ -752,7 +751,7 @@ export default function CreatePostScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sourceRow}>
             {MEDIA_SOURCES.map((source) => {
               const isActive = activeMediaSource === source.key;
-              const SourceIcon = source.icon === 'globe' ? Globe : FolderOpen;
+              const SourceIcon = source.icon === 'globe' ? Globe : Upload;
               return (
                 <TouchableOpacity
                   key={source.key}
@@ -819,55 +818,58 @@ export default function CreatePostScreen() {
               </TouchableOpacity>
 
               {(myUploads.length > 0 || myUploadsLoading) && (
-                <FlatList
-                  horizontal
-                  data={myUploads}
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.imageRow}
-                  onEndReached={handleLoadMoreUploads}
-                  onEndReachedThreshold={0.5}
-                  ListFooterComponent={myUploadsLoading ? (
-                    <View style={styles.myUploadsLoadingWrap}>
-                      <ActivityIndicator size="small" color={Colors.textTertiary} />
-                    </View>
-                  ) : null}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[styles.imageThumbnail, selectedImage === item.image_url && styles.imageThumbnailSelected]}
-                      onPress={() => {
-                        setSelectedImage(selectedImage === item.image_url ? '' : item.image_url);
-                        setPendingVideo(null);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      {brokenImageUrls.has(item.image_url) ? (
-                        <View style={[styles.thumbImage, styles.thumbFallback]}>
-                          <ImagePlus size={18} color={Colors.textTertiary} />
-                        </View>
-                      ) : (
-                        <Image
-                          source={{ uri: item.image_url }}
-                          style={styles.thumbImage}
-                          contentFit="cover"
-                          onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
-                        />
-                      )}
-                      {selectedImage === item.image_url && (
-                        <View style={styles.imageCheck}>
-                          <Check size={14} color={Colors.navyDark} />
-                        </View>
-                      )}
+                <>
+                  {myUploads.length > 0 && <Text style={styles.myUploadsLabel}>My Uploads</Text>}
+                  <FlatList
+                    horizontal
+                    data={myUploads}
+                    keyExtractor={(item) => item.id}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.imageRow}
+                    onEndReached={handleLoadMoreUploads}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={myUploadsLoading ? (
+                      <View style={styles.myUploadsLoadingWrap}>
+                        <ActivityIndicator size="small" color={Colors.textTertiary} />
+                      </View>
+                    ) : null}
+                    renderItem={({ item }) => (
                       <TouchableOpacity
-                        style={styles.uploadDeleteBtn}
-                        onPress={() => handleDeleteUpload(item.id, item.image_url)}
-                        hitSlop={8}
+                        style={[styles.imageThumbnail, selectedImage === item.image_url && styles.imageThumbnailSelected]}
+                        onPress={() => {
+                          setSelectedImage(selectedImage === item.image_url ? '' : item.image_url);
+                          setPendingVideo(null);
+                        }}
+                        activeOpacity={0.8}
                       >
-                        <X size={12} color="#fff" />
+                        {brokenImageUrls.has(item.image_url) ? (
+                          <View style={[styles.thumbImage, styles.thumbFallback]}>
+                            <ImagePlus size={18} color={Colors.textTertiary} />
+                          </View>
+                        ) : (
+                          <Image
+                            source={{ uri: item.image_url }}
+                            style={styles.thumbImage}
+                            contentFit="cover"
+                            onError={() => setBrokenImageUrls(prev => new Set(prev).add(item.image_url))}
+                          />
+                        )}
+                        {selectedImage === item.image_url && (
+                          <View style={styles.imageCheck}>
+                            <Check size={14} color={Colors.navyDark} />
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={styles.uploadDeleteBtn}
+                          onPress={() => handleDeleteUpload(item.id, item.image_url)}
+                          hitSlop={8}
+                        >
+                          <X size={12} color="#fff" />
+                        </TouchableOpacity>
                       </TouchableOpacity>
-                    </TouchableOpacity>
-                  )}
-                />
+                    )}
+                  />
+                </>
               )}
             </>
           )}
@@ -1978,6 +1980,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surface,
+  },
+  myUploadsLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textTertiary,
+    marginBottom: 6,
   },
   myUploadsLoadingWrap: {
     width: 44,

@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, type ImageStyle } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
@@ -53,7 +53,9 @@ export function PostMedia({ videoUrl, videoType, imageUrl, style, onImagePress }
   }
 
   if (imageUrl) {
-    const image = <Image source={{ uri: imageUrl }} style={style} contentFit="cover" />;
+    const image = (
+      <Image source={{ uri: imageUrl }} style={style as StyleProp<ImageStyle>} contentFit="cover" />
+    );
     if (onImagePress) {
       return (
         <TouchableOpacity onPress={onImagePress} activeOpacity={0.85}>

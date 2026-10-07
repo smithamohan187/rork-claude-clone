@@ -41,8 +41,8 @@ async function editPost(userId, postId, payload) {
   const updated = await postsModel.updatePost(
     postId,
     finalPayload,
-    hasImageUrl || (hasVideoUrl && payload.video_url),
-    hasVideoUrl || (hasImageUrl && payload.image_url),
+    Boolean(hasImageUrl || (hasVideoUrl && payload.video_url)),
+    Boolean(hasVideoUrl || (hasImageUrl && payload.image_url)),
   );
   if (!updated) throw new Error('Post not found');
   return updated;
