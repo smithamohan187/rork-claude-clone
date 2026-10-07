@@ -48,6 +48,11 @@ export interface EventFeedItem {
   image_url: string | null;
   venue: string;
   startDate: string | null;
+  endDate: string | null;
+  tags: string[];
+  isFree: boolean;
+  price: string | null;
+  isHot: boolean;
   createdAt: string;
   interested: boolean;
   like_count: number;
@@ -120,6 +125,11 @@ function mapToEvent(item: FeedApiItem): EventFeedItem {
     image_url: item.image_url,
     venue: item.business_name,
     startDate: item.relevant_date,
+    endDate: item.end_date,
+    tags: item.tags ?? [],
+    isFree: item.is_free ?? false,
+    price: item.price,
+    isHot: item.is_hot ?? false,
     createdAt: item.created_at,
     interested: item.is_saved ?? false,
     like_count: item.like_count ?? 0,

@@ -77,6 +77,7 @@ import type { BusinessProfile } from '@/api/services/businessProfileService';
 import { fetchBusinessCategories } from '@/api/services/categoriesService';
 import { updateMyBusiness, type BusinessHour } from '@/api/services/businessService';
 import CommentSheet from '@/components/feed/CommentSheet';
+import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useSavedBusiness } from '@/hooks/useSavedBusiness';
@@ -1531,12 +1532,19 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                 </View>
                 <View style={styles.eventMeta}>
                   <Clock size={11} color="#9CA3AF" />
-                  <Text style={styles.eventMetaText}>{formatTime(event.starts_at)}</Text>
+                  <Text style={styles.eventMetaText}>
+                    {formatTime(event.starts_at)}{event.ends_at ? ` – ${formatTime(event.ends_at)}` : ''}
+                  </Text>
                 </View>
                 <View style={styles.eventMeta}>
                   <MapPin size={11} color="#9CA3AF" />
                   <Text style={styles.eventMetaText}>{event.location ?? '—'}</Text>
                 </View>
+                <View style={styles.eventExtrasRow}>
+                  {event.is_hot && <EventHotBadge />}
+                  <EventPriceBadge isFree={event.is_free} price={event.price} />
+                </View>
+                <EventTagChips tags={event.tags} />
                 <Text style={styles.eventDesc} numberOfLines={2}>{event.description ?? ''}</Text>
                 <Text
                   style={styles.eventViewDetails}
@@ -3412,6 +3420,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     fontWeight: '400' as const,
+  },
+  eventExtrasRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
   },
   eventDesc: {
     fontSize: 12,

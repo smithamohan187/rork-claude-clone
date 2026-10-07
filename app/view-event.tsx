@@ -27,6 +27,7 @@ import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/busin
 import LikeButton from '@/components/feed/LikeButton';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { toggleSaveEvent } from '@/api/services/savedEventService';
+import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
 
 const PURPLE = '#1A5C35';
 const BG = '#F8F7FF';
@@ -333,6 +334,12 @@ export default function ViewEventScreen() {
         <View style={styles.content}>
           <Text style={styles.eventTitle}>{event.title}</Text>
 
+          <View style={styles.extrasRow}>
+            {event.is_hot && <EventHotBadge />}
+            <EventPriceBadge isFree={event.is_free} price={event.price} />
+          </View>
+          <EventTagChips tags={event.tags} />
+
           {/* META */}
           <View style={styles.metaRow}>
             <View style={[styles.iconBox, { backgroundColor: '#E8F5EE' }]}>
@@ -629,6 +636,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 12,
     lineHeight: 26,
+  },
+  extrasRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
   },
 
   metaRow: {

@@ -406,7 +406,13 @@ export default function ManageContentScreen() {
       const expiresAt = (item as unknown as Offer).expires_at;
       return expiresAt ? `Valid until ${formatLongDate(expiresAt)}` : 'No expiry';
     }
-    if (item.type === 'event') return `${formatDateTime((item as unknown as Event).starts_at)}`;
+    if (item.type === 'event') {
+      const event = item as unknown as Event;
+      const priceLabel = event.is_free ? 'Free' : event.price ? event.price : null;
+      const hotLabel = event.is_hot ? '🔥 Hot' : null;
+      const extras = [hotLabel, priceLabel].filter(Boolean).join(' · ');
+      return `${formatDateTime(event.starts_at)}${extras ? ` · ${extras}` : ''}`;
+    }
     return `Posted ${relativeTime(item.created_at)}`;
   };
 

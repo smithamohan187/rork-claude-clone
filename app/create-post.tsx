@@ -153,7 +153,7 @@ export default function CreatePostScreen() {
   const [selectedType, setSelectedType] = useState<PostType>('general');
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [showTypePicker, setShowTypePicker] = useState<boolean>(false);
-  const [activeMediaSource, setActiveMediaSource] = useState<MediaSource>('uploads');
+  const [activeMediaSource, setActiveMediaSource] = useState<MediaSource>('stock');
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [videoLink, setVideoLink] = useState<string>('');
   const [videoLinkError, setVideoLinkError] = useState<string>('');
@@ -768,6 +768,19 @@ export default function CreatePostScreen() {
 
           {activeMediaSource === 'stock' && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageRow}>
+              <TouchableOpacity
+                style={styles.inlineUploadTile}
+                activeOpacity={0.7}
+                onPress={handlePickFromDevice}
+                disabled={pickingPhoto}
+              >
+                {pickingPhoto ? (
+                  <ActivityIndicator size="small" color={Colors.textTertiary} />
+                ) : (
+                  <Upload size={20} color={Colors.textTertiary} />
+                )}
+                <Text style={styles.inlineUploadTileText}>Upload</Text>
+              </TouchableOpacity>
               {IMAGE_LIBRARY.stock.map((img) => (
                 <TouchableOpacity
                   key={img}
@@ -1957,6 +1970,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: 'transparent',
+  },
+  inlineUploadTile: {
+    width: 68,
+    height: 68,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.borderLight,
+    borderStyle: 'dashed' as const,
+    gap: 2,
+  },
+  inlineUploadTileText: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    fontWeight: '500' as const,
   },
   imageThumbnailSelected: {
     borderColor: Colors.accent,

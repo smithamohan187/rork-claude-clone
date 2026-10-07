@@ -12,6 +12,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
   const { rows } = await query(
     `SELECT item_type, item_id, business_id, business_name, business_logo,
             title, content, image_url, video_url, video_type, created_at, relevant_date, is_saved,
+            end_date, tags, is_free, price, is_hot,
             like_count, liked_by_me, is_owner, comment_count
      FROM (
        SELECT
@@ -28,6 +29,11 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          o.created_at,
          o.expires_at  AS relevant_date,
          (so.offer_id IS NOT NULL) AS is_saved,
+         NULL::timestamptz AS end_date,
+         NULL::text[]      AS tags,
+         NULL::boolean     AS is_free,
+         NULL::text        AS price,
+         NULL::boolean     AS is_hot,
          (SELECT COUNT(*)::int FROM likes WHERE content_type = 'offer' AND content_id = o.id) AS like_count,
          (SELECT EXISTS(SELECT 1 FROM likes WHERE content_type = 'offer' AND content_id = o.id AND profile_id = $1::uuid)) AS liked_by_me,
          ($1::uuid = (SELECT b2.profile_id FROM businesses b2 WHERE b2.id = o.business_id)) AS is_owner,
@@ -63,6 +69,11 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          e.created_at,
          e.starts_at   AS relevant_date,
          (se.event_id IS NOT NULL) AS is_saved,
+         e.ends_at     AS end_date,
+         e.tags,
+         e.is_free,
+         e.price,
+         e.is_hot,
          (SELECT COUNT(*)::int FROM likes WHERE content_type = 'event' AND content_id = e.id) AS like_count,
          (SELECT EXISTS(SELECT 1 FROM likes WHERE content_type = 'event' AND content_id = e.id AND profile_id = $1::uuid)) AS liked_by_me,
          ($1::uuid = (SELECT b2.profile_id FROM businesses b2 WHERE b2.id = e.business_id)) AS is_owner,
@@ -98,6 +109,11 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
          p.created_at,
          NULL          AS relevant_date,
          (sp.post_id IS NOT NULL) AS is_saved,
+         NULL::timestamptz AS end_date,
+         NULL::text[]      AS tags,
+         NULL::boolean     AS is_free,
+         NULL::text        AS price,
+         NULL::boolean     AS is_hot,
          (SELECT COUNT(*)::int FROM likes WHERE content_type = 'post' AND content_id = p.id) AS like_count,
          (SELECT EXISTS(SELECT 1 FROM likes WHERE content_type = 'post' AND content_id = p.id AND profile_id = $1::uuid)) AS liked_by_me,
          ($1::uuid = (SELECT b2.profile_id FROM businesses b2 WHERE b2.id = p.business_id)) AS is_owner,

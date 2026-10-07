@@ -12,6 +12,7 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
+import { EventHotBadge, EventPriceBadge, EventTagChips, formatEventDateRange } from '@/components/events/EventExtras';
 
 interface Props {
   event: EventFeedItem;
@@ -172,6 +173,12 @@ export const EventFeedCard = React.memo(function EventFeedCard({
               <MapPin size={12} color="#1A5C35" />
               <Text style={styles.venue} numberOfLines={1}>{event.venue}</Text>
             </View>
+            <Text style={styles.dateRange}>{formatEventDateRange(event.startDate, event.endDate)}</Text>
+            <View style={styles.badgeRow}>
+              {event.isHot && <EventHotBadge />}
+              <EventPriceBadge isFree={event.isFree} price={event.price} />
+            </View>
+            <EventTagChips tags={event.tags} />
 
             <Pressable
               style={[styles.interestedBtn, event.interested && styles.interestedBtnActive]}
@@ -363,6 +370,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     color: '#1A5C35',
+  },
+  dateRange: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
   },
   interestedBtn: {
     alignSelf: 'flex-start',

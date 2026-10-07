@@ -15,6 +15,11 @@ export interface FeedApiItem {
   created_at: string;
   relevant_date: string | null;
   is_saved?: boolean;
+  end_date: string | null;
+  tags: string[] | null;
+  is_free: boolean | null;
+  price: string | null;
+  is_hot: boolean | null;
   like_count?: number;
   liked_by_me?: boolean;
   is_owner?: boolean;
