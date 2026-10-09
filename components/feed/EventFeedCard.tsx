@@ -44,7 +44,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   currentUser,
 }: Props) {
   const dateParts = useMemo(() => {
-    const d = new Date(event.startDate);
+    const d = new Date(event.startDate ?? Date.now());
     return { day: d.getDate(), month: MONTHS[d.getMonth()] };
   }, [event.startDate]);
 
@@ -173,7 +173,11 @@ export const EventFeedCard = React.memo(function EventFeedCard({
               <MapPin size={12} color="#1A5C35" />
               <Text style={styles.venue} numberOfLines={1}>{event.venue}</Text>
             </View>
-            <Text style={styles.dateRange}>{formatEventDate(event.startDate)}</Text>
+            <Text style={styles.dateRange}>
+              {event.endDate
+                ? `${formatEventDate(event.startDate)} – ${formatEventDate(event.endDate)}`
+                : formatEventDate(event.startDate)}
+            </Text>
             <View style={styles.badgeRow}>
               {event.isHot && <EventHotBadge />}
               <EventPriceBadge isFree={event.isFree} price={event.price} />

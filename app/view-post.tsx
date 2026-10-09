@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import LikeButton from '@/components/feed/LikeButton';
 import CommentSheet from '@/components/feed/CommentSheet';
+import { PostMedia } from '@/components/feed/PostMedia';
 import {
   ActivityIndicator,
   Button,
@@ -152,16 +153,18 @@ export default function ViewPostScreen() {
       >
         {/* HERO — image if available, solid colour fallback */}
         <View style={styles.heroWrap}>
-          {post.image_url ? (
+          {post.image_url || post.video_url ? (
             <>
-              <Image
-                source={{ uri: post.image_url }}
+              <PostMedia
+                videoUrl={post.video_url}
+                videoType={post.video_type}
+                imageUrl={post.image_url}
                 style={styles.heroImage}
-                resizeMode="cover"
               />
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.55)']}
                 style={styles.heroGradient}
+                pointerEvents="none"
               />
             </>
           ) : (

@@ -29,6 +29,12 @@ export interface OfferFeedItem {
   description: string;
   image_url: string | null;
   expiryDate: string | null;
+  offerType: string | null;
+  originalPrice: number | null;
+  discountValue: number | null;
+  tags: string[];
+  isHot: boolean;
+  promoCode: string | null;
   createdAt: string;
   bookmarked: boolean;
   like_count: number;
@@ -104,6 +110,12 @@ function mapToOffer(item: FeedApiItem): OfferFeedItem {
     description: item.content ?? '',
     image_url: item.image_url,
     expiryDate: item.relevant_date,
+    offerType: item.offer_type,
+    originalPrice: item.original_price,
+    discountValue: item.discount_value,
+    tags: item.tags ?? [],
+    isHot: item.is_hot ?? false,
+    promoCode: item.promo_code,
     createdAt: item.created_at,
     bookmarked: item.is_saved ?? false,
     like_count: item.like_count ?? 0,
@@ -179,8 +191,8 @@ function mapToDiscovery(biz: RecommendedBusiness): SubscribedBusiness {
     name: biz.name,
     logoUrl: biz.logo_url ?? '',
     coverUrl: biz.cover_url ?? null,
-    category: biz.category,
-    categoryColor: CATEGORY_COLORS[biz.category] ?? '#1A5C35',
+    category: biz.category ?? '',
+    categoryColor: CATEGORY_COLORS[biz.category ?? ''] ?? '#1A5C35',
     subscriberCount: biz.subscriber_count,
     bio: biz.description ?? '',
   };

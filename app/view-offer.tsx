@@ -30,6 +30,7 @@ import {
 } from 'react-native-paper';
 import { fetchOfferById, type Offer as ServiceOffer } from '@/api/services/offersService';
 import { fetchBusinessProfile } from '@/api/services/businessProfileService';
+import { EventHotBadge, EventTagChips } from '@/components/events/EventExtras';
 
 const PURPLE = '#1A5C35';
 const LIGHT_PURPLE = '#E8F5EE';
@@ -44,8 +45,13 @@ type Offer = {
   title: string;
   description: string | null;
   image_url: string | null;
+  offer_type: string | null;
   discount_type: string | null;
   discount_value: number | null;
+  original_price: number | null;
+  tags: string[];
+  is_hot: boolean;
+  promo_code: string | null;
   starts_at: string | null;
   expires_at: string | null;
   is_active: boolean;
@@ -68,13 +74,23 @@ type Business = {
 const OFFER_TYPE_COLORS: Record<string, string> = {
   promotion: PURPLE,
   discount: TEAL,
-  'flash sale': RED,
-  bundle: AMBER,
+  flash_sale: RED,
+};
+
+const OFFER_TYPE_LABELS: Record<string, string> = {
+  promotion: 'Promotion',
+  discount: 'Discount',
+  flash_sale: 'Flash Sale',
 };
 
 function getTypeColor(type: string | null | undefined): string {
   if (!type) return PURPLE;
   return OFFER_TYPE_COLORS[type.toLowerCase()] ?? PURPLE;
+}
+
+function getTypeLabel(type: string | null | undefined): string {
+  if (!type) return '';
+  return OFFER_TYPE_LABELS[type.toLowerCase()] ?? type;
 }
 
 function formatDate(iso: string | null): string {
@@ -161,8 +177,13 @@ export default function ViewOfferScreen() {
         title:            offerData.title,
         description:      offerData.description,
         image_url:        offerData.image_url,
+        offer_type:       offerData.offer_type,
         discount_type:    offerData.discount_type,
         discount_value:   offerData.discount_value,
+        original_price:   offerData.original_price,
+        tags:             offerData.tags ?? [],
+        is_hot:           offerData.is_hot ?? false,
+        promo_code:       offerData.promo_code,
         starts_at:        offerData.starts_at,
         expires_at:       offerData.expires_at,
         is_active:        offerData.effective_status === 'active',
@@ -242,7 +263,8 @@ export default function ViewOfferScreen() {
     );
   }
 
-  const typeColor = getTypeColor(offer.discount_type);
+  const typeColor = getTypeColor(offer.offer_type);
+  const typeLabel = getTypeLabel(offer.offer_type);
 
   return (
     <View style={styles.container}>
@@ -298,9 +320,9 @@ export default function ViewOfferScreen() {
               )}
             </View>
 
-            {offer.discount_type ? (
+            {typeLabel ? (
               <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-                <Text style={styles.typeBadgeText}>{offer.discount_type}</Text>
+                <Text style={styles.typeBadgeText}>{typeLabel}</Text>
               </View>
             ) : null}
           </SafeAreaView>
@@ -347,7 +369,27 @@ export default function ViewOfferScreen() {
         ) : null}
 
         <View style={styles.contentWrap}>
-          <Text style={styles.title}>{offer.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, styles.titleFlex]}>{offer.title}</Text>
+            {offer.is_hot && <EventHotBadge />}
+          </View>
+
+          {offer.original_price ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.originalPriceText}>${offer.original_price.toFixed(2)}</Text>
+              {offer.discount_type === 'percent' && offer.discount_value ? (
+                <Text style={styles.discountedPriceText}>
+                  ${(offer.original_price * (1 - offer.discount_value / 100)).toFixed(2)}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          {offer.promo_code ? (
+            <View style={styles.promoCodeChip}>
+              <Text style={styles.promoCodeText}>Code: {offer.promo_code}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.validityRow}>
             <Calendar size={16} color={PURPLE} />
@@ -386,6 +428,8 @@ export default function ViewOfferScreen() {
             <Text style={styles.description}>{offer.description}</Text>
           ) : null}
 
+          <EventTagChips tags={offer.tags} />
+
           <View style={styles.engagementRow}>
             <TouchableOpacity
               style={styles.saveBtn}
@@ -420,7 +464,7 @@ export default function ViewOfferScreen() {
             </Text>
           ) : null}
 
-          {!isSubscribed ? (
+          {offer.is_owner ? null : !isSubscribed ? (
             <View style={styles.subBanner}>
               <Text style={styles.subBannerText}>
                 Subscribe to {business?.business_name ?? 'this business'} to earn rewards on this offer
@@ -544,6 +588,18 @@ const styles = StyleSheet.create({
   viewBiz: { color: PURPLE, fontWeight: '600', fontSize: 13 },
   contentWrap: { paddingHorizontal: 20, paddingTop: 20 },
   title: { fontSize: 22, fontWeight: '800', color: '#111827', lineHeight: 28 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  titleFlex: { flex: 1 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  originalPriceText: {
+    fontSize: 15, color: '#9CA3AF', textDecorationLine: 'line-through',
+  },
+  discountedPriceText: { fontSize: 17, fontWeight: '800', color: PURPLE },
+  promoCodeChip: {
+    alignSelf: 'flex-start', backgroundColor: LIGHT_TEAL, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5, marginTop: 8,
+  },
+  promoCodeText: { fontSize: 12, fontWeight: '700', color: TEAL },
   validityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   validityText: { color: '#374151', fontSize: 13, fontWeight: '500' },
   countdownRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },

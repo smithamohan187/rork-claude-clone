@@ -77,8 +77,11 @@ async function cancelEvent(userId, eventId) {
   return updated;
 }
 
-async function getEventsForBusiness(businessId, filter, profileId) {
-  const isOwner = await eventsModel.isBusinessOwnedByProfile(businessId, profileId);
+async function getEventsForBusiness(businessId, filter, profileId, userId) {
+  // Resolve ownership from the requesting USER, not the currently-active profile — an owner
+  // browsing with their personal profile active must still see their own business's events.
+  const ownedBusinessId = userId ? await eventsModel.getBusinessIdByUserId(userId) : null;
+  const isOwner = ownedBusinessId === businessId || await eventsModel.isBusinessOwnedByProfile(businessId, profileId);
   if (!isOwner) {
     const sub = await subscriptionModel.getSubscription(profileId, businessId);
     if (!sub?.is_active) return [];

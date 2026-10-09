@@ -20,6 +20,10 @@ export interface FeedApiItem {
   is_free: boolean | null;
   price: string | null;
   is_hot: boolean | null;
+  offer_type: string | null;
+  original_price: number | null;
+  promo_code: string | null;
+  discount_value: number | null;
   like_count?: number;
   liked_by_me?: boolean;
   is_owner?: boolean;

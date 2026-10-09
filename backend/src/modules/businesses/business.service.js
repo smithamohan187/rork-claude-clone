@@ -1,6 +1,7 @@
 const {
   insertBusiness,
   updateBusiness,
+  updateBusinessProfileDisplayName,
   insertBusinessHours,
   deleteBusinessHours,
   getBusinessHours,
@@ -71,10 +72,16 @@ async function registerBusiness(userId, payload) {
           inhouse_referral: inhouse_referral ?? false,
           inhouse_referral_url: inhouse_referral ? inhouse_referral_url : null,
         });
-        // Replace hours entirely on edit
-        await deleteBusinessHours(client, existingBusiness.id);
-        if (hours && hours.length > 0) {
-          await insertBusinessHours(client, existingBusiness.id, hours);
+        // Keeps the profile's display name (used by the Profile Switcher Pill, session
+        // response, etc.) in sync — this table is otherwise never touched after signup.
+        await updateBusinessProfileDisplayName(client, businessProfileId, business_name);
+        // Replace hours only when the caller actually sent them — callers that omit `hours`
+        // (e.g. business-complete-profile.tsx) must not have existing hours wiped out.
+        if (hours !== undefined) {
+          await deleteBusinessHours(client, existingBusiness.id);
+          if (hours.length > 0) {
+            await insertBusinessHours(client, existingBusiness.id, hours);
+          }
         }
       } else {
         // Edge case: business profile exists but business row is missing — create it.

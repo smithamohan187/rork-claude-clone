@@ -87,8 +87,13 @@ async function deletePost(userId, postId) {
   ]);
 }
 
-async function getPostsForBusiness(businessId, filter, profileId) {
-  const isOwner = await postsModel.isBusinessOwnedByProfile(businessId, profileId);
+async function getPostsForBusiness(businessId, filter, profileId, userId) {
+  // Ownership must be resolved from the requesting USER, not the currently-active profile —
+  // an owner who also has a personal profile and happens to be browsing with that profile
+  // active (e.g. viewing their own business page as a "customer") must still be recognised
+  // as the owner, not fall through to the subscription check below and see nothing.
+  const ownedBusinessId = userId ? await postsModel.getBusinessIdByUserId(userId) : null;
+  const isOwner = ownedBusinessId === businessId || await postsModel.isBusinessOwnedByProfile(businessId, profileId);
   // Disabled posts are meant to be hidden from everyone except the owning business.
   // Non-owners always get active-only, regardless of filter — including the default
   // 'all' filter, which would otherwise silently include disabled posts too.

@@ -12,7 +12,30 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
 import { pickFeedImage } from '@/constants/feedImages';
+import { EventHotBadge, EventTagChips } from '@/components/events/EventExtras';
 import ExpandableText from '../ExpandableText';
+
+const OFFER_TYPE_COLORS: Record<string, string> = {
+  promotion: '#1A5C35',
+  discount: '#14B8A6',
+  flash_sale: '#DC2626',
+};
+
+const OFFER_TYPE_LABELS: Record<string, string> = {
+  promotion: 'Promotion',
+  discount: 'Discount',
+  flash_sale: 'Flash Sale',
+};
+
+function getOfferTypeColor(type: string | null | undefined): string {
+  if (!type) return '#1A5C35';
+  return OFFER_TYPE_COLORS[type.toLowerCase()] ?? '#1A5C35';
+}
+
+function getOfferTypeLabel(type: string | null | undefined): string | null {
+  if (!type) return null;
+  return OFFER_TYPE_LABELS[type.toLowerCase()] ?? type;
+}
 
 interface Props {
   offer: OfferFeedItem;
@@ -49,6 +72,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   const [localCommentCount, setLocalCommentCount] = useState<number>(offer.comment_count ?? 0);
 
   const expiryInfo = useMemo(() => {
+    if (!offer.expiryDate) return { label: null as string | null, urgent: false };
     const now = new Date();
     const exp = new Date(offer.expiryDate);
     const diffMs = exp.getTime() - now.getTime();
@@ -186,13 +210,42 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
         <Text style={styles.title} numberOfLines={2}>{offer.title}</Text>
         <ExpandableText text={offer.description} />
 
-        <View style={styles.footerRow}>
-          <View style={[styles.expiryChip, expiryInfo.urgent ? styles.expiryChipUrgent : styles.expiryChipOk]}>
-            <Text style={[styles.expiryChipText, expiryInfo.urgent ? styles.expiryChipTextUrgent : styles.expiryChipTextOk]}>
-              {expiryInfo.label}
-            </Text>
-          </View>
+        <View style={styles.badgeRow}>
+          {offer.isHot && <EventHotBadge />}
+          {getOfferTypeLabel(offer.offerType) ? (
+            <View style={[styles.typeBadge, { backgroundColor: `${getOfferTypeColor(offer.offerType)}15` }]}>
+              <Text style={[styles.typeBadgeText, { color: getOfferTypeColor(offer.offerType) }]}>
+                {getOfferTypeLabel(offer.offerType)}
+              </Text>
+            </View>
+          ) : null}
+          {offer.originalPrice ? (
+            <View style={styles.priceRow}>
+              <Text style={styles.originalPriceText}>${offer.originalPrice.toFixed(2)}</Text>
+              {offer.discountValue ? (
+                <Text style={styles.discountedPriceText}>
+                  ${(offer.originalPrice * (1 - offer.discountValue / 100)).toFixed(2)}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
+        <EventTagChips tags={offer.tags} />
+        {offer.promoCode ? (
+          <View style={styles.promoCodeChip}>
+            <Text style={styles.promoCodeText}>Code: {offer.promoCode}</Text>
+          </View>
+        ) : null}
+
+        {expiryInfo.label ? (
+          <View style={styles.footerRow}>
+            <View style={[styles.expiryChip, expiryInfo.urgent ? styles.expiryChipUrgent : styles.expiryChipOk]}>
+              <Text style={[styles.expiryChipText, expiryInfo.urgent ? styles.expiryChipTextUrgent : styles.expiryChipTextOk]}>
+                {expiryInfo.label}
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <FeedActionBar
@@ -280,7 +333,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   coverGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     top: '50%',
   },
   discountBadge: {
@@ -349,6 +402,52 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#1A1A1A',
     marginTop: 6,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  typeBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  originalPriceText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  discountedPriceText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1A5C35',
+  },
+  promoCodeChip: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: '#FFF8E7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F3DFAE',
+  },
+  promoCodeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B47700',
   },
   footerRow: {
     flexDirection: 'row',

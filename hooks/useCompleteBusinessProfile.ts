@@ -52,10 +52,14 @@ export function useCompleteBusinessProfile() {
   const [state, setState] = useState('');
   const [country, setCountry] = useState('');
 
-  const [logoUri, setLogoUri] = useState<string | null>(null);
-  const [coverUri, setCoverUri] = useState<string | null>(null);
-  const [initialLogoUri, setInitialLogoUri] = useState<string | null>(null);
-  const [initialCoverUri, setInitialCoverUri] = useState<string | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [initialPhotoUri, setInitialPhotoUri] = useState<string | null>(null);
+
+  // Round-tripped unchanged — not exposed as a field in this form, but required by the
+  // backend schema; sending inhouse_referral: false unconditionally (as this screen used
+  // to) would silently turn off an existing in-house referral program on every save.
+  const [inhouseReferral, setInhouseReferral] = useState(false);
+  const [inhouseReferralUrl, setInhouseReferralUrl] = useState<string | null>(null);
 
   const [detecting, setDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
@@ -100,7 +104,7 @@ export function useCompleteBusinessProfile() {
     }
   }, []);
 
-  const pickLogo = useCallback(async () => {
+  const pickPhoto = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images' as ImagePicker.MediaType,
       allowsEditing: true,
@@ -108,19 +112,7 @@ export function useCompleteBusinessProfile() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setLogoUri(await toDisplayUri(result.assets[0].uri));
-    }
-  }, []);
-
-  const pickCover = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images' as ImagePicker.MediaType,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setCoverUri(await toDisplayUri(result.assets[0].uri));
+      setPhotoUri(await toDisplayUri(result.assets[0].uri));
     }
   }, []);
 
@@ -141,10 +133,11 @@ export function useCompleteBusinessProfile() {
         setCity(business.city ?? '');
         setState(business.state ?? '');
         setCountry(business.country ?? '');
-        setLogoUri(business.logo_url ?? null);
-        setCoverUri(business.cover_url ?? null);
-        setInitialLogoUri(business.logo_url ?? null);
-        setInitialCoverUri(business.cover_url ?? null);
+        const existingPhoto = business.logo_url ?? business.cover_url ?? null;
+        setPhotoUri(existingPhoto);
+        setInitialPhotoUri(existingPhoto);
+        setInhouseReferral(business.inhouse_referral ?? false);
+        setInhouseReferralUrl(business.inhouse_referral_url ?? null);
 
         // Only fill in via GPS if the owner hasn't already saved a location — never clobber it.
         if (!business.city && !business.state && !business.country) {
@@ -176,13 +169,12 @@ export function useCompleteBusinessProfile() {
         city: city.trim() || undefined,
         state: state.trim() || undefined,
         country: country.trim() || undefined,
-        inhouse_referral: false,
+        inhouse_referral: inhouseReferral,
+        inhouse_referral_url: inhouseReferral ? (inhouseReferralUrl ?? undefined) : undefined,
       });
-      if (logoUri && logoUri !== initialLogoUri) {
-        await uploadBusinessLogo(businessId, logoUri);
-      }
-      if (coverUri && coverUri !== initialCoverUri) {
-        await uploadBusinessCoverPhoto(businessId, coverUri);
+      if (photoUri && photoUri !== initialPhotoUri) {
+        await uploadBusinessLogo(businessId, photoUri);
+        await uploadBusinessCoverPhoto(businessId, photoUri);
       }
       await completeOnboarding(businessId);
       setSaved(true);
@@ -196,7 +188,7 @@ export function useCompleteBusinessProfile() {
   }, [
     saving, businessId, businessName, categoryId, businessType,
     description, phone, website, address, city, state, country, router,
-    logoUri, coverUri, initialLogoUri, initialCoverUri,
+    photoUri, initialPhotoUri, inhouseReferral, inhouseReferralUrl,
   ]);
 
   return {
@@ -210,7 +202,7 @@ export function useCompleteBusinessProfile() {
     country, setCountry,
     detecting, detectError, detectLocation,
 
-    logoUri, coverUri, pickLogo, pickCover,
+    photoUri, pickPhoto,
 
     loadingInitial, saving, error, saved,
     handleSave,

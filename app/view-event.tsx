@@ -28,6 +28,7 @@ import LikeButton from '@/components/feed/LikeButton';
 import CommentSheet from '@/components/feed/CommentSheet';
 import { toggleSaveEvent } from '@/api/services/savedEventService';
 import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
+import { useSubscription } from '@/hooks/useSubscription';
 
 const PURPLE = '#1A5C35';
 const BG = '#F8F7FF';
@@ -78,7 +79,7 @@ export default function ViewEventScreen() {
   const [error, setError] = useState(false);
   const [snackVisible, setSnackVisible] = useState(false);
   const [snackMsg, setSnackMsg] = useState('');
-  const [isSubscribed] = useState(false);
+  const { isSubscribed, isToggling: subscribing, subscribe } = useSubscription(event?.business_id || paramBizId);
   const [commentOpen, setCommentOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
@@ -124,11 +125,11 @@ export default function ViewEventScreen() {
     }
   }, [savingBookmark, saved, event]);
 
-  const handleSubscribe = useCallback(() => {
-    // Subscriptions module not yet built
-    setSnackMsg('Subscription feature coming soon');
+  const handleSubscribe = useCallback(async () => {
+    await subscribe();
+    setSnackMsg(`You're now subscribed to ${business?.name ?? 'this business'}!`);
     setSnackVisible(true);
-  }, []);
+  }, [subscribe, business]);
 
   const buildShareText = useCallback(() => {
     if (!event) return '';
@@ -402,7 +403,7 @@ export default function ViewEventScreen() {
           <View style={styles.divider} />
 
           {/* SUBSCRIBE BANNER / SUCCESS STRIP */}
-          {!isSubscribed ? (
+          {event.is_owner ? null : !isSubscribed ? (
             <View style={styles.subscribeBanner}>
               <Text style={styles.subscribeText}>
                 Subscribe to {business?.name ?? 'this business'} to get exclusive access to events like this and earn reward points.
@@ -411,6 +412,8 @@ export default function ViewEventScreen() {
                 mode="contained"
                 onPress={handleSubscribe}
                 buttonColor={PURPLE}
+                loading={subscribing}
+                disabled={subscribing}
                 style={styles.subscribeNowPaperBtn}
                 labelStyle={styles.subscribeNowPaperLabel}
                 testID="subscribe-inline"
@@ -450,11 +453,13 @@ export default function ViewEventScreen() {
         >
           Share Event
         </Button>
-        {!isSubscribed && (
+        {!isSubscribed && !event.is_owner && (
           <Button
             mode="contained"
             onPress={handleSubscribe}
             buttonColor={PURPLE}
+            loading={subscribing}
+            disabled={subscribing}
             style={styles.joinPaperBtn}
             contentStyle={styles.shareEventPaperContent}
             labelStyle={styles.shareEventPaperLabel}

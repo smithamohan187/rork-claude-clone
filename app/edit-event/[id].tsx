@@ -21,14 +21,26 @@ import {
   Dialog,
   Portal,
   Paragraph,
+  Switch,
 } from 'react-native-paper';
 import { Image } from 'expo-image';
-import { ArrowLeft, ImagePlus, Calendar, MapPin } from 'lucide-react-native';
+import { ArrowLeft, ImagePlus, Calendar, MapPin, ChevronDown, Check } from 'lucide-react-native';
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useEvent, useEvents } from '@/hooks/useEvents';
-import { uploadEventImage, type Event, type UpdateEventPayload } from '@/api/services/eventsService';
+import { uploadEventImage, type Event, type EventCategory, type UpdateEventPayload } from '@/api/services/eventsService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
+
+const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[] = [
+  { value: 'food', label: 'Food', emoji: '🍽️' },
+  { value: 'fitness', label: 'Fitness', emoji: '💪' },
+  { value: 'music', label: 'Music', emoji: '🎵' },
+  { value: 'art', label: 'Art', emoji: '🎨' },
+  { value: 'community', label: 'Community', emoji: '🤝' },
+  { value: 'wellness', label: 'Wellness', emoji: '🧘' },
+  { value: 'market', label: 'Market', emoji: '🛍️' },
+  { value: 'nightlife', label: 'Nightlife', emoji: '🌙' },
+];
 
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
@@ -63,6 +75,11 @@ interface DraftEvent {
   starts_at: string | null;
   ends_at: string | null;
   image_url: string | null;
+  category: EventCategory;
+  is_free: boolean;
+  price: string;
+  tags: string;
+  is_hot: boolean;
 }
 
 function eventToDraft(e: Event): DraftEvent {
@@ -73,6 +90,11 @@ function eventToDraft(e: Event): DraftEvent {
     starts_at: e.starts_at,
     ends_at: e.ends_at ?? null,
     image_url: e.image_url,
+    category: e.category,
+    is_free: e.is_free,
+    price: e.price ?? '',
+    tags: (e.tags ?? []).join(', '),
+    is_hot: e.is_hot,
   };
 }
 
@@ -98,7 +120,8 @@ export default function EditEventScreen() {
   const [errors, setErrors]         = useState<Errors>({});
   const [discardVisible, setDiscardVisible] = useState(false);
   const [saving, setSaving]         = useState(false);
-  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
+  const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
 
   useEffect(() => {
     if (original && !draft) setDraft(eventToDraft(original));
@@ -159,6 +182,11 @@ export default function EditEventScreen() {
         location:    draft.location.trim() || null,
         starts_at:   draft.starts_at ?? undefined,
         ends_at:     draft.ends_at,
+        category:    draft.category,
+        is_free:     draft.is_free,
+        price:       draft.is_free ? null : (draft.price.trim() || null),
+        tags:        draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        is_hot:      draft.is_hot,
         ...(!localImageUri && { image_url: draft.image_url }),
       };
       await editEvent(id!, payload);
@@ -248,7 +276,7 @@ export default function EditEventScreen() {
 
           <TouchableOpacity
             style={[styles.dateBtn, !!errors.starts_at && styles.dateBtnError]}
-            onPress={() => setPickerOpen(true)}
+            onPress={() => setPickerField('start')}
             activeOpacity={0.7}
             testID="event-start-date-btn"
           >
@@ -261,17 +289,109 @@ export default function EditEventScreen() {
             </View>
           </TouchableOpacity>
           <HelperText type="error" visible={!!errors.starts_at}>{errors.starts_at}</HelperText>
+
+          <TouchableOpacity
+            style={styles.dateBtn}
+            onPress={() => setPickerField('end')}
+            activeOpacity={0.7}
+            testID="event-end-date-btn"
+          >
+            <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
+            <View>
+              <Text style={styles.dateBtnLabel}>End Date & Time (Optional)</Text>
+              <Text style={[styles.dateBtnValue, !draft.ends_at && styles.dateBtnPlaceholder]}>
+                {draft.ends_at ? format(new Date(draft.ends_at), 'd MMM yyyy, HH:mm') : 'Select date & time'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <Text style={styles.sectionLabel}>Category</Text>
+          <TouchableOpacity
+            style={styles.categoryBtn}
+            onPress={() => setShowCategoryPicker((v) => !v)}
+            activeOpacity={0.7}
+            testID="event-category-btn"
+          >
+            <Text style={styles.categoryEmoji}>
+              {EVENT_CATEGORIES.find((c) => c.value === draft.category)?.emoji}
+            </Text>
+            <Text style={styles.categoryText}>
+              {EVENT_CATEGORIES.find((c) => c.value === draft.category)?.label}
+            </Text>
+            <ChevronDown size={16} color={TEXT_MUTED} />
+          </TouchableOpacity>
+          {showCategoryPicker && (
+            <View style={styles.categoryList}>
+              {EVENT_CATEGORIES.map((item) => {
+                const isActive = draft.category === item.value;
+                return (
+                  <TouchableOpacity
+                    key={item.value}
+                    style={styles.categoryOption}
+                    onPress={() => { set('category', item.value); setShowCategoryPicker(false); }}
+                    testID={`event-category-${item.value}`}
+                  >
+                    <Text style={styles.categoryEmoji}>{item.emoji}</Text>
+                    <Text style={styles.categoryText}>{item.label}</Text>
+                    {isActive && <Check size={16} color={PURPLE} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Free Event</Text>
+            <Switch value={draft.is_free} onValueChange={(v) => set('is_free', v)} color={PURPLE} testID="event-free-toggle" />
+          </View>
+
+          {!draft.is_free && (
+            <TextInput
+              label="Price"
+              value={draft.price}
+              onChangeText={(v) => set('price', v)}
+              mode="outlined"
+              outlineColor={BORDER}
+              activeOutlineColor={PURPLE}
+              placeholder="e.g. $15"
+              style={styles.input}
+              testID="event-price-input"
+            />
+          )}
+
+          <TextInput
+            label="Tags (comma separated)"
+            value={draft.tags}
+            onChangeText={(v) => set('tags', v)}
+            mode="outlined"
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            placeholder="Live Music, Outdoor, Family Friendly"
+            style={styles.input}
+            testID="event-tags-input"
+          />
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Mark as Hot</Text>
+            <Switch value={draft.is_hot} onValueChange={(v) => set('is_hot', v)} color={PURPLE} testID="event-hot-toggle" />
+          </View>
         </ScrollView>
 
         <DatePickerModal
           locale="en"
           mode="single"
-          visible={pickerOpen}
-          onDismiss={() => setPickerOpen(false)}
-          date={draft.starts_at ? new Date(draft.starts_at) : undefined}
+          visible={pickerField !== null}
+          onDismiss={() => setPickerField(null)}
+          date={
+            pickerField === 'start'
+              ? (draft.starts_at ? new Date(draft.starts_at) : undefined)
+              : (draft.ends_at ? new Date(draft.ends_at) : undefined)
+          }
           onConfirm={({ date }) => {
-            if (date) set('starts_at', date.toISOString());
-            setPickerOpen(false);
+            if (!date) { setPickerField(null); return; }
+            if (pickerField === 'start') set('starts_at', date.toISOString());
+            else set('ends_at', date.toISOString());
+            setPickerField(null);
           }}
           saveLabel="Confirm"
         />
@@ -413,4 +533,43 @@ const styles = StyleSheet.create({
   dateBtnLabel: { fontSize: 12, color: TEXT_MUTED, marginBottom: 2 },
   dateBtnValue: { fontSize: 15, color: TEXT_DARK },
   dateBtnPlaceholder: { color: '#C4C4CC' },
+  sectionLabel: { fontSize: 12, fontWeight: '700' as const, color: TEXT_MUTED, marginTop: 12, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  categoryBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  categoryEmoji: { fontSize: 16 },
+  categoryText: { flex: 1, fontSize: 15, color: TEXT_DARK },
+  categoryList: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    overflow: 'hidden' as const,
+  },
+  categoryOption: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER,
+  },
+  toggleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: TEXT_DARK },
 });

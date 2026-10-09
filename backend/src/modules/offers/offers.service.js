@@ -92,8 +92,11 @@ async function getActiveOffersForBusiness(businessId) {
   return offersModel.getActiveOffersByBusinessId(businessId);
 }
 
-async function getBusinessOffers(businessId, filter, profileId) {
-  const isOwner = await offersModel.isBusinessOwnedByProfile(businessId, profileId);
+async function getBusinessOffers(businessId, filter, profileId, userId) {
+  // Resolve ownership from the requesting USER, not the currently-active profile — an owner
+  // browsing with their personal profile active must still see their own business's offers.
+  const ownedBusinessId = userId ? await offersModel.getBusinessIdByUserId(userId) : null;
+  const isOwner = ownedBusinessId === businessId || await offersModel.isBusinessOwnedByProfile(businessId, profileId);
   if (!isOwner) {
     const sub = await subscriptionModel.getSubscription(profileId, businessId);
     if (!sub?.is_active) return [];

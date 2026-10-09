@@ -13,7 +13,7 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { ArrowLeft, Camera, ImagePlus, MapPin, X } from 'lucide-react-native';
+import { ArrowLeft, Camera, Check, ImagePlus, MapPin, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useCompleteBusinessProfile } from '@/hooks/useCompleteBusinessProfile';
 
@@ -29,7 +29,7 @@ export default function BusinessCompleteProfileScreen() {
     state, setState,
     country, setCountry,
     detecting, detectError, detectLocation,
-    logoUri, coverUri, pickLogo, pickCover,
+    photoUri, pickPhoto,
     loadingInitial, saving, error,
     handleSave,
   } = useCompleteBusinessProfile();
@@ -57,64 +57,52 @@ export default function BusinessCompleteProfileScreen() {
             </Text>
 
             <Text style={styles.sectionLabel}>BUSINESS TYPE</Text>
-            <View style={styles.typeRow}>
-              {(['goodwill', 'incentivised'] as const).map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.typeOption, businessType === t && styles.typeOptionSelected]}
-                  onPress={() => setBusinessType(t)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.typeOptionText, businessType === t && styles.typeOptionTextSelected]}>
-                    {t === 'goodwill' ? 'Goodwill' : 'Incentivised Referrals'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.typeCardList}>
+              {(['goodwill', 'incentivised'] as const).map((t) => {
+                const selected = businessType === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeCard, selected && styles.typeCardSelected]}
+                    onPress={() => setBusinessType(t)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.typeCardHeader}>
+                      <Text style={[styles.typeCardTitle, selected && styles.typeCardTitleSelected]}>
+                        {t === 'goodwill' ? 'Goodwill' : 'Incentivised Referrals'}
+                      </Text>
+                      <View style={[styles.typeCardRadio, selected && styles.typeCardRadioSelected]}>
+                        {selected && <Check size={12} color="#fff" strokeWidth={3} />}
+                      </View>
+                    </View>
+                    <Text style={styles.typeCardDesc}>
+                      {t === 'goodwill'
+                        ? 'Post offers and events and build loyalty through genuine connection — no points or rewards system.'
+                        : 'Reward customers with points, tiers, and a redeemable rewards catalog to drive repeat visits.'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <Text style={styles.typeHelperText}>
-              {businessType === 'goodwill'
-                ? 'Post offers and events and build loyalty through genuine connection — no points or rewards system.'
-                : 'Reward customers with points, tiers, and a redeemable rewards catalog to drive repeat visits.'}
-            </Text>
 
             <Text style={styles.sectionLabel}>PHOTOS</Text>
             <View style={styles.uploadSection}>
               <View style={styles.inputLabelRow}>
                 <ImagePlus size={16} color={Colors.textSecondary} />
-                <Text style={styles.inputLabel}>Business Logo</Text>
+                <Text style={styles.inputLabel}>Business Photo</Text>
               </View>
-              {logoUri ? (
+              {photoUri ? (
                 <View style={styles.uploadedLogoWrap}>
-                  <Image source={{ uri: logoUri }} style={styles.uploadedLogo} contentFit="cover" />
-                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickLogo} activeOpacity={0.7}>
+                  <Image source={{ uri: photoUri }} style={styles.uploadedLogo} contentFit="cover" />
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickPhoto} activeOpacity={0.7}>
                     <X size={14} color="#fff" />
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity style={styles.uploadLogoBox} onPress={pickLogo} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.uploadLogoBox} onPress={pickPhoto} activeOpacity={0.7}>
                   <Camera size={22} color={Colors.textSecondary} />
-                  <Text style={styles.uploadPhotoText}>Tap to upload logo</Text>
-                  <Text style={styles.uploadPhotoSubtext}>Recommended: 1:1 square</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.uploadSection}>
-              <View style={styles.inputLabelRow}>
-                <ImagePlus size={16} color={Colors.textSecondary} />
-                <Text style={styles.inputLabel}>Cover Photo</Text>
-              </View>
-              {coverUri ? (
-                <View style={styles.uploadedImageWrap}>
-                  <Image source={{ uri: coverUri }} style={styles.uploadedBusinessPhoto} contentFit="cover" />
-                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickCover} activeOpacity={0.7}>
-                    <X size={14} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity style={styles.uploadPhotoBox} onPress={pickCover} activeOpacity={0.7}>
-                  <Camera size={24} color={Colors.textSecondary} />
-                  <Text style={styles.uploadPhotoText}>Tap to upload cover photo</Text>
-                  <Text style={styles.uploadPhotoSubtext}>Recommended: 16:9 landscape</Text>
+                  <Text style={styles.uploadPhotoText}>Tap to upload a photo</Text>
+                  <Text style={styles.uploadPhotoSubtext}>Used as your business's logo and cover photo</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -255,15 +243,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1, marginBottom: 10, marginTop: 8,
   },
   row: { flexDirection: 'row', gap: 12 },
-  typeRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  typeOption: {
-    flex: 1, paddingVertical: 12, borderRadius: 12,
-    borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center',
+  typeCardList: { gap: 10, marginBottom: 8 },
+  typeCard: {
+    padding: 14, borderRadius: 14,
+    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surfaceAlt,
   },
-  typeOptionSelected: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  typeOptionText: { fontSize: 13, fontWeight: '600' as const, color: Colors.textSecondary },
-  typeOptionTextSelected: { color: Colors.primaryDark },
-  typeHelperText: { fontSize: 12, color: Colors.textTertiary, marginBottom: 8, lineHeight: 16 },
+  typeCardSelected: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  typeCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  typeCardTitle: { fontSize: 14, fontWeight: '700' as const, color: Colors.textSecondary },
+  typeCardTitleSelected: { color: Colors.primaryDark },
+  typeCardRadio: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  typeCardRadioSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary },
+  typeCardDesc: { fontSize: 12, color: Colors.textTertiary, marginTop: 4, lineHeight: 16 },
   inputGroup: { marginBottom: 14 },
   inputLabel: { fontSize: 13, fontWeight: '600' as const, color: Colors.text, marginBottom: 6 },
   input: {
@@ -289,16 +283,6 @@ const styles = StyleSheet.create({
   detectErrorText: { fontSize: 12, color: Colors.error, marginBottom: 10 },
   inputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   uploadSection: { marginBottom: 18 },
-  uploadPhotoBox: {
-    backgroundColor: Colors.surfaceAlt,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    borderStyle: 'dashed',
-    borderRadius: 14,
-    paddingVertical: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   uploadLogoBox: {
     backgroundColor: Colors.surfaceAlt,
     borderWidth: 2,
@@ -312,8 +296,6 @@ const styles = StyleSheet.create({
   },
   uploadPhotoText: { fontSize: 13, fontWeight: '500' as const, color: Colors.textSecondary },
   uploadPhotoSubtext: { fontSize: 11, color: Colors.textTertiary },
-  uploadedImageWrap: { position: 'relative' },
-  uploadedBusinessPhoto: { width: '100%', height: 180, borderRadius: 14 },
   uploadedLogoWrap: { position: 'relative', alignSelf: 'flex-start' },
   uploadedLogo: { width: 120, height: 120, borderRadius: 14 },
   removeImageBtn: {

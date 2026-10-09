@@ -61,6 +61,13 @@ async function updateBusiness(client, businessId, data) {
   return rows[0];
 }
 
+async function updateBusinessProfileDisplayName(client, profileId, displayName) {
+  await client.query(
+    'UPDATE profiles SET display_name = $1, updated_at = NOW() WHERE id = $2',
+    [displayName, profileId]
+  );
+}
+
 async function insertBusinessHours(client, businessId, hours) {
   for (const h of hours) {
     await client.query(
@@ -294,6 +301,7 @@ module.exports = {
   getActiveProfileId,
   insertBusiness,
   updateBusiness,
+  updateBusinessProfileDisplayName,
   insertBusinessHours,
   deleteBusinessHours,
   getBusinessHours,

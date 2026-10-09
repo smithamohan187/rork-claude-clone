@@ -286,6 +286,22 @@ export default function UserProfileScreen() {
               />
               <Divider style={styles.divider} />
               <List.Item
+                title="Edit Business Details"
+                description="Update your business info in one place"
+                left={() => (
+                  <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
+                    <UserPen size={18} color={PURPLE} />
+                  </View>
+                )}
+                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
+                onPress={() => router.push('/edit-business' as any)}
+                style={styles.listItem}
+                titleStyle={styles.listItemTitle}
+                descriptionStyle={styles.listItemDesc}
+                testID="settings-edit-business"
+              />
+              <Divider style={styles.divider} />
+              <List.Item
                 title="Analytics & Reports"
                 description="View performance and customer insights"
                 left={() => (

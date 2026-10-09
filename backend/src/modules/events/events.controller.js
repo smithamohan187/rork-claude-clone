@@ -57,7 +57,7 @@ const cancelEventHandler = asyncHandler(async (req, res) => {
 });
 
 const getBusinessEventsHandler = asyncHandler(async (req, res) => {
-  const events = await eventsService.getEventsForBusiness(req.params.businessId, req.query.filter, req.user.activeProfileId);
+  const events = await eventsService.getEventsForBusiness(req.params.businessId, req.query.filter, req.user.activeProfileId, req.user.userId);
   res.json(ok({ events }));
 });
 

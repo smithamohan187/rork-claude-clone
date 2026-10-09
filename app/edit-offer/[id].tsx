@@ -21,13 +21,20 @@ import {
   Dialog,
   Portal,
   Paragraph,
+  Switch,
 } from 'react-native-paper';
 import { ArrowLeft, ImagePlus } from 'lucide-react-native';
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useOffer } from '@/hooks/useOffers';
-import { updateOffer, uploadOfferImage, type Offer } from '@/api/services/offersService';
+import { updateOffer, uploadOfferImage, type Offer, type OfferType } from '@/api/services/offersService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
+
+const OFFER_TYPES: { value: OfferType; label: string }[] = [
+  { value: 'promotion', label: 'Promotion' },
+  { value: 'discount', label: 'Discount' },
+  { value: 'flash_sale', label: 'Flash Sale' },
+];
 
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
@@ -85,10 +92,16 @@ export default function EditOfferScreen() {
   const [discardVisible, setDiscardVisible] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
+  const [tagsText, setTagsText] = useState<string>('');
+  const [discountPercentText, setDiscountPercentText] = useState<string>('');
   const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
-    if (original && !draft) setDraft({ ...original });
+    if (original && !draft) {
+      setDraft({ ...original });
+      setTagsText((original.tags ?? []).join(', '));
+      setDiscountPercentText(original.discount_value != null ? String(original.discount_value) : '');
+    }
   }, [original, draft]);
 
   const hasChanges = useMemo(() => {
@@ -180,6 +193,14 @@ export default function EditOfferScreen() {
         expires_at:      draft.expires_at,
         terms:           draft.terms,
         max_redemptions: draft.max_redemptions ?? null,
+        offer_type:      draft.offer_type,
+        discount_type:   draft.offer_type === 'discount' ? 'percent' : null,
+        discount_value:  draft.offer_type === 'discount' && discountPercentText ? parseInt(discountPercentText, 10) : null,
+        original_price:  draft.original_price,
+        tags:            tagsText.split(',').map((t) => t.trim()).filter(Boolean),
+        is_hot:          draft.is_hot,
+        promo_code:      draft.promo_code?.trim() || null,
+        status:          draft.status === 'disabled' ? 'disabled' : 'active',
         // only send image_url when explicitly clearing it; new uploads go via uploadOfferImage
         ...(!localImageUri && { image_url: draft.image_url }),
       });
@@ -303,6 +324,96 @@ export default function EditOfferScreen() {
             style={styles.input}
           />
           <HelperText type="error" visible={!!errors.max_redemptions}>{errors.max_redemptions}</HelperText>
+
+          <Text style={styles.sectionLabel}>Offer Type</Text>
+          <View style={styles.typePillRow}>
+            {OFFER_TYPES.map((item) => {
+              const isSelected = draft.offer_type === item.value;
+              return (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.typePill, isSelected && styles.typePillSelected]}
+                  onPress={() => set('offer_type', item.value)}
+                  activeOpacity={0.8}
+                  testID={`edit-offer-type-${item.value}`}
+                >
+                  <Text style={[styles.typePillText, isSelected && styles.typePillTextSelected]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {draft.offer_type === 'discount' && (
+            <TextInput
+              label="Discount %"
+              value={discountPercentText}
+              onChangeText={(v) => setDiscountPercentText(v.replace(/[^0-9]/g, '').slice(0, 3))}
+              mode="outlined"
+              outlineColor={BORDER}
+              activeOutlineColor={PURPLE}
+              keyboardType="numeric"
+              right={<TextInput.Affix text="%" />}
+              style={styles.input}
+              testID="edit-offer-discount-input"
+            />
+          )}
+
+          <TextInput
+            label="Original Price (Optional)"
+            value={draft.original_price != null ? String(draft.original_price) : ''}
+            onChangeText={(v) => set('original_price', v ? parseFloat(v.replace(/[^0-9.]/g, '')) : null)}
+            mode="outlined"
+            keyboardType="decimal-pad"
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            left={<TextInput.Affix text="$" />}
+            style={styles.input}
+            testID="edit-offer-original-price-input"
+          />
+
+          <TextInput
+            label="Tags (comma separated)"
+            value={tagsText}
+            onChangeText={setTagsText}
+            mode="outlined"
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            placeholder="Weekend, Members Only, Limited Time"
+            style={styles.input}
+            testID="edit-offer-tags-input"
+          />
+
+          <TextInput
+            label="Promo Code (Optional)"
+            value={draft.promo_code ?? ''}
+            onChangeText={(v) => set('promo_code', v || null)}
+            mode="outlined"
+            autoCapitalize="characters"
+            outlineColor={BORDER}
+            activeOutlineColor={PURPLE}
+            style={styles.input}
+            testID="edit-offer-promo-code-input"
+          />
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Mark as Hot</Text>
+            <Switch value={draft.is_hot} onValueChange={(v) => set('is_hot', v)} color={PURPLE} testID="edit-offer-hot-toggle" />
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>
+              {draft.effective_status === 'expired' ? 'Active (Expired)' : 'Active'}
+            </Text>
+            <Switch
+              value={draft.status !== 'disabled'}
+              disabled={draft.effective_status === 'expired'}
+              onValueChange={(v) => set('status', v ? 'active' : 'disabled')}
+              color={PURPLE}
+              testID="edit-offer-active-toggle"
+            />
+          </View>
         </ScrollView>
 
         <DatePickerModal
@@ -464,4 +575,24 @@ const styles = StyleSheet.create({
   dateBtnLabel: { fontSize: 12, color: TEXT_MUTED, marginBottom: 2 },
   dateBtnValue: { fontSize: 16, color: TEXT_DARK },
   dateBtnPlaceholder: { color: '#C4C4CC' },
+  sectionLabel: { fontSize: 12, fontWeight: '700' as const, color: TEXT_MUTED, marginTop: 8, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  typePillRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 16 },
+  typePill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: '#fff',
+  },
+  typePillSelected: { backgroundColor: PURPLE, borderColor: PURPLE },
+  typePillText: { fontSize: 13, fontWeight: '600' as const, color: TEXT_DARK },
+  typePillTextSelected: { color: '#fff' },
+  toggleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 10,
+  },
+  toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: TEXT_DARK },
 });

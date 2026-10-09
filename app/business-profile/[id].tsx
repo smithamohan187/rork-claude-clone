@@ -1358,6 +1358,25 @@ function OffersTab({
                 {offer.title}
               </Text>
               <Text style={styles.offerDesc}>{offer.description}</Text>
+              <View style={styles.offerExtrasRow}>
+                {offer.is_hot && <EventHotBadge />}
+                {offer.original_price ? (
+                  <View style={styles.offerPriceRow}>
+                    <Text style={styles.offerOriginalPrice}>${offer.original_price.toFixed(2)}</Text>
+                    {offer.discount_value ? (
+                      <Text style={styles.offerDiscountedPrice}>
+                        ${(offer.original_price * (1 - offer.discount_value / 100)).toFixed(2)}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+              <EventTagChips tags={offer.tags} />
+              {offer.promo_code ? (
+                <View style={styles.offerPromoCodeChip}>
+                  <Text style={styles.offerPromoCodeText}>Code: {offer.promo_code}</Text>
+                </View>
+              ) : null}
               <View style={styles.offerFooter}>
                 <Calendar size={12} color="#9CA3AF" />
                 <Text style={styles.offerValidity}>Valid until {offer.expires_at ? formatDate(offer.expires_at) : '—'}</Text>
@@ -1573,6 +1592,14 @@ function EventsTab({ businessId, isOwner, onShowSnack }: { businessId: string; i
                   <MapPin size={11} color="#9CA3AF" />
                   <Text style={styles.eventMetaText}>{event.location ?? '—'}</Text>
                 </View>
+                {event.ends_at ? (
+                  <View style={styles.eventMeta}>
+                    <Clock size={11} color="#9CA3AF" />
+                    <Text style={styles.eventMetaText}>
+                      Ends {formatDate(event.ends_at)}, {formatTime(event.ends_at)}
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.eventExtrasRow}>
                   {event.is_hot && <EventHotBadge />}
                   <EventPriceBadge isFree={event.is_free} price={event.price} />
@@ -2177,16 +2204,6 @@ function AboutTab({
   return (
     <View>
       <Text style={styles.aboutDescription}>{business.description}</Text>
-
-      <View style={styles.aboutRow}>
-        <View style={[styles.aboutIcon, { backgroundColor: '#E8F5EE' }]}>
-          <Clock size={16} color={ACCENT} />
-        </View>
-        <View style={styles.aboutRowContent}>
-          <Text style={styles.aboutLabel}>Hours</Text>
-          <Text style={styles.aboutValue}>{business.hours}</Text>
-        </View>
-      </View>
 
       <View style={styles.aboutRow}>
         <View style={[styles.aboutIcon, { backgroundColor: '#FEF3C7' }]}>
@@ -2833,7 +2850,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   coverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
   coverSafeArea: {
@@ -3366,6 +3383,43 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 19,
     marginTop: 4,
+  },
+  offerExtrasRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  offerPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  offerOriginalPrice: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  offerDiscountedPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1A5C35',
+  },
+  offerPromoCodeChip: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: '#FFF8E7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F3DFAE',
+  },
+  offerPromoCodeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B47700',
   },
   offerFooter: {
     flexDirection: 'row',
@@ -4082,7 +4136,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end' as const,
   },
   composerBackdropTap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   composerSheet: {
     backgroundColor: '#fff',
