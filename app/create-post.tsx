@@ -48,9 +48,9 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { createPost, updatePost, uploadPostVideo } from '@/api/services/postsService';
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
-import { createOffer, uploadOfferImage, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
+import { createOffer, updateOffer, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
-import { uploadEventImage, type EventCategory } from '@/api/services/eventsService';
+import { type EventCategory } from '@/api/services/eventsService';
 
 registerTranslation('en', en);
 
@@ -347,7 +347,7 @@ export default function CreatePostScreen() {
   const [eventPrice, setEventPrice] = useState<string>('');
   const [eventTags, setEventTags] = useState<string>('');
 
-  const { addEvent } = useEvents();
+  const { addEvent, editEvent } = useEvents();
 
   const clearErrors = useCallback(() => setErrors({}), []);
 
@@ -480,7 +480,10 @@ export default function CreatePostScreen() {
       setIsSubmitting(true);
       try {
         const offer = await createOffer(payload);
-        if (offerImage) await uploadOfferImage(offer.id, offerImage);
+        // offerImage is already a hosted URL by this point (uploaded via uploadMedia when
+        // picked, or a stock/my-uploads URL) — set it with a plain JSON update rather than
+        // uploadOfferImage's multipart re-fetch, which CORS-fails on web for cross-origin URLs.
+        if (offerImage) await updateOffer(offer.id, { image_url: offerImage });
 
         Animated.sequence([
           Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
@@ -513,7 +516,9 @@ export default function CreatePostScreen() {
         tags: eventTags.split(',').map(t => t.trim()).filter(Boolean),
         is_hot: eventIsHot,
       });
-      if (eventImage) await uploadEventImage(event.id, eventImage);
+      // Same as the offer path above: eventImage is already a hosted URL, so set it via a
+      // plain JSON update instead of the multipart upload endpoint.
+      if (eventImage) await editEvent(event.id, { image_url: eventImage });
 
       Animated.sequence([
         Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
@@ -532,7 +537,7 @@ export default function CreatePostScreen() {
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
-    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventImage, addEvent,
+    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventImage, addEvent, editEvent,
     eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot,
   ]);
 

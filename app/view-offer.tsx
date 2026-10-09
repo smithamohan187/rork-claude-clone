@@ -376,10 +376,10 @@ export default function ViewOfferScreen() {
 
           {offer.original_price ? (
             <View style={styles.priceRow}>
-              <Text style={styles.originalPriceText}>${offer.original_price.toFixed(2)}</Text>
+              <Text style={styles.originalPriceText}>${Number(offer.original_price).toFixed(2)}</Text>
               {offer.discount_type === 'percent' && offer.discount_value ? (
                 <Text style={styles.discountedPriceText}>
-                  ${(offer.original_price * (1 - offer.discount_value / 100)).toFixed(2)}
+                  ${(Number(offer.original_price) * (1 - Number(offer.discount_value) / 100)).toFixed(2)}
                 </Text>
               ) : null}
             </View>

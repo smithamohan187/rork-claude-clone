@@ -1362,10 +1362,10 @@ function OffersTab({
                 {offer.is_hot && <EventHotBadge />}
                 {offer.original_price ? (
                   <View style={styles.offerPriceRow}>
-                    <Text style={styles.offerOriginalPrice}>${offer.original_price.toFixed(2)}</Text>
+                    <Text style={styles.offerOriginalPrice}>${Number(offer.original_price).toFixed(2)}</Text>
                     {offer.discount_value ? (
                       <Text style={styles.offerDiscountedPrice}>
-                        ${(offer.original_price * (1 - offer.discount_value / 100)).toFixed(2)}
+                        ${(Number(offer.original_price) * (1 - Number(offer.discount_value) / 100)).toFixed(2)}
                       </Text>
                     ) : null}
                   </View>

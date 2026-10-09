@@ -38,10 +38,9 @@ import { format } from 'date-fns';
 import { Colors } from '@/constants/colors';
 import { usePosts } from '@/hooks/usePosts';
 import { uploadPostImage } from '@/api/services/postsService';
-import { createOffer, uploadOfferImage, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
+import { createOffer, updateOffer, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
 import { useEvents } from '@/hooks/useEvents';
-import { uploadEventImage } from '@/api/services/eventsService';
 
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
@@ -210,7 +209,7 @@ export default function CreateOfferScreen() {
   const [eventTimeOpen, setEventTimeOpen] = useState<boolean>(false);
   const [eventEndTimeOpen, setEventEndTimeOpen] = useState<boolean>(false);
 
-  const { addEvent } = useEvents();
+  const { addEvent, editEvent } = useEvents();
 
   const tabIndicatorAnim = useRef(
     new Animated.Value(activeTab === 'offer' ? 0 : activeTab === 'event' ? 1 : 2),
@@ -375,7 +374,10 @@ export default function CreateOfferScreen() {
       try {
         setPublishing(true);
         const offer = await createOffer(payload);
-        if (offerImage) await uploadOfferImage(offer.id, offerImage);
+        // offerImage is already a hosted URL (uploaded via uploadMedia when picked, or from
+        // My Uploads) — set it with a plain JSON update rather than uploadOfferImage's
+        // multipart re-fetch, which CORS-fails on web for cross-origin URLs.
+        if (offerImage) await updateOffer(offer.id, { image_url: offerImage });
         setSnackbarVisible(true);
         setTimeout(() => router.back(), 1200);
       } catch (err: unknown) {
@@ -395,7 +397,9 @@ export default function CreateOfferScreen() {
           starts_at:   eventDate!.toISOString(),
           ends_at:     eventEndDate ? eventEndDate.toISOString() : null,
         });
-        if (offerImage) await uploadEventImage(event.id, offerImage);
+        // Same as the offer path above: offerImage is already a hosted URL, so set it via a
+        // plain JSON update instead of the multipart upload endpoint.
+        if (offerImage) await editEvent(event.id, { image_url: offerImage });
         setSnackbarVisible(true);
         setTimeout(() => router.back(), 1200);
       } catch (err: unknown) {
@@ -409,7 +413,7 @@ export default function CreateOfferScreen() {
     offerTitle, offerDescription, offerType, discountPercent, offerImage,
     offerStartDate, offerEndDate, isActive,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
-    eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, addEvent,
+    eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, addEvent, editEvent,
     postTitle, postContent, postImage, addPost,
   ]);
 

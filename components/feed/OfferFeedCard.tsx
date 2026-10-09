@@ -221,10 +221,10 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
           ) : null}
           {offer.originalPrice ? (
             <View style={styles.priceRow}>
-              <Text style={styles.originalPriceText}>${offer.originalPrice.toFixed(2)}</Text>
+              <Text style={styles.originalPriceText}>${Number(offer.originalPrice).toFixed(2)}</Text>
               {offer.discountValue ? (
                 <Text style={styles.discountedPriceText}>
-                  ${(offer.originalPrice * (1 - offer.discountValue / 100)).toFixed(2)}
+                  ${(Number(offer.originalPrice) * (1 - Number(offer.discountValue) / 100)).toFixed(2)}
                 </Text>
               ) : null}
             </View>
