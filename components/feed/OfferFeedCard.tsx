@@ -1,7 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
-import { Image } from 'expo-image';
+import { Image, type ImageLoadEventData } from 'expo-image';
+
+// Instagram-style clamp: never let the cover photo go taller than a 4:5 portrait or
+// wider than a 1.91:1 landscape, regardless of its real aspect ratio.
+const MIN_ASPECT_RATIO = 4 / 5;
+const MAX_ASPECT_RATIO = 1.91;
+
+function clampAspectRatio(width: number, height: number): number {
+  if (!width || !height) return MIN_ASPECT_RATIO;
+  return Math.min(MAX_ASPECT_RATIO, Math.max(MIN_ASPECT_RATIO, width / height));
+}
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -95,6 +105,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
 
   const initials = offer.businessName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
+  const [coverRatio, setCoverRatio] = useState<number>(MIN_ASPECT_RATIO);
   const coverUri = useMemo(
     () => offer.image_url || pickFeedImage(offer.id, [offer.title, offer.description, offer.businessName]),
     [offer.image_url, offer.id, offer.title, offer.description, offer.businessName],
@@ -144,7 +155,26 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
 
   return (
     <View style={styles.card} testID={`offer-card-${offer.id}`}>
-      <Pressable onPress={onPress} style={styles.cover}>
+      <View style={styles.header}>
+        {logoFailed ? (
+          <View style={[styles.logo, styles.logoFallback]}>
+            <Text style={styles.logoInitials}>{initials}</Text>
+          </View>
+        ) : (
+          <Image
+            source={{ uri: offer.businessLogo }}
+            style={styles.logo}
+            onError={() => setLogoFailed(true)}
+            contentFit="cover"
+          />
+        )}
+        <Text style={styles.businessName} numberOfLines={1}>{offer.businessName}</Text>
+        <View style={styles.offerPill}>
+          <Text style={styles.offerPillText}>OFFER</Text>
+        </View>
+      </View>
+
+      <Pressable onPress={onPress} style={[styles.cover, { aspectRatio: coverRatio }]}>
           {coverFailed ? (
             <LinearGradient
               colors={['#00B246', '#1A5C35']}
@@ -155,6 +185,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
               source={{ uri: coverUri }}
               style={StyleSheet.absoluteFill}
               onError={() => setCoverFailed(true)}
+              onLoad={(e: ImageLoadEventData) => setCoverRatio(clampAspectRatio(e.source.width, e.source.height))}
               contentFit="cover"
               transition={150}
             />
@@ -188,25 +219,6 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
           ) : null}
       </Pressable>
       <View style={styles.body}>
-        <View style={styles.headerRow}>
-          {logoFailed ? (
-            <View style={[styles.logo, styles.logoFallback]}>
-              <Text style={styles.logoInitials}>{initials}</Text>
-            </View>
-          ) : (
-            <Image
-              source={{ uri: offer.businessLogo }}
-              style={styles.logo}
-              onError={() => setLogoFailed(true)}
-              contentFit="cover"
-            />
-          )}
-          <Text style={styles.businessName} numberOfLines={1}>{offer.businessName}</Text>
-          <View style={styles.offerPill}>
-            <Text style={styles.offerPillText}>OFFER</Text>
-          </View>
-        </View>
-
         <Text style={styles.title} numberOfLines={2}>{offer.title}</Text>
         <ExpandableText text={offer.description} />
 
@@ -248,19 +260,21 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
         ) : null}
       </View>
 
-      <FeedActionBar
-        reactionCount={offer.like_count}
-        hasLiked={offer.liked_by_me}
-        isOwner={offer.is_owner}
-        commentCount={localCommentCount}
-        showComments={commentSheetOpen}
-        showShare={showShare}
-        onLike={() => onToggleLike(offer.id)}
-        onOpenLikers={() => setLikersOpen(true)}
-        onComment={handleToggleComments}
-        onShare={handleToggleShare}
-        onRefer={handleRefer}
-      />
+      <View style={styles.actionBarWrap}>
+        <FeedActionBar
+          reactionCount={offer.like_count}
+          hasLiked={offer.liked_by_me}
+          isOwner={offer.is_owner}
+          commentCount={localCommentCount}
+          showComments={commentSheetOpen}
+          showShare={showShare}
+          onLike={() => onToggleLike(offer.id)}
+          onOpenLikers={() => setLikersOpen(true)}
+          onComment={handleToggleComments}
+          onShare={handleToggleShare}
+          onRefer={handleRefer}
+        />
+      </View>
 
       <LikersSheet
         visible={likersOpen}
@@ -313,21 +327,12 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 16,
-    marginBottom: 12,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#1A5C35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 0.5,
-    borderColor: '#E8F5EE',
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EFEFEF',
   },
   cover: {
-    height: 160,
     width: '100%',
     backgroundColor: '#EDE9F6',
     position: 'relative',
@@ -357,12 +362,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   body: {
-    padding: 16,
+    padding: 12,
   },
-  headerRow: {
+  actionBarWrap: {
+    paddingHorizontal: 12,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   logo: {
     width: 32,
@@ -394,7 +405,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#1A5C35',
-    marginTop: 10,
     lineHeight: 22,
   },
   description: {
@@ -408,7 +418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 8,
+    marginTop: 6,
   },
   typeBadge: {
     paddingHorizontal: 9,
@@ -452,7 +462,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 10,
   },
   expiryChip: {
     paddingHorizontal: 10,

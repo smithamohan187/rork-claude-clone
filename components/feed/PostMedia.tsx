@@ -1,10 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TouchableOpacity, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Image, type ImageStyle } from 'expo-image';
+import { Image, type ImageLoadEventData, type ImageStyle } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
 import { Play } from 'lucide-react-native';
+
+// Instagram-style clamp: never let a photo go taller than a 4:5 portrait or
+// wider than a 1.91:1 landscape, regardless of its real aspect ratio.
+const MIN_ASPECT_RATIO = 4 / 5;
+const MAX_ASPECT_RATIO = 1.91;
+
+function clampAspectRatio(width: number, height: number): number {
+  if (!width || !height) return MIN_ASPECT_RATIO;
+  return Math.min(MAX_ASPECT_RATIO, Math.max(MIN_ASPECT_RATIO, width / height));
+}
 
 // Matches the embed-id extraction logic used wherever we need a YouTube/Vimeo
 // inline player. Returns null for any other platform/link shape, which signals
@@ -41,9 +51,17 @@ interface PostMediaProps {
   imageUrl: string | null;
   style: StyleProp<ViewStyle>;
   onImagePress?: () => void;
+  // 'natural' overrides the caller's fixed aspectRatio once the image loads, clamping to
+  // Instagram's 4:5–1.91:1 range instead of cropping every source into one fixed box.
+  // Defaults to 'fixed' so existing callers (detail hero, business-profile list) are unaffected.
+  aspectRatioMode?: 'fixed' | 'natural';
 }
 
-export function PostMedia({ videoUrl, videoType, imageUrl, style, onImagePress }: PostMediaProps) {
+export function PostMedia({ videoUrl, videoType, imageUrl, style, onImagePress, aspectRatioMode = 'fixed' }: PostMediaProps) {
+  const [naturalRatio, setNaturalRatio] = useState<number>(MIN_ASPECT_RATIO);
+  const handleLoad = (e: ImageLoadEventData) => {
+    setNaturalRatio(clampAspectRatio(e.source.width, e.source.height));
+  };
   if (videoUrl) {
     // Reels-style: when a full-screen viewer is available (onImagePress provided), the
     // feed card is just a static tap target into it — same as the image branch below —
@@ -85,8 +103,16 @@ export function PostMedia({ videoUrl, videoType, imageUrl, style, onImagePress }
   }
 
   if (imageUrl) {
+    const imageStyle = (
+      aspectRatioMode === 'natural' ? [style, { aspectRatio: naturalRatio }] : style
+    ) as StyleProp<ImageStyle>;
     const image = (
-      <Image source={{ uri: imageUrl }} style={style as StyleProp<ImageStyle>} contentFit="cover" />
+      <Image
+        source={{ uri: imageUrl }}
+        style={imageStyle}
+        contentFit="cover"
+        onLoad={aspectRatioMode === 'natural' ? handleLoad : undefined}
+      />
     );
     if (onImagePress) {
       return (

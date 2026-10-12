@@ -132,8 +132,8 @@ export const FeedActionBar = React.memo(function FeedActionBar({
 
 const styles = StyleSheet.create({
   bar: {
-    marginTop: 12,
-    paddingTop: 8,
+    marginTop: 6,
+    paddingTop: 6,
     borderTopWidth: 0.5,
     borderTopColor: '#E8F5EE',
     flexDirection: 'row',
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   divider: {
     width: 0.5,
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     paddingHorizontal: 4,
-    paddingTop: 10,
+    paddingTop: 6,
     paddingBottom: 2,
   },
 });

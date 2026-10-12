@@ -1885,14 +1885,27 @@ function PostsTab({
 
               <TouchableOpacity onPress={() => openPost(post.id)} activeOpacity={0.8} testID={`post-open-${post.id}`}>
                 <Text style={styles.postText}>{post.content}</Text>
+              </TouchableOpacity>
 
+              {post.video_url ? (
+                // Rendered outside the navigate-on-press touchable so the inline native video
+                // controls receive taps directly instead of them bubbling up into openPost().
                 <PostMedia
                   videoUrl={post.video_url}
                   videoType={post.video_type}
-                  imageUrl={post.image_url}
+                  imageUrl={null}
                   style={styles.postImage}
                 />
-              </TouchableOpacity>
+              ) : post.image_url ? (
+                <TouchableOpacity onPress={() => openPost(post.id)} activeOpacity={0.8}>
+                  <PostMedia
+                    videoUrl={null}
+                    videoType={null}
+                    imageUrl={post.image_url}
+                    style={styles.postImage}
+                  />
+                </TouchableOpacity>
+              ) : null}
 
               <Text
                 style={styles.eventViewDetails}

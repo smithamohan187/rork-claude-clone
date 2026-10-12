@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
-import { Image } from 'expo-image';
+import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +27,16 @@ interface Props {
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
+// Instagram-style clamp: never let the cover photo go taller than a 4:5 portrait or
+// wider than a 1.91:1 landscape, regardless of its real aspect ratio.
+const MIN_ASPECT_RATIO = 4 / 5;
+const MAX_ASPECT_RATIO = 1.91;
+
+function clampAspectRatio(width: number, height: number): number {
+  if (!width || !height) return MIN_ASPECT_RATIO;
+  return Math.min(MAX_ASPECT_RATIO, Math.max(MIN_ASPECT_RATIO, width / height));
+}
+
 function easeNext() {
   if (Platform.OS !== 'web') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -49,11 +59,14 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   }, [event.startDate]);
 
   const [coverFailed, setCoverFailed] = useState<boolean>(false);
+  const [coverRatio, setCoverRatio] = useState<number>(MIN_ASPECT_RATIO);
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
   const [referOpen, setReferOpen] = useState<boolean>(false);
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
   const [localCommentCount, setLocalCommentCount] = useState<number>(event.comment_count ?? 0);
+  const initials = event.businessName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   const coverUri = useMemo(
     () => event.image_url || pickFeedImage(event.id, ['events', event.title, event.venue, event.businessName]),
     [event.image_url, event.id, event.title, event.venue, event.businessName],
@@ -112,7 +125,26 @@ export const EventFeedCard = React.memo(function EventFeedCard({
 
   return (
     <View style={styles.card} testID={`event-card-${event.id}`}>
-      <Pressable onPress={onPress} style={styles.cover}>
+      <View style={styles.header}>
+        {logoFailed ? (
+          <View style={[styles.logo, styles.logoFallback]}>
+            <Text style={styles.logoInitials}>{initials}</Text>
+          </View>
+        ) : (
+          <Image
+            source={{ uri: event.businessLogo }}
+            style={styles.logo}
+            onError={() => setLogoFailed(true)}
+            contentFit="cover"
+          />
+        )}
+        <Text style={styles.businessName} numberOfLines={1}>{event.businessName}</Text>
+        <View style={styles.upcomingPill}>
+          <Text style={styles.upcomingPillText}>UPCOMING</Text>
+        </View>
+      </View>
+
+      <Pressable onPress={onPress} style={[styles.cover, { aspectRatio: coverRatio }]}>
           {coverFailed ? (
             <LinearGradient
               colors={['#00B246', '#1A5C35']}
@@ -123,6 +155,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
               source={{ uri: coverUri }}
               style={StyleSheet.absoluteFill}
               onError={() => setCoverFailed(true)}
+              onLoad={(e: ImageLoadEventData) => setCoverRatio(clampAspectRatio(e.source.width, e.source.height))}
               contentFit="cover"
               transition={150}
             />
@@ -162,12 +195,6 @@ export const EventFeedCard = React.memo(function EventFeedCard({
       <View style={styles.body}>
         <View style={styles.row}>
           <View style={styles.content}>
-            <View style={styles.metaRow}>
-              <Text style={styles.businessName} numberOfLines={1}>{event.businessName}</Text>
-              <View style={styles.upcomingPill}>
-                <Text style={styles.upcomingPillText}>UPCOMING</Text>
-              </View>
-            </View>
             <Text style={styles.title} numberOfLines={2}>{event.title}</Text>
             <View style={styles.venueRow}>
               <MapPin size={12} color="#1A5C35" />
@@ -197,19 +224,21 @@ export const EventFeedCard = React.memo(function EventFeedCard({
         </View>
       </View>
 
-      <FeedActionBar
-        reactionCount={event.like_count}
-        hasLiked={event.liked_by_me}
-        isOwner={event.is_owner}
-        commentCount={localCommentCount}
-        showComments={commentSheetOpen}
-        showShare={showShare}
-        onLike={() => onToggleLike(event.id)}
-        onOpenLikers={() => setLikersOpen(true)}
-        onComment={handleToggleComments}
-        onShare={handleToggleShare}
-        onRefer={handleRefer}
-      />
+      <View style={styles.actionBarWrap}>
+        <FeedActionBar
+          reactionCount={event.like_count}
+          hasLiked={event.liked_by_me}
+          isOwner={event.is_owner}
+          commentCount={localCommentCount}
+          showComments={commentSheetOpen}
+          showShare={showShare}
+          onLike={() => onToggleLike(event.id)}
+          onOpenLikers={() => setLikersOpen(true)}
+          onComment={handleToggleComments}
+          onShare={handleToggleShare}
+          onRefer={handleRefer}
+        />
+      </View>
 
       <LikersSheet
         visible={likersOpen}
@@ -262,21 +291,12 @@ export const EventFeedCard = React.memo(function EventFeedCard({
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 16,
-    marginBottom: 12,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#1A5C35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 0.5,
-    borderColor: '#E8F5EE',
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EFEFEF',
   },
   cover: {
-    height: 160,
     width: '100%',
     backgroundColor: '#EDE9F6',
     position: 'relative',
@@ -325,25 +345,38 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   body: {
-    padding: 14,
+    padding: 12,
   },
+  actionBarWrap: {
+    paddingHorizontal: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  logo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EDE9F6',
+  },
+  logoFallback: { alignItems: 'center', justifyContent: 'center' },
+  logoInitials: { color: '#1A5C35', fontSize: 11, fontWeight: '800' },
   row: {
     flexDirection: 'row',
   },
   content: {
     flex: 1,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   businessName: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
+    fontWeight: '700',
     color: '#1A5C35',
-    fontWeight: '600',
   },
   upcomingPill: {
     backgroundColor: '#E1F5EE',
@@ -361,7 +394,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#1A5C35',
-    marginTop: 4,
     lineHeight: 19,
   },
   venueRow: {

@@ -750,7 +750,7 @@ export default function CreatePostScreen() {
           onPress={() => setMediaTab('images')}
           activeOpacity={0.7}
         >
-          <ImagePlus size={16} color={mediaTab === 'images' ? Colors.navyDark : Colors.textTertiary} />
+          <ImagePlus size={16} color={mediaTab === 'images' ? '#fff' : Colors.textTertiary} />
           <Text style={[styles.mediaTabText, mediaTab === 'images' && styles.mediaTabTextActive]}>Images</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -758,7 +758,7 @@ export default function CreatePostScreen() {
           onPress={() => setMediaTab('videos')}
           activeOpacity={0.7}
         >
-          <Film size={16} color={mediaTab === 'videos' ? Colors.navyDark : Colors.textTertiary} />
+          <Film size={16} color={mediaTab === 'videos' ? '#fff' : Colors.textTertiary} />
           <Text style={[styles.mediaTabText, mediaTab === 'videos' && styles.mediaTabTextActive]}>Videos</Text>
         </TouchableOpacity>
       </View>
@@ -2102,7 +2102,7 @@ const styles = StyleSheet.create({
   },
   mediaTabTextActive: {
     fontWeight: '600' as const,
-    color: Colors.navyDark,
+    color: '#fff',
   },
   sourceRow: {
     gap: 8,

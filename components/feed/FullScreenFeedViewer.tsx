@@ -788,7 +788,7 @@ function FullScreenInlineVideo({ uri }: { uri: string }) {
       player={player}
       style={StyleSheet.absoluteFill}
       nativeControls
-      contentFit="cover"
+      contentFit="contain"
     />
   );
 }
@@ -830,7 +830,7 @@ function PageShell({
         <Image
           source={{ uri: coverUri }}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          contentFit="contain"
           onError={() => setImgFailed(true)}
           transition={150}
         />

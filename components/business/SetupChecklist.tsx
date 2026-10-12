@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   },
   iconWrapDone: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   rowLabel: { flex: 1, fontSize: 13.5, fontWeight: '500' as const, color: Colors.text },
-  rowLabelDone: { color: Colors.textTertiary, textDecorationLine: 'line-through' },
+  rowLabelDone: { color: Colors.textTertiary },
   rowLabelLocked: { color: Colors.textTertiary },
   lockNote: {
     fontSize: 11.5,

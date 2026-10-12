@@ -199,7 +199,9 @@ export default function PostFeedCard({
 
       {/* Body */}
       {post.text ? (
-        <ExpandableText text={post.text} />
+        <View style={styles.captionWrap}>
+          <ExpandableText text={post.text} />
+        </View>
       ) : null}
 
       {postVideoUrl || post.image_url ? (
@@ -208,8 +210,9 @@ export default function PostFeedCard({
             videoUrl={postVideoUrl}
             videoType={postVideoType}
             imageUrl={post.image_url}
-            style={styles.image}
+            style={postVideoUrl ? styles.videoImage : styles.image}
             onImagePress={onImagePress}
+            aspectRatioMode={postVideoUrl ? 'fixed' : 'natural'}
           />
           <TouchableOpacity
             style={styles.saveOverlay}
@@ -241,19 +244,21 @@ export default function PostFeedCard({
       )}
 
       {/* Engagement row — same as Offer/Event */}
-      <FeedActionBar
-        reactionCount={resolvedLikeCount}
-        hasLiked={liked}
-        isOwner={isOwner}
-        commentCount={localCommentCount}
-        showComments={commentSheetOpen}
-        showShare={showShare}
-        onLike={handleLike}
-        onOpenLikers={() => setLikersOpen(true)}
-        onComment={handleToggleComments}
-        onShare={handleToggleShare}
-        onRefer={handleRefer}
-      />
+      <View style={styles.actionBarWrap}>
+        <FeedActionBar
+          reactionCount={resolvedLikeCount}
+          hasLiked={liked}
+          isOwner={isOwner}
+          commentCount={localCommentCount}
+          showComments={commentSheetOpen}
+          showShare={showShare}
+          onLike={handleLike}
+          onOpenLikers={() => setLikersOpen(true)}
+          onComment={handleToggleComments}
+          onShare={handleToggleShare}
+          onRefer={handleRefer}
+        />
+      </View>
 
       <LikersSheet
         visible={likersOpen}
@@ -343,22 +348,17 @@ export default function PostFeedCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#1A5C35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 0.5,
-    borderColor: '#E8F5EE',
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EFEFEF',
     position: 'relative',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
     paddingRight: 56,
   },
   logo: {
@@ -387,8 +387,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#EDE9F6',
     position: 'absolute',
-    right: 0,
-    top: 0,
+    right: 12,
+    top: 10,
   },
   badgeText: {
     color: PURPLE,
@@ -413,21 +413,26 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     zIndex: 5,
   },
-  bodyText: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#1A1A1A',
-    marginTop: 12,
+  captionWrap: {
+    paddingHorizontal: 12,
   },
   imageWrap: {
     position: 'relative',
   },
   image: {
     width: '100%',
-    aspectRatio: 16 / 10,
-    borderRadius: 12,
-    marginTop: 12,
+    aspectRatio: 4 / 5,
+    marginTop: 8,
     backgroundColor: '#EDE9F6',
+  },
+  videoImage: {
+    width: '100%',
+    aspectRatio: 9 / 16,
+    marginTop: 8,
+    backgroundColor: '#14241C',
+  },
+  actionBarWrap: {
+    paddingHorizontal: 12,
   },
   menuBackdrop: {
     flex: 1,
@@ -538,7 +543,7 @@ const styles = StyleSheet.create({
     gap: 6,
     alignSelf: 'flex-start',
     paddingVertical: 6,
-    paddingHorizontal: 2,
+    paddingHorizontal: 12,
     marginTop: 4,
   },
   saveRowText: {
