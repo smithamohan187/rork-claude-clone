@@ -14,7 +14,11 @@ async function addComment(contentType, contentId, profileId, body, parentComment
       throw err;
     }
   }
-  return commentsModel.addComment(contentType, contentId, profileId, body, parentCommentId);
+  const created = await commentsModel.addComment(contentType, contentId, profileId, body, parentCommentId);
+  // INSERT ... RETURNING * only has raw `comments` columns — join the author's profile
+  // so the response matches the shape GET /comments returns (display_name, avatar_url),
+  // otherwise the UI has no name to show until the next full refetch.
+  return commentsModel.getCommentById(created.id);
 }
 
 async function getComments(contentType, contentId, limit, offset, callerProfileId) {

@@ -168,6 +168,13 @@ export function FullScreenFeedViewer({
       onRequestClose={onClose}
       transparent={false}
     >
+      {/* react-native-paper's <Portal> (used by CommentSheet below) renders into the
+          nearest ancestor <Portal.Host>. Without one here it escapes to the app-level
+          global host, which on web is mounted earlier in the DOM than this RN Modal's
+          own content — so the comment sheet would paint BEHIND this full-screen viewer
+          and be invisible/unusable even while technically "open". Nesting a host here
+          keeps the comment sheet's portal inside this Modal's own subtree, on top. */}
+      <Portal.Host>
       <View style={styles.root}>
         <StatusBar barStyle="light-content" />
         <FlatList
@@ -218,6 +225,7 @@ export function FullScreenFeedViewer({
           </Animated.View>
         ) : null}
       </View>
+      </Portal.Host>
     </RNModal>
   );
 }
