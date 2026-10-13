@@ -27,11 +27,18 @@ export function getEmbedVideoUrl(url: string): string | null {
   return null;
 }
 
+// On web, expo-video's VideoView renders a bare <video> tag and passes the `style` prop
+// straight through as CSS with no sizing logic of its own. An absolutely-positioned (or
+// otherwise auto-sized) <video> falls back to its native intrinsic pixel resolution instead
+// of filling its box, so every usage must merge an explicit, non-auto width/height on top of
+// whatever positioning style the caller supplies.
+const FILL_STYLE = { width: '100%' as const, height: '100%' as const };
+
 function InlineVideoPlayer({ uri, style }: { uri: string; style: StyleProp<ViewStyle> }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
   });
-  return <VideoView player={player} style={style} nativeControls contentFit="cover" />;
+  return <VideoView player={player} style={[style, FILL_STYLE]} nativeControls contentFit="cover" />;
 }
 
 // Non-interactive first-frame preview used in feed cards that open a full-screen
@@ -42,7 +49,7 @@ function VideoPreviewFrame({ uri, style }: { uri: string; style: StyleProp<ViewS
     p.muted = true;
     p.pause();
   });
-  return <VideoView player={player} style={style} nativeControls={false} contentFit="cover" pointerEvents="none" />;
+  return <VideoView player={player} style={[style, FILL_STYLE]} nativeControls={false} contentFit="cover" pointerEvents="none" />;
 }
 
 interface PostMediaProps {

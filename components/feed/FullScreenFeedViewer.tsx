@@ -786,7 +786,11 @@ function FullScreenInlineVideo({ uri }: { uri: string }) {
   return (
     <VideoView
       player={player}
-      style={StyleSheet.absoluteFill}
+      // On web, VideoView's underlying <video> tag has no sizing logic of its own — an
+      // absolutely-positioned element with no explicit width/height falls back to its native
+      // intrinsic pixel resolution instead of filling the screen. Merge an explicit fill size
+      // on top of the absolute positioning so it always fills this box (see PostMedia.tsx).
+      style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
       nativeControls
       contentFit="contain"
     />
