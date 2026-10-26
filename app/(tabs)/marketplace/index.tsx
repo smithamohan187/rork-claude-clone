@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import BusinessInviteBanner from '@/components/feed/BusinessInviteBanner';
+import { useSideDrawer } from '@/contexts/SideDrawerContext';
 import { useBusinessDirectory } from '@/hooks/useBusinessDirectory';
 import type { BusinessDirectoryItem, BusinessCategory } from '@/api/services/businessDirectoryService';
 
@@ -198,6 +199,7 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function BusinessDirectoryScreen() {
   const router = useRouter();
+  const { open: openDrawer } = useSideDrawer();
   const searchInputRef = useRef<TextInput>(null);
 
   const {
@@ -238,7 +240,9 @@ export default function BusinessDirectoryScreen() {
         <View style={styles.headerRow}>
           <Building2 size={22} color="#fff" />
           <Text style={styles.headerTitle}>Business Directory</Text>
-          <View style={{ width: 22 }} />
+          <Pressable onPress={openDrawer} hitSlop={8} testID="header-drawer-menu">
+            <MaterialCommunityIcons name="menu" size={22} color="#fff" />
+          </Pressable>
         </View>
 
         {/* Search bar */}

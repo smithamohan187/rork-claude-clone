@@ -30,6 +30,7 @@ import {
   X,
   XCircle,
   Play,
+  Menu,
 } from 'lucide-react-native';
 import {
   useManageContent,
@@ -44,6 +45,7 @@ import { type Event } from '@/api/services/eventsService';
 import { usePosts } from '@/hooks/usePosts';
 import { type Post } from '@/api/services/postsService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSideDrawer } from '@/contexts/SideDrawerContext';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -164,6 +166,7 @@ const EVENT_STATUS_MAP: Record<string, { label: string; color: string; bg: strin
 
 export default function ManageContentScreen() {
   const router = useRouter();
+  const { open: openDrawer } = useSideDrawer();
   const { updateStatus, removeItem } = useManageContent();
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers(offerFilter);
@@ -664,6 +667,13 @@ export default function ManageContentScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={openDrawer}
+          hitSlop={8}
+          testID="header-drawer-menu"
+        >
+          <Menu size={22} color={TEXT_DARK} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage Content</Text>
       </View>
 
@@ -920,6 +930,9 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: '#fff',

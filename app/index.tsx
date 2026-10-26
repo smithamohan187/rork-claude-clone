@@ -738,6 +738,17 @@ export default function OnboardingScreen() {
     }
   }, [activeIndex, activeSlides.length, haptic]);
 
+  const handleBack = useCallback(() => {
+    haptic('light');
+    if (activeIndex > 0) {
+      flatListRef.current?.scrollToIndex({ index: activeIndex - 1, animated: true });
+    } else {
+      setRole(null);
+      setActiveIndex(0);
+      scrollX.setValue(0);
+    }
+  }, [activeIndex, haptic, scrollX]);
+
   const handleSelectRole = useCallback((selected: Role) => {
     haptic('light');
     setActiveIndex(0);
@@ -842,9 +853,19 @@ export default function OnboardingScreen() {
       <>
       <SafeAreaView style={styles.safeArea} edges={['top']} pointerEvents="box-none">
         <View style={styles.topBar}>
-          <View style={styles.logoRow}>
-            <View style={[styles.logoDot, { backgroundColor: '#FFFFFF' }]} />
-            <Text style={[styles.logoText, { color: '#FFFFFF' }]}>TouchPoint</Text>
+          <View style={styles.topBarLeft}>
+            <TouchableOpacity
+              onPress={handleBack}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              testID="onboarding-back-btn"
+              activeOpacity={0.6}
+            >
+              <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.logoRow}>
+              <View style={[styles.logoDot, { backgroundColor: '#FFFFFF' }]} />
+              <Text style={[styles.logoText, { color: '#FFFFFF' }]}>TouchPoint</Text>
+            </View>
           </View>
           {!isReadySlide && (
             <TouchableOpacity
@@ -946,6 +967,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   logoRow: {
     flexDirection: 'row',

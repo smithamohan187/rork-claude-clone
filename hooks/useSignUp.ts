@@ -13,13 +13,6 @@ export interface PostSignupRedirect {
   params: Record<string, string>;
 }
 
-// Populated only when signup was submitted via a customer-invite link — lets the success screen
-// show one combined "joined + welcome points" message instead of a generic one.
-export interface WelcomeInfo {
-  businessName: string;
-  welcomePoints: number;
-}
-
 type StrengthLevel = 0 | 1 | 2 | 3 | 4;
 
 function computeStrength(pw: string): StrengthLevel {
@@ -68,7 +61,6 @@ export function useSignUp() {
   const [authError, setAuthError]             = useState('');
   const [registrationSucceeded, setRegistrationSucceeded] = useState(false);
   const [postSignupRedirect, setPostSignupRedirect] = useState<PostSignupRedirect | null>(null);
-  const [welcomeInfo, setWelcomeInfo] = useState<WelcomeInfo | null>(null);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const strength = useMemo(() => computeStrength(password), [password]);
@@ -187,38 +179,41 @@ export function useSignUp() {
       const data = await signUp(payload);
       await loginWithTokens(data, email.trim().toLowerCase());
 
-      if (pending) {
-        setPostSignupRedirect({
-          pathname: pending.route,
-          params: { [pending.id_param]: pending.content_id, businessId: pending.business_id },
-        });
-        if (!isBusinessInvite) {
-          await clearPendingShareReferral();
-        }
-      }
-
-      // Customer-invite signup: auto-subscribe to the inviting business and credit any configured
-      // welcome points, then show a combined confirmation. Best-effort — a failure here must not
-      // block the (already-successful) registration itself.
+      // Customer-invite / business-QR-scan signup: auto-subscribe to the inviting business and
+      // credit any configured welcome points. Resolved before building postSignupRedirect so the
+      // welcome banner on business-profile (the same `welcomePoints`-param-driven effect used by
+      // useShareDeepLink.ts) fires consistently, instead of this screen showing its own one-off
+      // business-specific message. Best-effort — a failure here must not block the
+      // (already-successful) registration itself.
+      let resolvedWelcomePoints: number | undefined;
       if (isCustomerInvite && pending?.referral_code) {
         try {
           const resolved = await resolvePendingInvite(pending.referral_code);
-          if (resolved.matched && resolved.business) {
-            setWelcomeInfo({ businessName: resolved.business.name, welcomePoints: resolved.welcomePoints });
-          }
+          if (resolved.matched) resolvedWelcomePoints = resolved.welcomePoints;
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignUp] resolvePendingInvite error:', resolveErr);
         }
       }
-
-      // Business-QR-scan signup: same auto-subscribe + welcome-points + combined confirmation as
-      // the customer-invite branch above, just keyed by a raw businessId instead of an invite code.
       if (isBusinessQrScan && pending?.business_id) {
         try {
           const resolved = await scanSubscribeToBusiness(pending.business_id);
-          setWelcomeInfo({ businessName: resolved.business.name, welcomePoints: resolved.welcomePoints });
+          resolvedWelcomePoints = resolved.welcomePoints;
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignUp] scanSubscribeToBusiness error:', resolveErr);
+        }
+      }
+
+      if (pending) {
+        setPostSignupRedirect({
+          pathname: pending.route,
+          params: {
+            [pending.id_param]: pending.content_id,
+            businessId: pending.business_id,
+            ...(resolvedWelcomePoints !== undefined ? { welcomePoints: String(resolvedWelcomePoints) } : {}),
+          },
+        });
+        if (!isBusinessInvite) {
+          await clearPendingShareReferral();
         }
       }
 
@@ -264,7 +259,6 @@ export function useSignUp() {
     // Submission state
     loading, authError, registrationSucceeded,
     postSignupRedirect,
-    welcomeInfo,
 
     // Handlers
     handleRegister,

@@ -37,6 +37,8 @@ import {
   MessageCircle,
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSideDrawer } from '@/contexts/SideDrawerContext';
 import ProfileSwitcherModal from '@/components/ProfileSwitcherModal';
 import SetupChecklist from '@/components/business/SetupChecklist';
 import { format } from 'date-fns';
@@ -209,6 +211,7 @@ function getChipInitials(name: string): string {
 
 export default function BusinessDashboard() {
   const { authUser, activeProfile, profiles } = useAuth();
+  const { open: openDrawer } = useSideDrawer();
   const router = useRouter();
   const { summary, loading: statsLoading, refresh: refreshStats, businessId } = useBusinessDashboard();
   const activity = useRecentActivity();
@@ -303,6 +306,15 @@ export default function BusinessDashboard() {
         <View style={styles.headerWrap}>
           <SafeAreaView edges={['top']} style={styles.safeHeader}>
             <View style={styles.switcherRow}>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={openDrawer}
+                activeOpacity={0.7}
+                testID="header-drawer-menu"
+              >
+                <MaterialCommunityIcons name="menu" size={22} color="#fff" />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.profileChip}
                 onPress={() => setSwitcherVisible(true)}
@@ -598,6 +610,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
+  },
+  menuBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   switcherRow: {
     flexDirection: 'row',

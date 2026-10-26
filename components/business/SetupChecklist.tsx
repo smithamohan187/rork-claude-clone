@@ -17,6 +17,7 @@ interface ChecklistItem {
   done: boolean;
   route: string;
   params?: Record<string, string>;
+  optional?: boolean;
 }
 
 interface SetupChecklistProps {
@@ -56,7 +57,7 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
       { id: 'profile', label: 'Complete your profile', done: !!summary?.onboarding_complete, route: '/business-complete-profile' },
       // "Prizes", not "Tiers" — reward tiers are a global, admin-set concept (not something a
       // business owner configures here); this step is specifically about the rewards catalog.
-      { id: 'rewards', label: 'Add rewards & prizes', done: !!summary?.has_rewards, route: '/reward-configuration' },
+      { id: 'rewards', label: 'Add rewards & prizes', done: !!summary?.has_rewards, route: '/reward-configuration', optional: true },
       { id: 'trial', label: 'Start your Stripe trial', done: trialStarted, route: '/business-start-trial' },
       { id: 'post', label: 'Add a post', done: (summary?.post_count ?? 0) > 0, route: '/create-post' },
       {
@@ -66,8 +67,9 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
     ];
   }, [summary, businessId, businessName]);
 
-  const doneCount = items.filter(i => i.done).length;
-  const allDone = doneCount === items.length;
+  const requiredItems = useMemo(() => items.filter(i => !i.optional), [items]);
+  const doneCount = requiredItems.filter(i => i.done).length;
+  const allDone = doneCount === requiredItems.length;
 
   if (allDone) return null; // fades away once fully set up — nothing left to nudge the owner about
 
@@ -75,14 +77,14 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
     <View style={styles.card} testID="setup-checklist">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Finish setting up your business</Text>
-        <Text style={styles.count}>{doneCount} of {items.length}</Text>
+        <Text style={styles.count}>{doneCount} of {requiredItems.length}</Text>
       </View>
       {/* react-native-paper's ProgressBar sets its outer wrapper to height:'100%' on web
           (only the `style` prop reaches an inner track view) — inside a plain flex column
           that stretches to fill all remaining space unless a fixed-height ancestor bounds it. */}
       <View style={styles.progressBarWrapper}>
         <ProgressBar
-          progress={doneCount / items.length}
+          progress={doneCount / requiredItems.length}
           color={Colors.primary}
           style={styles.progressBar}
         />
@@ -107,7 +109,10 @@ export default function SetupChecklist({ summary, businessId, businessName }: Se
                   <Circle size={10} color={Colors.textTertiary} />
                 )}
               </View>
-              <Text style={[styles.rowLabel, item.done && styles.rowLabelDone, isLocked && styles.rowLabelLocked]}>{item.label}</Text>
+              <Text style={[styles.rowLabel, item.done && styles.rowLabelDone, isLocked && styles.rowLabelLocked]}>
+                {item.label}
+                {item.optional ? <Text style={styles.optionalTag}> (Optional)</Text> : null}
+              </Text>
               {!item.done && !isLocked && <ChevronRight size={16} color={Colors.textTertiary} />}
             </TouchableOpacity>
           );
@@ -168,6 +173,7 @@ const styles = StyleSheet.create({
   rowLabel: { flex: 1, fontSize: 13.5, fontWeight: '500' as const, color: Colors.text },
   rowLabelDone: { color: Colors.textTertiary },
   rowLabelLocked: { color: Colors.textTertiary },
+  optionalTag: { fontSize: 11.5, fontWeight: '500' as const, color: Colors.textTertiary },
   lockNote: {
     fontSize: 11.5,
     color: Colors.textTertiary,

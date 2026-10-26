@@ -6,14 +6,6 @@ import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shar
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
 import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
-// Populated only when login was reached via a customer-invite link — lets the screen show one
-// combined "joined + welcome points" message instead of navigating straight to the feed.
-export interface WelcomeInfo {
-  businessId: string;
-  businessName: string;
-  welcomePoints: number;
-}
-
 function isValidEmail(val: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
 }
@@ -39,7 +31,6 @@ export function useSignIn() {
   const [submitted, setSubmitted]   = useState(false);
   const [loading, setLoading]       = useState(false);
   const [authError, setAuthError]   = useState('');
-  const [welcomeInfo, setWelcomeInfo] = useState<WelcomeInfo | null>(null);
 
   const mode: InputMode = useMemo(() => detectMode(identifier), [identifier]);
 
@@ -82,21 +73,22 @@ export function useSignIn() {
       const data = await signIn(payload);
       await loginWithTokens(data, mode === 'email' ? identifier.trim().toLowerCase() : undefined);
 
-      // If this login was reached via a customer-invite link, auto-subscribe to the inviting
-      // business and credit any configured welcome points, then show a combined confirmation
-      // instead of navigating straight to the feed. Best-effort — a failure here must not block
-      // the (already-successful) login itself.
+      // If this login was reached via a customer-invite link (or a business-QR scan), auto-subscribe
+      // to the inviting business and credit any configured welcome points, then land directly on
+      // business-profile with `welcomePoints` so its existing welcome-banner effect fires — the same
+      // mechanism useShareDeepLink.ts uses for an already-authenticated tap — instead of this screen
+      // showing its own one-off business-specific message. Best-effort — a failure here must not
+      // block the (already-successful) login itself.
       const pending = await getPendingShareReferral();
       if (pending?.content_type === 'business') {
         try {
           const resolved = await resolvePendingInvite(pending.referral_code);
           if (resolved.matched && resolved.business) {
-            setWelcomeInfo({
-              businessId: resolved.business.id,
-              businessName: resolved.business.name,
-              welcomePoints: resolved.welcomePoints,
-            });
             await clearPendingShareReferral();
+            router.replace({
+              pathname: '/business-profile/[id]' as never,
+              params: { id: resolved.business.id, welcomePoints: String(resolved.welcomePoints) } as never,
+            });
             return;
           }
         } catch (resolveErr) {
@@ -109,12 +101,11 @@ export function useSignIn() {
       if (pending?.content_type === 'business_qr' && pending.business_id) {
         try {
           const resolved = await scanSubscribeToBusiness(pending.business_id);
-          setWelcomeInfo({
-            businessId: resolved.business.id,
-            businessName: resolved.business.name,
-            welcomePoints: resolved.welcomePoints,
-          });
           await clearPendingShareReferral();
+          router.replace({
+            pathname: '/business-profile/[id]' as never,
+            params: { id: resolved.business.id, welcomePoints: String(resolved.welcomePoints) } as never,
+          });
           return;
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignIn] scanSubscribeToBusiness error:', resolveErr);
@@ -141,7 +132,6 @@ export function useSignIn() {
     passwordError,
     loading,
     authError,
-    welcomeInfo,
     handleLogin,
   };
 }

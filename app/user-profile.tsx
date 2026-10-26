@@ -37,11 +37,13 @@ import {
   HandHeart,
   ArrowUpCircle,
   X as XIcon,
+  Menu,
 } from 'lucide-react-native';
 import { Modal as RNModal } from 'react-native';
 import { Snackbar } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSideDrawer } from '@/contexts/SideDrawerContext';
 import { useGlobalRewardTier } from '@/hooks/useGlobalRewardTier';
 import { useMemberSince } from '@/hooks/useMemberSince';
 import { useProfileStats } from '@/hooks/useProfileStats';
@@ -61,7 +63,15 @@ const PURPLE_MUTED = '#E8F5EE';
 
 export default function UserProfileScreen() {
   const router = useRouter();
-  const canGoBack = ((): boolean => {
+  const pathname = usePathname();
+  const { open: openDrawer } = useSideDrawer();
+  // This same component renders both as the Profile tab root (`/(tabs)/profile`) and as a
+  // pushed standalone screen (`/user-profile`, e.g. from a business profile's "View Profile"
+  // link). router.canGoBack() alone isn't a reliable signal here — on web especially, it's
+  // true as soon as there's any browser history at all, even when this is the tab root reached
+  // by a plain tab switch — so gate the back arrow on actually being the pushed route too.
+  const isPushedRoute = pathname === '/user-profile';
+  const canGoBack = isPushedRoute && ((): boolean => {
     try {
       return typeof router.canGoBack === 'function' ? router.canGoBack() : false;
     } catch (e) {
@@ -143,7 +153,14 @@ export default function UserProfileScreen() {
               <ArrowLeft size={22} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <View style={styles.backBtn} />
+            <TouchableOpacity
+              onPress={openDrawer}
+              style={styles.backBtn}
+              activeOpacity={0.7}
+              testID="header-drawer-menu"
+            >
+              <Menu size={22} color="#fff" />
+            </TouchableOpacity>
           )}
           <Text style={styles.navTitle}>My Profile</Text>
           <View style={styles.backBtn} />
