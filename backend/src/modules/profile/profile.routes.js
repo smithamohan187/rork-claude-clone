@@ -17,7 +17,14 @@ const avatarStorage = multer.diskStorage({
   filename:    (_req, _file, cb) => cb(null, `${Date.now()}-avatar.jpg`),
 });
 const avatarUpload = multer({ storage: avatarStorage });*/
-const avatarUpload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    cb(null, ALLOWED_AVATAR_MIME_TYPES.includes(file.mimetype));
+  },
+});
 
 const router = Router();
 

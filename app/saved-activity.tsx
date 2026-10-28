@@ -375,6 +375,62 @@ interface FavouritesTabProps {
   onExplore: () => void;
 }
 
+// A plain inline renderItem can't call useState (hook order breaks as the list changes) —
+// this owns its own logo-load-failure state per row instead.
+const FavouriteRow = React.memo(function FavouriteRow({
+  item,
+  onRemove,
+  onView,
+}: {
+  item: SavedBusinessItem;
+  onRemove: (id: string) => void;
+  onView: (id: string) => void;
+}) {
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
+  const meta = [item.category_name, item.city].filter(Boolean).join(' · ');
+  return (
+    <View style={styles.card} testID={`fav-${item.id}`}>
+      <View style={styles.row}>
+        {item.logo_url && !logoFailed ? (
+          <Image
+            source={{ uri: item.logo_url }}
+            style={styles.logoSquare}
+            contentFit="cover"
+            onError={() => setLogoFailed(true)}
+          />
+        ) : (
+          <View style={[styles.logoSquare, { backgroundColor: '#1A5C35' }]}>
+            <Text style={styles.logoInitials}>{getInitials(item.name)}</Text>
+          </View>
+        )}
+        <View style={styles.rowCenter}>
+          <Text style={styles.bizName} numberOfLines={1}>{item.name}</Text>
+          {!!meta && <Text style={styles.muted}>{meta}</Text>}
+          {item.avg_rating != null && (
+            <Text style={styles.muted}>★ {Number(item.avg_rating).toFixed(1)}</Text>
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => onRemove(item.id)}
+          hitSlop={10}
+          testID={`remove-fav-${item.id}`}
+        >
+          <Heart size={20} color="#E24B4A" fill="#E24B4A" />
+        </TouchableOpacity>
+      </View>
+      <Divider style={styles.innerDivider} />
+      <View style={styles.rowBetween}>
+        <Text style={styles.smallMuted}>
+          {formatSubscriberCount(item.subscriber_count)} subscribers
+        </Text>
+        <TouchableOpacity onPress={() => onView(item.id)}>
+          <Text style={styles.viewLink}>View Business →</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
 function FavouritesTab({ items, onRemove, onView, onExplore }: FavouritesTabProps) {
   if (items.length === 0) {
     return (
@@ -393,49 +449,7 @@ function FavouritesTab({ items, onRemove, onView, onExplore }: FavouritesTabProp
       data={items}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
-      renderItem={({ item }) => {
-        const meta = [item.category_name, item.city].filter(Boolean).join(' · ');
-        return (
-          <View style={styles.card} testID={`fav-${item.id}`}>
-            <View style={styles.row}>
-              {item.logo_url ? (
-                <Image
-                  source={{ uri: item.logo_url }}
-                  style={styles.logoSquare}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[styles.logoSquare, { backgroundColor: '#1A5C35' }]}>
-                  <Text style={styles.logoInitials}>{getInitials(item.name)}</Text>
-                </View>
-              )}
-              <View style={styles.rowCenter}>
-                <Text style={styles.bizName} numberOfLines={1}>{item.name}</Text>
-                {!!meta && <Text style={styles.muted}>{meta}</Text>}
-                {item.avg_rating != null && (
-                  <Text style={styles.muted}>★ {Number(item.avg_rating).toFixed(1)}</Text>
-                )}
-              </View>
-              <TouchableOpacity
-                onPress={() => onRemove(item.id)}
-                hitSlop={10}
-                testID={`remove-fav-${item.id}`}
-              >
-                <Heart size={20} color="#E24B4A" fill="#E24B4A" />
-              </TouchableOpacity>
-            </View>
-            <Divider style={styles.innerDivider} />
-            <View style={styles.rowBetween}>
-              <Text style={styles.smallMuted}>
-                {formatSubscriberCount(item.subscriber_count)} subscribers
-              </Text>
-              <TouchableOpacity onPress={() => onView(item.id)}>
-                <Text style={styles.viewLink}>View Business →</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-      }}
+      renderItem={({ item }) => <FavouriteRow item={item} onRemove={onRemove} onView={onView} />}
     />
   );
 }

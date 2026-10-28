@@ -859,8 +859,9 @@ export default function OnboardingScreen() {
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               testID="onboarding-back-btn"
               activeOpacity={0.6}
+              style={styles.backBtnCircle}
             >
-              <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+              <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.logoRow}>
               <View style={[styles.logoDot, { backgroundColor: '#FFFFFF' }]} />
@@ -972,6 +973,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  backBtnCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   logoRow: {
     flexDirection: 'row',

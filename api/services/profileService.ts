@@ -30,6 +30,7 @@ export interface ProfileData {
 export interface UpdateProfilePayload {
   display_name?: string;
   phone?: string;
+  bio?: string;
   city?: string;
   state?: string;
   country?: string;

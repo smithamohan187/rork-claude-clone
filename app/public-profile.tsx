@@ -71,6 +71,11 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState<PublicProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState<boolean>(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  // Tracks which mutual-business logo URLs 404'd (e.g. pre-GCS-migration legacy paths — see
+  // .claude/modules/image-handling.md), so they fall back to the initials chip instead of a
+  // broken image. A Set keyed by business id since these render inside a .map(), not their own
+  // component, so per-row useState isn't an option.
+  const [failedMutualLogoIds, setFailedMutualLogoIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
@@ -262,6 +267,7 @@ export default function PublicProfileScreen() {
             >
               {mutualBusinesses.map((biz) => {
                 const logoUrl = resolveAvatarUrl(biz.logo_url);
+                const logoFailed = failedMutualLogoIds.has(biz.id);
                 return (
                   <TouchableOpacity
                     key={biz.id}
@@ -269,8 +275,12 @@ export default function PublicProfileScreen() {
                     onPress={() => navToBusiness(biz.id)}
                     testID={`mutual-${biz.id}`}
                   >
-                    {logoUrl ? (
-                      <Image source={{ uri: logoUrl }} style={styles.mutualLogo} />
+                    {logoUrl && !logoFailed ? (
+                      <Image
+                        source={{ uri: logoUrl }}
+                        style={styles.mutualLogo}
+                        onError={() => setFailedMutualLogoIds((prev) => new Set(prev).add(biz.id))}
+                      />
                     ) : (
                       <View style={[styles.mutualLogo, { backgroundColor: colorForId(biz.id) }]}>
                         <Text style={styles.mutualLogoText}>{initials(biz.name)}</Text>

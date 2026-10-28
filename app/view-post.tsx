@@ -62,6 +62,7 @@ export default function ViewPostScreen() {
 
   const [post, setPost] = useState<Post | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
+  const [bizLogoFailed, setBizLogoFailed] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -188,8 +189,12 @@ export default function ViewPostScreen() {
         {business ? (
           <Surface style={styles.bizStrip} elevation={1}>
             <View style={styles.bizLogoWrap}>
-              {business.logo_url ? (
-                <Image source={{ uri: business.logo_url }} style={styles.bizLogo} />
+              {business.logo_url && !bizLogoFailed ? (
+                <Image
+                  source={{ uri: business.logo_url }}
+                  style={styles.bizLogo}
+                  onError={() => setBizLogoFailed(true)}
+                />
               ) : (
                 <View style={[styles.bizLogo, styles.bizLogoFallback]}>
                   <Text style={styles.bizLogoLetter}>

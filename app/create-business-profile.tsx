@@ -91,7 +91,7 @@ const FEATURE_SLIDES = [
   },
 ];
 
-type CreationMethod = 'none' | 'manual';
+type CreationMethod = 'none' | 'manual' | 'simple';
 
 export default function CreateBusinessProfileScreen() {
   const router = useRouter();
@@ -111,6 +111,9 @@ export default function CreateBusinessProfileScreen() {
     loading,
     apiError,
     setApiError,
+    businessId,
+    prefillLoading,
+    submitSimple,
     // Step 1
     businessName, setBusinessName,
     businessType, setBusinessType,
@@ -218,12 +221,31 @@ export default function CreateBusinessProfileScreen() {
   }, [currentStep, animateTransition, hookGoBack, animateProgress, methodFadeAnim]);
 
   const handleSelectManual = useCallback(() => {
+    // An existing business owner (edit/resume) still gets the full wizard; a customer with no
+    // business yet gets the short name+category form instead — see submitSimple in
+    // useCreateBusiness.ts.
+    const target: CreationMethod = businessId ? 'manual' : 'simple';
     Animated.timing(methodFadeAnim, {
       toValue: 0,
       duration: 120,
       useNativeDriver: true,
     }).start(() => {
-      setCreationMethod('manual');
+      setCreationMethod(target);
+      Animated.timing(methodFadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [methodFadeAnim, businessId]);
+
+  const handleSimpleBack = useCallback(() => {
+    Animated.timing(methodFadeAnim, {
+      toValue: 0,
+      duration: 120,
+      useNativeDriver: true,
+    }).start(() => {
+      setCreationMethod('none');
       Animated.timing(methodFadeAnim, {
         toValue: 1,
         duration: 200,
@@ -841,6 +863,132 @@ export default function CreateBusinessProfileScreen() {
     }
   };
 
+  // Wait for the prefill fetch to settle before deciding whether this is a fresh create (no
+  // businessId yet — show the simplified form) or an edit/resume (businessId found — full
+  // wizard). Without this, a returning business owner would briefly see the fresh-create UI.
+  if (prefillLoading) {
+    return (
+      <View style={[styles.container, styles.prefillLoadingWrap]}>
+        <ActivityIndicator size="large" color={Colors.navyDark} />
+      </View>
+    );
+  }
+
+  if (creationMethod === 'simple') {
+    const selectedCategory = businessCategories.find(c => c.id === categoryId);
+    return (
+      <View style={styles.container}>
+        <SafeAreaView edges={['top']} style={styles.safeTop}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleSimpleBack} style={styles.headerBtn} activeOpacity={0.7}>
+              <ArrowLeft size={22} color={Colors.bannerText} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Create Business Profile</Text>
+            <View style={styles.headerBtn} />
+          </View>
+        </SafeAreaView>
+
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={100}>
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+              <View style={styles.stepHeader}>
+                <Building2 size={28} color={Colors.navyDark} />
+                <Text style={styles.stepTitle}>Let's get you started</Text>
+                <Text style={styles.stepSubtitle}>Just the basics for now — you can finish the rest from your dashboard</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <View style={styles.inputLabelRow}>
+                  <Store size={16} color={errors.businessName ? Colors.error : Colors.navyLight} />
+                  <Text style={[styles.inputLabel, !!errors.businessName && styles.inputLabelError]}>Business Name *</Text>
+                </View>
+                <TextInput
+                  style={[styles.textInput, !!errors.businessName && styles.textInputError]}
+                  value={businessName}
+                  onChangeText={setBusinessName}
+                  placeholder="e.g. Rivera Coffee Co."
+                  placeholderTextColor={Colors.textTertiary}
+                  autoCapitalize="words"
+                />
+                {!!errors.businessName && <Text style={styles.errorText}>{errors.businessName}</Text>}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <View style={styles.inputLabelRow}>
+                  <Tag size={16} color={errors.categoryId ? Colors.error : Colors.navyLight} />
+                  <Text style={[styles.inputLabel, !!errors.categoryId && styles.inputLabelError]}>Category *</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.categorySelector, !!errors.categoryId && styles.textInputError]}
+                  onPress={() => setShowCategoryPicker(v => !v)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.categorySelectorText, !selectedCategory && styles.categorySelectorPlaceholder]}>
+                    {selectedCategory ? selectedCategory.name : 'Select a category'}
+                  </Text>
+                  <ChevronRight size={18} color={Colors.textTertiary} style={{ transform: [{ rotate: showCategoryPicker ? '90deg' : '0deg' }] }} />
+                </TouchableOpacity>
+                {!!errors.categoryId && <Text style={styles.errorText}>{errors.categoryId}</Text>}
+              </View>
+
+              {showCategoryPicker && (
+                <View style={styles.categoryList}>
+                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
+                    {businessCategories.map((cat) => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[styles.categoryItem, categoryId === cat.id && styles.categoryItemSelected]}
+                        onPress={() => { setCategoryId(cat.id); setShowCategoryPicker(false); }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.categoryItemText, categoryId === cat.id && styles.categoryItemTextSelected]}>{cat.name}</Text>
+                        {categoryId === cat.id && <Check size={16} color={Colors.navyDark} />}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {!!apiError && (
+                <View style={styles.apiErrorBanner}>
+                  <Text style={styles.apiErrorText}>{apiError}</Text>
+                  <TouchableOpacity onPress={() => setApiError(null)}>
+                    <X size={16} color={Colors.error} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.nextBtn, { flex: 1 }, loading && { opacity: 0.7 }]}
+              onPress={submitSimple}
+              activeOpacity={0.8}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.nextBtnText}>Create Business</Text>
+                  <Check size={18} color="#fff" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   if (creationMethod === 'none') {
     return (
       <View style={styles.container}>
@@ -999,6 +1147,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  prefillLoadingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   methodSelectionWrap: {
     paddingTop: 8,

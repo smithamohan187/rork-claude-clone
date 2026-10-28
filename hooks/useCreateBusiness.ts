@@ -90,6 +90,9 @@ export function useCreateBusiness() {
 
   // Existing business id — set on mount if user already has one
   const [businessId, setBusinessId] = useState<string | null>(null);
+  // True until the prefill fetch below settles — businessId stays null in the meantime even for
+  // a returning business owner, so consumers must wait on this before branching create-vs-edit UI.
+  const [prefillLoading, setPrefillLoading] = useState(true);
 
   // Auto-carried from a business-invite deep link (see useShareDeepLink/useSignUp) — read on mount,
   // submitted with registration, cleared only once registration actually succeeds.
@@ -154,7 +157,8 @@ export function useCreateBusiness() {
   // doesn't fire on a cold page load before the access token is back in memory (would 401
   // and silently leave the form blank instead of showing the existing business).
   useEffect(() => {
-    if (authLoading || !isAuthenticated) return;
+    if (authLoading) return;
+    if (!isAuthenticated) { setPrefillLoading(false); return; }
     fetchMyBusiness()
       .then(async (biz) => {
         if (!biz) return;
@@ -204,7 +208,8 @@ export function useCreateBusiness() {
           }
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPrefillLoading(false));
   }, [authLoading, isAuthenticated]);
 
   const clearFieldError = useCallback((field: string) => {
@@ -426,6 +431,37 @@ export function useCreateBusiness() {
     validateStep, plans, selectedPlanId, checkout, finishAndNavigate, isPlanLocked,
   ]);
 
+  // Simplified creation path for a logged-in customer with no business yet — collects only
+  // name + category (business_type defaults to 'goodwill', same as the minimal onboarding
+  // signup form). Deliberately skips logo/cover upload, completeOnboarding, and plan selection —
+  // the resulting business lands in the same state a minimal-signup business would, which the
+  // dashboard's "Complete Profile" checklist (useCompleteBusinessProfile.ts) already handles.
+  const submitSimple = useCallback(async () => {
+    const errs: Record<string, string> = {};
+    if (!businessName.trim()) errs.businessName = 'Business name is required';
+    if (!categoryId) errs.categoryId = 'Category is required';
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setLoading(true);
+    setApiError(null);
+    try {
+      const business = await registerBusiness({
+        business_name: businessName.trim(),
+        category_id: categoryId,
+        business_type: 'goodwill',
+        inhouse_referral: false,
+      });
+      setBusinessId(business.id);
+      await finishAndNavigate('Business created successfully!');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong';
+      setApiError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [businessName, categoryId, finishAndNavigate]);
+
   return {
     currentStep,
     errors,
@@ -433,6 +469,7 @@ export function useCreateBusiness() {
     apiError,
     setApiError,
     businessId,
+    prefillLoading,
     // Step 1
     businessName, setBusinessName: (v: string) => { setBusinessName(v); clearFieldError('businessName'); },
     businessType, setBusinessType: (v: BusinessType) => { setBusinessType(v); clearFieldError('businessType'); },
@@ -459,6 +496,6 @@ export function useCreateBusiness() {
     // Categories
     businessCategories,
     // Navigation
-    goNext, goBack, submit, finishAndNavigate,
+    goNext, goBack, submit, submitSimple, finishAndNavigate,
   };
 }

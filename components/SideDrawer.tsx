@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Portal } from 'react-native-paper';
 import {
   X,
   ChevronRight,
@@ -116,7 +117,7 @@ function MenuRow({
 const SideDrawer = React.memo(function SideDrawer() {
   const router = useRouter();
   const { isOpen, close } = useSideDrawer();
-  const { authUser, profiles, accountType, switchAccount } = useAuth();
+  const { authUser, profiles, accountType, switchAccount, logout } = useAuth();
 
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -209,9 +210,11 @@ const SideDrawer = React.memo(function SideDrawer() {
   const handleLogout = useCallback(() => {
     close();
     setTimeout(() => {
-      router.replace('/(auth)/sign-in' as never);
+      logout().finally(() => {
+        router.replace('/(auth)/sign-in' as never);
+      });
     }, 180);
-  }, [close, router]);
+  }, [close, router, logout]);
 
   if (!isOpen && (translateX as unknown as { _value: number })._value <= -DRAWER_WIDTH + 1) {
     // optimization: don't render if fully closed (but allow during animation)
@@ -224,6 +227,7 @@ const SideDrawer = React.memo(function SideDrawer() {
   const isBusinessActive = accountType === 'business';
 
   return (
+    <Portal>
     <View
       style={[styles.root, { pointerEvents: isOpen ? 'auto' : 'none' }]}
       testID="side-drawer-root"
@@ -354,6 +358,7 @@ const SideDrawer = React.memo(function SideDrawer() {
         </SafeAreaView>
       </Animated.View>
     </View>
+    </Portal>
   );
 });
 

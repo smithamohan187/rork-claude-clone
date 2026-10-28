@@ -3,18 +3,18 @@ const { fetchAllCategories, fetchAllBusinessCategories } = require('./categories
 async function getCategories(req, res) {
   try {
     const categories = await fetchAllCategories();
-    res.status(200).json({ success: true, data: categories });
+    res.status(200).json({ success: true, data: categories, error: null });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Failed to fetch categories' });
+    res.status(500).json({ success: false, data: null, error: 'Failed to fetch categories' });
   }
 }
 
 async function getBusinessCategories(req, res) {
   try {
     const categories = await fetchAllBusinessCategories();
-    res.status(200).json({ success: true, data: categories });
+    res.status(200).json({ success: true, data: categories, error: null });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Failed to fetch business categories' });
+    res.status(500).json({ success: false, data: null, error: 'Failed to fetch business categories' });
   }
 }
 

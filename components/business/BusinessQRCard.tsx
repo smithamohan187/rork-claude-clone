@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,6 +44,7 @@ function BusinessQRCardComponent({
   testID,
 }: BusinessQRCardProps) {
   const qrValue = qrUrl ?? buildBusinessQRUrl(businessId);
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
 
   return (
     <View style={styles.wrap} testID={testID}>
@@ -71,11 +72,20 @@ function BusinessQRCardComponent({
               logoSize={44}
               logoElement={
                 <View style={styles.logoCenterWrap}>
-                  <Image
-                    source={{ uri: businessLogo }}
-                    style={styles.logoCenter}
-                    contentFit="cover"
-                  />
+                  {businessLogo && !logoFailed ? (
+                    <Image
+                      source={{ uri: businessLogo }}
+                      style={styles.logoCenter}
+                      contentFit="cover"
+                      onError={() => setLogoFailed(true)}
+                    />
+                  ) : (
+                    <View style={[styles.logoCenter, styles.logoCenterFallback]}>
+                      <Text style={styles.logoCenterInitial}>
+                        {businessName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               }
             />
@@ -197,6 +207,16 @@ const styles = StyleSheet.create({
   logoCenter: {
     width: '100%',
     height: '100%',
+  },
+  logoCenterFallback: {
+    backgroundColor: INDIGO,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoCenterInitial: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800' as const,
   },
   dashedDivider: {
     width: '90%',

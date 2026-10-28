@@ -15,7 +15,7 @@ import {
 
 export function useEditProfile() {
 
-  const { isAuthenticated, authLoading, authUser, updateAuthUser, accessToken } = useAuth();
+  const { isAuthenticated, authLoading, authUser, updateAuthUser, refreshProfiles, accessToken } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -28,6 +28,7 @@ export function useEditProfile() {
 
   const [fullName, setFullName]       = useState('');
   const [phone, setPhone]             = useState('');
+  const [bio, setBio]                 = useState('');
   const [country, setCountry]         = useState('');
   const [countryCode, setCountryCode] = useState('');
   const [state, setState]             = useState('');
@@ -67,6 +68,7 @@ export function useEditProfile() {
         ]);
         setFullName(profile.display_name ?? '');
         setPhone(profile.phone ?? '');
+        setBio(profile.bio ?? '');
         setAvatarUri(resolveAvatarUrl(profile.avatar_url) ?? authUser?.avatar ?? null);
         setCountry(profile.country ?? '');
         setState(profile.state ?? '');
@@ -169,6 +171,18 @@ export function useEditProfile() {
     });
     if (picked.canceled || !picked.assets?.[0]) return;
     const asset = picked.assets[0];
+
+    const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5MB
+    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+    if (asset.fileSize != null && asset.fileSize > MAX_AVATAR_BYTES) {
+      setError('Image is too large. Please choose a file under 5MB.');
+      return;
+    }
+    if (asset.mimeType && !ALLOWED_MIME_TYPES.includes(asset.mimeType)) {
+      setError('Unsupported file type. Please choose a JPG, PNG, or WebP image.');
+      return;
+    }
+
     const dataUri = `data:image/jpeg;base64,${asset.base64}`;
     setPendingAvatarBase64(dataUri);
     setPendingAvatarFileUri(asset.uri);
@@ -176,6 +190,10 @@ export function useEditProfile() {
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (!fullName.trim()) {
+      setError('Name is required');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -202,6 +220,7 @@ export function useEditProfile() {
       await updateMyProfile({
         display_name:  fullName.trim() || undefined,
         phone:         phone.trim() || undefined,
+        bio:           bio.trim(),
         city:          city.trim() || undefined,
         state:         state.trim() || undefined,
         country:       country.trim() || undefined,
@@ -213,6 +232,10 @@ export function useEditProfile() {
         name:   fullName.trim() || undefined,
         avatar: resolvedAvatarUrl ?? avatarUri ?? undefined,
       });
+      // Also refresh the profiles[] list — the profile switcher pill reads avatarUrl
+      // from there, not from authUser, so without this it stays stuck on stale
+      // initials until the next full session hydration (e.g. a page reload).
+      await refreshProfiles();
 
       setSuccess(true);
     } catch (err: unknown) {
@@ -221,12 +244,13 @@ export function useEditProfile() {
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, city, state, country, selectedInterestIds,
-      pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser]);
+  }, [fullName, phone, bio, city, state, country, selectedInterestIds,
+      pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser, refreshProfiles]);
 
   return {
     fullName,   setFullName,
     phone,      setPhone,
+    bio,        setBio,
     country,    state,  city,
     onCountryChange,  onCountrySelect,  countrySuggestions,
     onStateChange,    onStateSelect,    stateSuggestions,

@@ -17,6 +17,7 @@ import {
   Switch as RNSwitch,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -225,6 +226,11 @@ export default function BusinessProfileScreen() {
   }, [loadRewardConfig, authLoading, isAuthenticated]));
 
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
+  // Stored cover/logo URLs can 404 (pre-GCS-migration legacy paths — see
+  // .claude/modules/image-handling.md) — track load failures so the header degrades to a
+  // gradient/initials fallback instead of a broken image.
+  const [coverFailed, setCoverFailed] = useState<boolean>(false);
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
   const isOwner = useMemo(
     () => !!authUser && !!realBusiness && authUser.id === realBusiness.owner_user_id,
     [authUser, realBusiness],
@@ -516,7 +522,16 @@ export default function BusinessProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.coverWrap}>
-          <Image source={{ uri: business.coverImage + (business.updatedAt ? `?t=${business.updatedAt}` : '') }} style={styles.coverImage} contentFit="cover" />
+          {business.coverImage && !coverFailed ? (
+            <Image
+              source={{ uri: business.coverImage + (business.updatedAt ? `?t=${business.updatedAt}` : '') }}
+              style={styles.coverImage}
+              contentFit="cover"
+              onError={() => setCoverFailed(true)}
+            />
+          ) : (
+            <LinearGradient colors={['#00B246', '#1A5C35']} style={styles.coverImage} />
+          )}
           <View style={styles.coverOverlay} />
           {isEditing && (
             <View style={styles.coverCameraOverlay} pointerEvents="none">
@@ -591,7 +606,20 @@ export default function BusinessProfileScreen() {
 
         <View style={styles.profileHeader}>
           <View style={styles.logoWrap}>
-            <Image source={{ uri: business.logo + (business.updatedAt ? `?t=${business.updatedAt}` : '') }} style={styles.logo} contentFit="cover" />
+            {business.logo && !logoFailed ? (
+              <Image
+                source={{ uri: business.logo + (business.updatedAt ? `?t=${business.updatedAt}` : '') }}
+                style={styles.logo}
+                contentFit="cover"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <View style={[styles.logo, styles.logoFallback]}>
+                <Text style={styles.logoFallbackText}>
+                  {business.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+                </Text>
+              </View>
+            )}
             {isEditing && (
               <View style={styles.logoCameraOverlay} pointerEvents="none">
                 <Camera size={18} color="#fff" />
@@ -1735,6 +1763,9 @@ function PostsTab({
 }) {
   const router = useRouter();
   const [postFilter, setPostFilter] = useState<PostFilter>('all');
+  // Every row shows the same business.logo, so one shared failed-state covers them all —
+  // no need for per-row tracking the way a varying per-item URL would require.
+  const [postAvatarFailed, setPostAvatarFailed] = useState<boolean>(false);
   const { posts, isLoading, toggleDisable: togglePostDisable, deletePost: apiDeletePost } =
     useBusinessPosts(business.id, postFilter);
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
@@ -1839,7 +1870,20 @@ function PostsTab({
             <View key={post.id} style={[styles.postCard, dimmed && styles.offerCardDimmed]} testID={`post-${post.id}`}>
               <View style={styles.postHeaderRow}>
                 <View style={styles.postHeaderLeft}>
-                  <Image source={{ uri: business.logo }} style={styles.postAvatar} contentFit="cover" />
+                  {business.logo && !postAvatarFailed ? (
+                    <Image
+                      source={{ uri: business.logo }}
+                      style={styles.postAvatar}
+                      contentFit="cover"
+                      onError={() => setPostAvatarFailed(true)}
+                    />
+                  ) : (
+                    <View style={[styles.postAvatar, styles.postAvatarFallback]}>
+                      <Text style={styles.postAvatarFallbackText}>
+                        {business.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.postBusinessName} numberOfLines={1}>{business.name}</Text>
                     <Text style={styles.postTimestamp}>{relativeDate(post.created_at)}</Text>
@@ -2933,6 +2977,16 @@ const styles = StyleSheet.create({
   logo: {
     width: '100%',
     height: '100%',
+  },
+  logoFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A5C35',
+  },
+  logoFallbackText: {
+    color: '#fff',
+    fontSize: LOGO_SIZE * 0.35,
+    fontWeight: '800' as const,
   },
   headerInfo: {
     flex: 1,
@@ -4045,6 +4099,16 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: '#F3F4F6',
+  },
+  postAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A5C35',
+  },
+  postAvatarFallbackText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800' as const,
   },
   postBusinessName: {
     fontSize: 14,

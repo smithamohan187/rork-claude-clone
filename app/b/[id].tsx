@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -16,6 +16,7 @@ export default function BusinessQRRedirectScreen() {
   const router = useRouter();
   // Public endpoint — no auth needed, works for a logged-out visitor landing from a scanned QR.
   const { business, loading, error } = useBusinessProfile(id ?? '');
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -78,7 +79,18 @@ export default function BusinessQRRedirectScreen() {
         style={styles.hero}
       >
         <View style={styles.heroLogoWrap}>
-          <Image source={{ uri: business.logo_url ?? undefined }} style={styles.heroLogo} contentFit="cover" />
+          {business.logo_url && !logoFailed ? (
+            <Image
+              source={{ uri: business.logo_url }}
+              style={styles.heroLogo}
+              contentFit="cover"
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <Text style={styles.heroLogoInitials}>
+              {business.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+            </Text>
+          )}
         </View>
         <Text style={styles.heroEyebrow}>SUBSCRIBE ON TOUCHPOINT</Text>
         <Text style={styles.heroName} numberOfLines={2}>{business.name}</Text>
@@ -137,8 +149,11 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.45)',
     marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroLogo: { width: '100%', height: '100%' },
+  heroLogoInitials: { fontSize: 28, fontWeight: '800' as const, color: INDIGO },
   heroEyebrow: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: 11,

@@ -75,6 +75,7 @@ export default function ViewEventScreen() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [bizLogoFailed, setBizLogoFailed] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [snackVisible, setSnackVisible] = useState(false);
@@ -293,8 +294,13 @@ export default function ViewEventScreen() {
 
         {/* ORGANISER STRIP */}
         <View style={styles.organiserStrip}>
-          {business?.logo_url ? (
-            <Image source={{ uri: business.logo_url }} style={styles.logoSquare} resizeMode="cover" />
+          {business?.logo_url && !bizLogoFailed ? (
+            <Image
+              source={{ uri: business.logo_url }}
+              style={styles.logoSquare}
+              resizeMode="cover"
+              onError={() => setBizLogoFailed(true)}
+            />
           ) : (
             <View style={styles.logoSquare}>
               <Text style={styles.logoText}>{bizInitial}</Text>

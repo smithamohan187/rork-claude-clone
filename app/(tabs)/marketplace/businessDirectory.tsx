@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -94,6 +94,7 @@ const BusinessCard = React.memo(function BusinessCard({
   isSubscribed?: boolean;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
@@ -118,10 +119,17 @@ const BusinessCard = React.memo(function BusinessCard({
       >
         {/* Image area with overlay badges */}
         <View style={styles.cardImageWrap}>
-          {item.logo_url ? (
+          {item.logo_url && !logoFailed ? (
             // logo_url is an absolute http:// URL (resolved in the service layer)
-            <Image source={{ uri: item.logo_url }} style={styles.cardImage} contentFit="cover" />
+            <Image
+              source={{ uri: item.logo_url }}
+              style={styles.cardImage}
+              contentFit="cover"
+              onError={() => setLogoFailed(true)}
+            />
           ) : (
+            // No logo uploaded, or the stored URL 404s (pre-GCS-migration legacy path —
+            // see .claude/modules/image-handling.md)
             <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
               <Building2 size={28} color={PURPLE} />
             </View>

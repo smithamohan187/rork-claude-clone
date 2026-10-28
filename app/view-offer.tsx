@@ -143,6 +143,7 @@ export default function ViewOfferScreen() {
 
   const [offer, setOffer] = useState<Offer | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
+  const [bizLogoFailed, setBizLogoFailed] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
   const [showTerms, setShowTerms] = useState<boolean>(false);
@@ -331,8 +332,12 @@ export default function ViewOfferScreen() {
         {business ? (
           <Surface style={styles.bizStrip} elevation={1}>
             <View style={styles.bizLogoWrap}>
-              {business.logo_url ? (
-                <Image source={{ uri: business.logo_url }} style={styles.bizLogo} />
+              {business.logo_url && !bizLogoFailed ? (
+                <Image
+                  source={{ uri: business.logo_url }}
+                  style={styles.bizLogo}
+                  onError={() => setBizLogoFailed(true)}
+                />
               ) : (
                 <View style={[styles.bizLogo, styles.bizLogoFallback]}>
                   <Text style={styles.bizLogoLetter}>
