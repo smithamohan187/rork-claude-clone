@@ -75,13 +75,15 @@ export default function BusinessStartTrialScreen() {
               <Text style={styles.currentCardName}>{subscription.plan_name}</Text>
               {subscription.current_period_end && (
                 <Text style={styles.currentCardMeta}>
-                  Renews {new Date(subscription.current_period_end).toLocaleDateString()}
+                  {subscription.status === 'trial'
+                    ? `You're in your free trial — your card will be charged on ${new Date(subscription.current_period_end).toLocaleDateString()}`
+                    : `Renews ${new Date(subscription.current_period_end).toLocaleDateString()}`}
                 </Text>
               )}
             </View>
-            <View style={[styles.statusBadge, styles.statusBadgeActive]}>
-              <Text style={[styles.statusBadgeText, styles.statusBadgeTextActive]}>
-                {subscription.status}
+            <View style={[styles.statusBadge, subscription.status === 'trial' ? styles.statusBadgeTrial : styles.statusBadgeActive]}>
+              <Text style={[styles.statusBadgeText, subscription.status === 'trial' ? styles.statusBadgeTextTrial : styles.statusBadgeTextActive]}>
+                {subscription.status === 'trial' ? 'Trial' : subscription.status}
               </Text>
             </View>
           </View>
@@ -195,6 +197,9 @@ const styles = StyleSheet.create({
   statusBadgeActive: {
     backgroundColor: Colors.success + '15',
   },
+  statusBadgeTrial: {
+    backgroundColor: Colors.primary + '15',
+  },
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '700' as const,
@@ -202,6 +207,9 @@ const styles = StyleSheet.create({
   },
   statusBadgeTextActive: {
     color: Colors.success,
+  },
+  statusBadgeTextTrial: {
+    color: Colors.primaryDark,
   },
   planCard: {
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 16,

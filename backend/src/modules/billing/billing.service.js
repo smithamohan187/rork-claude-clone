@@ -271,7 +271,7 @@ async function verifySession(userId, sessionId) {
       status: mapStripeStatus(subscription.status),
       stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
       stripeSubscriptionId: subscription.id,
-      currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+      currentPeriodEnd: resolvePeriodEnd(subscription),
     });
     await client.query('COMMIT');
     return { verified: true, subscription: saved };
@@ -307,14 +307,28 @@ async function handleWebhookEvent(event) {
         const businessId = session.metadata?.business_id;
         const planId = session.metadata?.plan_id;
         if (businessId && planId) {
+          // The Checkout Session itself doesn't carry the subscription's real status (trialing
+          // vs active) — look it up so a trial isn't miscorded as a paid-and-active subscription.
+          let status = 'active';
+          let currentPeriodEnd = null;
+          if (session.subscription) {
+            try {
+              const subscription = await stripe.subscriptions.retrieve(session.subscription);
+              status = mapStripeStatus(subscription.status);
+              currentPeriodEnd = resolvePeriodEnd(subscription);
+            } catch (err) {
+              logger.warn('billing.webhook', 'could not retrieve subscription for status, defaulting to active', { eventId: event.id, err: err.message });
+            }
+          }
           await billingModel.upsertBusinessSubscription(client, {
             businessId,
             planId,
-            status: 'active',
+            status,
             stripeCustomerId: session.customer,
             stripeSubscriptionId: session.subscription,
+            currentPeriodEnd,
           });
-          logger.info('billing.webhook', 'checkout.session.completed applied', { businessId, planId });
+          logger.info('billing.webhook', 'checkout.session.completed applied', { businessId, planId, status });
         } else {
           logger.warn('billing.webhook', 'checkout.session.completed missing business_id/plan_id metadata', { eventId: event.id });
         }
@@ -325,7 +339,7 @@ async function handleWebhookEvent(event) {
         const plan = await billingModel.getPlanByStripePriceId(sub.items?.data?.[0]?.price?.id);
         await billingModel.updateSubscriptionStatusByStripeSubscriptionId(client, sub.id, {
           status: mapStripeStatus(sub.status),
-          currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+          currentPeriodEnd: resolvePeriodEnd(sub),
           planId: plan?.id,
         });
         logger.info('billing.webhook', 'customer.subscription.updated applied', { stripeSubscriptionId: sub.id, status: sub.status });
@@ -356,10 +370,22 @@ async function handleWebhookEvent(event) {
 }
 
 function mapStripeStatus(stripeStatus) {
-  if (stripeStatus === 'active' || stripeStatus === 'trialing') return 'active';
+  if (stripeStatus === 'trialing') return 'trial';
+  if (stripeStatus === 'active') return 'active';
   if (stripeStatus === 'canceled' || stripeStatus === 'unpaid') return 'cancelled';
   if (stripeStatus === 'past_due' || stripeStatus === 'incomplete_expired') return 'expired';
   return 'active';
+}
+
+// The date billing.service.js/the frontend should show as "when does this period end / when
+// do you get charged". For a trialing subscription that's trial_end, not current_period_end
+// (current_period_end moved off the top-level Subscription object onto each subscription item
+// in newer Stripe API versions — read both so this keeps working either way).
+function resolvePeriodEnd(subscription) {
+  const unixSeconds = subscription.status === 'trialing'
+    ? subscription.trial_end
+    : (subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end);
+  return unixSeconds ? new Date(unixSeconds * 1000) : null;
 }
 
 async function getPlans() {

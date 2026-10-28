@@ -238,6 +238,7 @@ export function useEditProfile() {
       await refreshProfiles();
 
       setSuccess(true);
+      router.replace('/user-profile' as never);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save profile';
       setError(msg);
@@ -245,7 +246,7 @@ export function useEditProfile() {
       setSaving(false);
     }
   }, [fullName, phone, bio, city, state, country, selectedInterestIds,
-      pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser, refreshProfiles]);
+      pendingAvatarBase64, pendingAvatarFileUri, accessToken, avatarUri, updateAuthUser, refreshProfiles, router]);
 
   return {
     fullName,   setFullName,

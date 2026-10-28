@@ -132,15 +132,15 @@ async function getSubscriberCount(businessId) {
   return rows[0]?.count ?? 0;
 }
 
-// Every business_subscriptions row with a live Stripe subscription — status 'active' covers
-// both Stripe 'active' and 'trialing' (mapStripeStatus maps both to 'active' in this app),
-// so trialing businesses are re-tiered too, same as fully active ones.
+// Every business_subscriptions row with a live Stripe subscription — 'active' and 'trial' are
+// both distinct, live statuses (mapStripeStatus keeps them separate), so trialing businesses
+// are re-tiered too, same as fully active ones.
 async function getBillableSubscriptions() {
   const { rows } = await query(
     `SELECT bs.*, sp.max_subscribers AS current_plan_max_subscribers
      FROM business_subscriptions bs
      JOIN subscription_plans sp ON sp.id = bs.plan_id
-     WHERE bs.status = 'active' AND bs.stripe_subscription_id IS NOT NULL`
+     WHERE bs.status IN ('active', 'trial') AND bs.stripe_subscription_id IS NOT NULL`
   );
   return rows;
 }

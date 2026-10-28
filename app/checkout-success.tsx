@@ -51,7 +51,7 @@ export default function CheckoutSuccessScreen() {
       if (isCancelled()) return;
       try {
         const subscription = await fetchMySubscription();
-        if (subscription?.status === 'active') {
+        if (subscription?.status === 'active' || subscription?.status === 'trial') {
           if (isCancelled()) return;
           showSnackbar('Payment completed — your business is live!');
           await proceedToApp();
