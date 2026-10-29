@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { TextInput as PaperInput, Switch } from 'react-native-paper';
 import {
   X,
@@ -144,9 +144,13 @@ export default function CreatePostScreen() {
   const { authUser, accountType } = useAuth();
 
   // ---- Tab mode (Post / Event / Offer) ----
-  // Default is always 'post' — this screen is also reached from the dashboard
-  // checklist's "Add a post" step and must open straight into the Post tab.
-  const [activeTab, setActiveTab] = useState<TabMode>('post');
+  // Defaults to 'post' — this screen is also reached from the dashboard checklist's
+  // "Add a post" step and must open straight into the Post tab with no params — but
+  // Manage Content's Create Offer/Event buttons pass ?tab= to land on the right tab.
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<TabMode>(
+    (tab === 'event' ? 'event' : tab === 'offer' ? 'offer' : 'post') as TabMode,
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const tabIndicatorAnim = useRef(
     new Animated.Value(activeTab === 'post' ? 0 : activeTab === 'event' ? 1 : 2),
@@ -427,7 +431,7 @@ export default function CreatePostScreen() {
       try {
         const trimmed = content.trim();
         const title = trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-        const post = await createPost({ title, content: trimmed });
+        const post = await createPost({ title, content: trimmed, post_type: selectedType });
         if (selectedImage) {
           await updatePost(post.id, { image_url: selectedImage });
         } else if (pendingVideo) {
@@ -533,7 +537,7 @@ export default function CreatePostScreen() {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create your event. Please try again.');
     }
   }, [
-    activeTab, isFormValid, charCount, content, selectedImage, pendingVideo, successAnim, router,
+    activeTab, isFormValid, charCount, content, selectedType, selectedImage, pendingVideo, successAnim, router,
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,

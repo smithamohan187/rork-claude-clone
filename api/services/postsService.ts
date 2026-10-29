@@ -3,12 +3,15 @@ import { Platform } from 'react-native';
 import { File as ExpoFile } from 'expo-file-system';
 import { resolveImageUrl as resolveUrl } from '@/utils/resolveImageUrl';
 
+export type PostType = 'promotion' | 'announcement' | 'general';
+
 export interface Post {
   id: string;
   type: 'post';
   business_id: string;
   title: string;
   content: string;
+  post_type: PostType;
   image_url: string | null;
   video_url: string | null;
   video_type: 'upload' | 'link' | null;
@@ -24,6 +27,7 @@ export interface Post {
 export interface CreatePostPayload {
   title: string;
   content: string;
+  post_type?: PostType;
 }
 
 const BASE_URL = API_BASE_URL.replace(/\/$/, '');

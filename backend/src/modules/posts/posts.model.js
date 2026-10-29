@@ -14,12 +14,12 @@ async function getBusinessIdByUserId(userId) {
   return rows[0]?.business_id ?? null;
 }
 
-async function insertPost(businessId, { title, content, image_url }) {
+async function insertPost(businessId, { title, content, image_url, post_type }) {
   const { rows } = await query(
-    `INSERT INTO posts (business_id, title, content, image_url)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO posts (business_id, title, content, image_url, post_type)
+     VALUES ($1, $2, $3, $4, COALESCE($5, 'general'))
      RETURNING *`,
-    [businessId, title, content, image_url ?? null]
+    [businessId, title, content, image_url ?? null, post_type ?? null]
   );
   return rows[0];
 }
@@ -75,7 +75,7 @@ async function getPostsByBusinessId(businessId, isActive, profileId) {
   return rows;
 }
 
-async function updatePost(id, { title, content, image_url, video_url, video_type, is_active }, hasImageUrl = false, hasVideoUrl = false) {
+async function updatePost(id, { title, content, image_url, video_url, video_type, is_active, post_type }, hasImageUrl = false, hasVideoUrl = false) {
   const { rows } = await query(
     `UPDATE posts SET
        title      = COALESCE($1, title),
@@ -84,6 +84,7 @@ async function updatePost(id, { title, content, image_url, video_url, video_type
        video_url  = CASE WHEN $7 THEN $8 ELSE video_url END,
        video_type = CASE WHEN $7 THEN $9 ELSE video_type END,
        is_active  = COALESCE($5, is_active),
+       post_type  = COALESCE($10, post_type),
        updated_at = NOW()
      WHERE id = $6
      RETURNING *`,
@@ -97,6 +98,7 @@ async function updatePost(id, { title, content, image_url, video_url, video_type
       hasVideoUrl,
       video_url ?? null,
       video_type ?? null,
+      post_type ?? null,
     ]
   );
   return rows[0] ?? null;

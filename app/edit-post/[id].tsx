@@ -24,8 +24,14 @@ import {
 } from 'react-native-paper';
 import { ArrowLeft, ImagePlus, Link2, Upload, Trash2, Video as VideoIcon } from 'lucide-react-native';
 import { usePost } from '@/hooks/usePosts';
-import { updatePost, uploadPostImage, uploadPostVideo } from '@/api/services/postsService';
+import { updatePost, uploadPostImage, uploadPostVideo, type PostType } from '@/api/services/postsService';
 import { PostMedia } from '@/components/feed/PostMedia';
+
+const POST_TYPE_OPTIONS: { value: PostType; label: string }[] = [
+  { value: 'promotion', label: 'Promotion' },
+  { value: 'announcement', label: 'Announcement' },
+  { value: 'general', label: 'General' },
+];
 
 // A single pending video selection — either a pasted external link or a device file picked
 // but not yet uploaded. Only one may exist at a time, matching create-post.tsx's rule.
@@ -76,7 +82,7 @@ const TEXT_MUTED = '#6B7280';
 const BORDER = '#ECECF1';
 const DANGER = '#ED4956';
 
-type Draft = { title: string; content: string };
+type Draft = { title: string; content: string; post_type: PostType };
 type Errors = { title?: string; content?: string };
 
 export default function EditPostScreen() {
@@ -102,7 +108,7 @@ export default function EditPostScreen() {
 
   useEffect(() => {
     if (original && !draft) {
-      setDraft({ title: original.title, content: original.content });
+      setDraft({ title: original.title, content: original.content, post_type: original.post_type });
       if (original.video_url && original.video_type) {
         setExistingVideo({ url: original.video_url, type: original.video_type });
         setMediaMode('video');
@@ -117,6 +123,7 @@ export default function EditPostScreen() {
     return (
       draft.title !== original.title ||
       draft.content !== original.content ||
+      draft.post_type !== original.post_type ||
       localImageUri !== null ||
       imageRemoved ||
       videoRemoved ||
@@ -278,12 +285,14 @@ export default function EditPostScreen() {
       const payload: {
         title: string;
         content: string;
+        post_type: PostType;
         image_url?: null;
         video_url?: string | null;
         video_type?: 'upload' | 'link' | null;
       } = {
         title: draft.title.trim(),
         content: draft.content.trim(),
+        post_type: draft.post_type,
       };
       if (mediaMode === 'video') {
         if (imageRemoved || localImageUri) payload.image_url = null;
@@ -382,6 +391,21 @@ export default function EditPostScreen() {
               onRemoveVideo={handleRemoveVideo}
             />
           )}
+
+          <View style={styles.typeRow}>
+            {POST_TYPE_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.typeBtn, draft.post_type === opt.value && styles.typeBtnActive]}
+                onPress={() => set('post_type', opt.value)}
+                testID={`edit-post-type-${opt.value}`}
+              >
+                <Text style={[styles.typeBtnText, draft.post_type === opt.value && styles.typeBtnTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <TextInput
             label="Title *"
@@ -619,6 +643,20 @@ const styles = StyleSheet.create({
   mediaModeBtnActive: { backgroundColor: PURPLE, borderColor: PURPLE },
   mediaModeText: { fontSize: 13, fontWeight: '600' as const, color: TEXT_MUTED },
   mediaModeTextActive: { color: '#fff' },
+  typeRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 16 },
+  typeBtn: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: '#fff',
+  },
+  typeBtnActive: { backgroundColor: PURPLE, borderColor: PURPLE },
+  typeBtnText: { fontSize: 13, fontWeight: '600' as const, color: TEXT_MUTED },
+  typeBtnTextActive: { color: '#fff' },
   videoAddWrap: { marginBottom: 16 },
   videoLinkOrText: { textAlign: 'center' as const, color: TEXT_MUTED, fontSize: 12, marginVertical: 8 },
   videoLinkInputRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },

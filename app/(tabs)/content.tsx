@@ -164,6 +164,45 @@ const EVENT_STATUS_MAP: Record<string, { label: string; color: string; bg: strin
   cancelled: { label: 'Cancelled', color: DANGER,     bg: DANGER + '15' },
 };
 
+// Same label/emoji pairs as edit-event/[id].tsx's EVENT_CATEGORIES — duplicated locally
+// rather than shared, matching this file's existing per-screen small-map convention.
+const EVENT_CATEGORIES: Record<string, { label: string; emoji: string }> = {
+  food:      { label: 'Food',      emoji: '🍽️' },
+  fitness:   { label: 'Fitness',   emoji: '💪' },
+  music:     { label: 'Music',     emoji: '🎵' },
+  art:       { label: 'Art',       emoji: '🎨' },
+  community: { label: 'Community', emoji: '🤝' },
+  wellness:  { label: 'Wellness',  emoji: '🧘' },
+  market:    { label: 'Market',    emoji: '🛍️' },
+  nightlife: { label: 'Nightlife', emoji: '🌙' },
+};
+
+// Same labels as edit-offer/[id].tsx's OFFER_TYPES
+const OFFER_TYPE_LABELS: Record<string, string> = {
+  promotion:  'Promotion',
+  discount:   'Discount',
+  flash_sale: 'Flash Sale',
+};
+
+// Same labels as create-post.tsx's POST_TYPE_OPTIONS / edit-post/[id].tsx's POST_TYPE_OPTIONS
+const POST_TYPE_LABELS: Record<string, string> = {
+  promotion:    'Promotion',
+  announcement: 'Announcement',
+  general:      'General',
+};
+
+function discountSummary(discountType: string | null, discountValue: number | null): string | null {
+  if (discountValue == null) return null;
+  const value = Number(discountValue) % 1 === 0 ? Number(discountValue) : Number(discountValue).toFixed(2);
+  switch (discountType) {
+    case 'percent': return `${value}% off`;
+    case 'flat':    return `$${value} off`;
+    case 'bogo':    return 'BOGO';
+    case 'freebie': return 'Free item';
+    default:        return null;
+  }
+}
+
 export default function ManageContentScreen() {
   const router = useRouter();
   const { open: openDrawer } = useSideDrawer();
@@ -412,9 +451,7 @@ export default function ManageContentScreen() {
     if (item.type === 'event') {
       const event = item as unknown as Event;
       const priceLabel = event.is_free ? 'Free' : event.price ? event.price : null;
-      const hotLabel = event.is_hot ? '🔥 Hot' : null;
-      const extras = [hotLabel, priceLabel].filter(Boolean).join(' · ');
-      return `${formatDateTime(event.starts_at)}${extras ? ` · ${extras}` : ''}`;
+      return `${formatDateTime(event.starts_at)}${priceLabel ? ` · ${priceLabel}` : ''}`;
     }
     return `Posted ${relativeTime(item.created_at)}`;
   };
@@ -422,6 +459,39 @@ export default function ManageContentScreen() {
   const renderEventLocation = (item: ContentItem): string | null => {
     if (item.type !== 'event') return null;
     return (item as unknown as Event).location ?? null;
+  };
+
+  // Surfaces the new offer/event fields (tags, hot flag, discount, promo code, category)
+  // as a compact chip row on the listing card — these aren't shown anywhere else on the card.
+  const renderTagChips = (item: ContentItem) => {
+    const chips: string[] = [];
+    if (item.type === 'offer') {
+      const offer = item as unknown as Offer;
+      if (offer.is_hot) chips.push('🔥 Hot');
+      if (offer.offer_type && offer.offer_type !== 'promotion') {
+        chips.push(OFFER_TYPE_LABELS[offer.offer_type] ?? offer.offer_type);
+      }
+      const discount = discountSummary(offer.discount_type, offer.discount_value);
+      if (discount) chips.push(discount);
+      if (offer.promo_code) chips.push(`Code: ${offer.promo_code}`);
+      (offer.tags ?? []).forEach(t => chips.push(t));
+    } else if (item.type === 'event') {
+      const event = item as unknown as Event;
+      const category = EVENT_CATEGORIES[event.category];
+      if (category) chips.push(`${category.emoji} ${category.label}`);
+      if (event.is_hot) chips.push('🔥 Hot');
+      (event.tags ?? []).forEach(t => chips.push(t));
+    }
+    if (chips.length === 0) return null;
+    return (
+      <View style={styles.tagChipRow}>
+        {chips.map((label, i) => (
+          <View key={`${label}-${i}`} style={styles.tagChip}>
+            <Text style={styles.tagChipText}>{label}</Text>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   const renderCard = (item: ContentItem) => {
@@ -460,6 +530,7 @@ export default function ManageContentScreen() {
             {location ? (
               <Text style={styles.cardDesc} numberOfLines={1}>📍 {location}</Text>
             ) : null}
+            {renderTagChips(item)}
             <Text style={styles.cardSubtitle}>{renderSubtitle(item)}</Text>
           </View>
         </TouchableOpacity>
@@ -577,6 +648,13 @@ export default function ManageContentScreen() {
           </View>
           {post.content ? (
             <Text style={styles.cardDesc} numberOfLines={2}>{post.content}</Text>
+          ) : null}
+          {post.post_type && post.post_type !== 'general' ? (
+            <View style={styles.tagChipRow}>
+              <View style={styles.tagChip}>
+                <Text style={styles.tagChipText}>{POST_TYPE_LABELS[post.post_type] ?? post.post_type}</Text>
+              </View>
+            </View>
           ) : null}
           <Text style={styles.cardSubtitle}>Posted {relativeTime(post.created_at)}</Text>
         </View>
@@ -698,7 +776,7 @@ export default function ManageContentScreen() {
       <View style={styles.createBtnWrap}>
         {activeTab === 'offers' && (
           <TouchableOpacity
-            onPress={() => businessUnlocked ? router.push('/create-offer' as any) : showSnackbar(lockMessage)}
+            onPress={() => businessUnlocked ? router.push('/create-post?tab=offer' as any) : showSnackbar(lockMessage)}
             style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-offer-btn"
@@ -709,7 +787,7 @@ export default function ManageContentScreen() {
         )}
         {activeTab === 'events' && (
           <TouchableOpacity
-            onPress={() => businessUnlocked ? router.push('/create-offer?tab=event' as any) : showSnackbar(lockMessage)}
+            onPress={() => businessUnlocked ? router.push('/create-post?tab=event' as any) : showSnackbar(lockMessage)}
             style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-event-btn"
@@ -720,7 +798,7 @@ export default function ManageContentScreen() {
         )}
         {activeTab === 'posts' && (
           <TouchableOpacity
-            onPress={() => businessUnlocked ? router.push('/create-offer?tab=post' as any) : showSnackbar(lockMessage)}
+            onPress={() => businessUnlocked ? router.push('/create-post' as any) : showSnackbar(lockMessage)}
             style={[styles.createOfferLink, !businessUnlocked && styles.createLinkLocked]}
             activeOpacity={0.7}
             testID="create-post-btn"
@@ -1027,6 +1105,23 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 11,
     fontWeight: '700' as const,
+  },
+  tagChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    marginBottom: 4,
+  },
+  tagChip: {
+    backgroundColor: BORDER,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  tagChipText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: TEXT_MUTED,
   },
   cardDesc: {
     fontSize: 13,

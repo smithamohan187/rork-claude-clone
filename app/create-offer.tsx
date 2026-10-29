@@ -67,6 +67,7 @@ const PURPLE_FAINT = '#F7F6FB';
 const PURPLE_DARK = '#1A5C35';
 const PURPLE_GLOW = 'rgba(83,52,183,0.35)';
 const CARD_SHADOW = 'rgba(26,92,53,0.08)';
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // matches the "JPG, PNG up to 10MB" hint shown on both cover-image pickers
 
 type TabMode = 'offer' | 'event' | 'post';
 
@@ -166,6 +167,10 @@ export default function CreateOfferScreen() {
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
+      if (result.assets[0].fileSize && result.assets[0].fileSize > MAX_IMAGE_BYTES) {
+        Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
       const stable = await toDisplayUri(result.assets[0].uri);
       setPickingOfferPhoto(true);
       const media = await uploadMedia(stable);
@@ -276,7 +281,12 @@ export default function CreateOfferScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const stable = await toDisplayUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+          return;
+        }
+        const stable = await toDisplayUri(asset.uri);
         if (activeTab === 'post') setPostImage(stable);
         else setOfferImage(stable);
         if (__DEV__) console.log('[CreateOffer] Image selected:', stable);

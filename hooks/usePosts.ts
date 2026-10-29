@@ -51,8 +51,15 @@ export function usePosts(initialFilter?: 'active' | 'disabled') {
 
   const toggleStatus = useCallback(async (id: string, isActive: boolean): Promise<void> => {
     const updated = await togglePostStatus(id, isActive);
-    setPosts(prev => prev.map(p => p.id === id ? updated : p));
-  }, []);
+    setPosts(prev => {
+      // When viewing a status-filtered list (Active/Disabled), a toggle that moves the post
+      // out of that filter must drop it from the list, not just patch its badge in place —
+      // otherwise a just-disabled post stays visible under the "Active" filter until the next refetch.
+      if (initialFilter === 'active' && !updated.is_active) return prev.filter(p => p.id !== id);
+      if (initialFilter === 'disabled' && updated.is_active) return prev.filter(p => p.id !== id);
+      return prev.map(p => p.id === id ? updated : p);
+    });
+  }, [initialFilter]);
 
   const removePost = useCallback(async (id: string): Promise<void> => {
     await deletePost(id);

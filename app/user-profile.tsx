@@ -287,23 +287,7 @@ export default function UserProfileScreen() {
                 </>
               ) : null)}
               <List.Item
-                title="Business Settings"
-                description="Manage your business profile"
-                left={() => (
-                  <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>
-                    <Briefcase size={18} color={PURPLE} />
-                  </View>
-                )}
-                right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-                onPress={() => router.push('/create-business-profile' as any)}
-                style={styles.listItem}
-                titleStyle={styles.listItemTitle}
-                descriptionStyle={styles.listItemDesc}
-                testID="settings-business"
-              />
-              <Divider style={styles.divider} />
-              <List.Item
-                title="Edit Business Details"
+                title="Edit Business Profile"
                 description="Update your business info in one place"
                 left={() => (
                   <View style={[styles.settingsIcon, { backgroundColor: PURPLE + '12' }]}>

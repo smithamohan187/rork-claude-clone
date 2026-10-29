@@ -58,3 +58,12 @@ touchpoints_backup.sql
 backend/migrations/
 eas.json
 bun.lock
+.playwright-mcp/
+testing
+~$touchpoints_master_test_suite.xlsx
+backend/bms006_raw.json
+touchpoints_test_cases.csv
+touchpoints_test_cases.xlsx
+
+
+       

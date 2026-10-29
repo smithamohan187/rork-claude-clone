@@ -1,3 +1,4 @@
+const multer = require('multer');
 const { fail } = require('../utils/apiResponse');
 const { logger } = require('../utils/logger');
 
@@ -24,6 +25,10 @@ function globalErrorHandler(err, req, res, next) {
   logger.error('globalErrorHandler', err.message, err);
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(fail(err.message));
+  }
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : err.message;
+    return res.status(400).json(fail(message));
   }
   res.status(err.status || 500).json(fail(err.message || 'Internal server error'));
 }
