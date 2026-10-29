@@ -46,7 +46,7 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
   // Only a business with no prior business_subscriptions row at all gets the 30-day trial —
   // a renewal after cancelling has already had its trial (or an active period), so it goes
   // straight to a paid checkout.
-  const session = await stripe.checkout.sessions.create({
+  const sessionParams = {
     mode: 'subscription',
     customer: stripeCustomerId,
     line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
@@ -54,7 +54,26 @@ async function createCheckoutSession(userId, planId, { successUrl, cancelUrl }) 
     cancel_url: cancelUrl,
     metadata: { business_id: business.id, plan_id: plan.id },
     ...(existingSubscription ? {} : { subscription_data: { trial_period_days: 30 } }),
-  });
+  };
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create(sessionParams);
+  } catch (err) {
+    // A stored stripe_customer_id can go stale (deleted in the Stripe dashboard, carried over
+    // from a different Stripe mode/environment, or — as happened here — left behind by a DB
+    // seeding script) — recover by minting a fresh customer and retrying once, rather than
+    // permanently 500ing every future checkout attempt for this business.
+    const isMissingCustomer = err.code === 'resource_missing' && err.param === 'customer';
+    if (!isMissingCustomer) throw err;
+    logger.warn(`Stale Stripe customer ${stripeCustomerId} for business ${business.id} — creating a new one`);
+    const customer = await stripe.customers.create({
+      name: business.name,
+      metadata: { business_id: business.id },
+    });
+    stripeCustomerId = customer.id;
+    session = await stripe.checkout.sessions.create({ ...sessionParams, customer: stripeCustomerId });
+  }
 
   return { url: session.url };
 }

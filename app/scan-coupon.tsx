@@ -68,9 +68,12 @@ function mapResult(result: ScanCouponResult): ResultView {
 
 // Matches the server's actual code shape (coupons.service.js: 6 hex chars + 4-digit segment,
 // e.g. TP-E5BAAD-1758) — a 2-4-4 grouping here would silently produce a string that never
-// matches any real coupon code.
+// matches any real coupon code. A leading "TP" is stripped before regrouping so pasting/typing
+// the full displayed code (e.g. "TP-EE41D6-3261") doesn't get folded into the 6-char segment.
 function formatManual(raw: string): string {
-  const cleaned = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 10);
+  let cleaned = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  if (cleaned.startsWith('TP')) cleaned = cleaned.slice(2);
+  cleaned = cleaned.slice(0, 10);
   if (cleaned.length <= 6) return cleaned;
   return `${cleaned.slice(0, 6)}-${cleaned.slice(6, 10)}`;
 }
@@ -479,7 +482,7 @@ export default function ScanCouponScreen() {
               autoCapitalize="characters"
               autoCorrect={false}
               autoFocus
-              maxLength={12}
+              maxLength={14}
               style={manualStyles.input}
               testID="manual-input"
             />
