@@ -3,7 +3,7 @@ const feedModel = require('./feed.model');
 async function getFeed(userId, category, limit, offset) {
   const profileId = await feedModel.getUserActiveProfileId(userId);
   if (!profileId) {
-    return { mode: 'top_rated', items: await feedModel.getTopRatedBusinesses(10, userId) };
+    return { mode: 'top_rated', items: await feedModel.getTopRatedBusinesses(10, userId, category) };
   }
 
   const items = await feedModel.getSubscribedFeed(profileId, category, limit, offset);
@@ -17,18 +17,18 @@ async function getFeed(userId, category, limit, offset) {
     return { mode: 'feed', items: [] };
   }
 
-  const byCategory = await feedModel.getRecommendedBusinesses(profileId, 10);
+  const byCategory = await feedModel.getRecommendedBusinesses(profileId, 10, category);
   if (byCategory.length > 0) {
     return { mode: 'category_recommendations', items: byCategory };
   }
 
-  const byLocation = await feedModel.getRecommendedByLocation(profileId, 10);
+  const byLocation = await feedModel.getRecommendedByLocation(profileId, 10, category);
   if (byLocation.length > 0) {
     return { mode: 'location_recommendations', items: byLocation };
   }
 
   // Terminal tier — no filter to fail, so no further fallback needed.
-  return { mode: 'top_rated', items: await feedModel.getTopRatedBusinesses(10, userId) };
+  return { mode: 'top_rated', items: await feedModel.getTopRatedBusinesses(10, userId, category) };
 }
 
 module.exports = { getFeed };

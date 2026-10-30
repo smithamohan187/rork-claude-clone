@@ -152,7 +152,7 @@ async function getSubscribedFeed(profileId, category, limit, offset) {
   return rows;
 }
 
-async function getRecommendedBusinesses(profileId, limit) {
+async function getRecommendedBusinesses(profileId, limit, category = null) {
   const { rows } = await query(
     `SELECT
        b.id,
@@ -184,14 +184,15 @@ async function getRecommendedBusinesses(profileId, limit) {
      )
      AND b.is_active = true
      AND EXISTS (SELECT 1 FROM business_subscriptions bs WHERE bs.business_id = b.id AND bs.status IN ('active', 'trial'))
+     AND ($3::uuid IS NULL OR b.category_id = $3::uuid)
      ORDER BY subscriber_count DESC, b.created_at DESC
      LIMIT $2`,
-    [profileId, limit]
+    [profileId, limit, category || null]
   );
   return rows;
 }
 
-async function getRecommendedByLocation(profileId, limit) {
+async function getRecommendedByLocation(profileId, limit, category = null) {
   const { rows } = await query(
     `SELECT
        b.id,
@@ -219,14 +220,15 @@ async function getRecommendedByLocation(profileId, limit) {
          WHERE user_id = (SELECT user_id FROM profiles WHERE id = $1)
            AND profile_type = 'business'
        )
+       AND ($3::uuid IS NULL OR b.category_id = $3::uuid)
      ORDER BY subscriber_count DESC, b.created_at DESC
      LIMIT $2`,
-    [profileId, limit]
+    [profileId, limit, category || null]
   );
   return rows;
 }
 
-async function getTopRatedBusinesses(limit, userId = null) {
+async function getTopRatedBusinesses(limit, userId = null, category = null) {
   const { rows } = await query(
     `SELECT
        b.id,
@@ -250,9 +252,10 @@ async function getTopRatedBusinesses(limit, userId = null) {
        AND ($2::uuid IS NULL OR b.profile_id NOT IN (
          SELECT id FROM profiles WHERE user_id = $2 AND profile_type = 'business'
        ))
+       AND ($3::uuid IS NULL OR b.category_id = $3::uuid)
      ORDER BY avg_rating DESC, subscriber_count DESC, b.created_at DESC
      LIMIT $1`,
-    [limit, userId || null]
+    [limit, userId || null, category || null]
   );
   return rows;
 }
