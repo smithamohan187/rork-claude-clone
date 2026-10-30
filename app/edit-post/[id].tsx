@@ -26,6 +26,7 @@ import { ArrowLeft, ImagePlus, Link2, Upload, Trash2, Video as VideoIcon } from 
 import { usePost } from '@/hooks/usePosts';
 import { updatePost, uploadPostImage, uploadPostVideo, type PostType } from '@/api/services/postsService';
 import { PostMedia } from '@/components/feed/PostMedia';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 
 const POST_TYPE_OPTIONS: { value: PostType; label: string }[] = [
   { value: 'promotion', label: 'Promotion' },
@@ -88,6 +89,7 @@ type Errors = { title?: string; content?: string };
 export default function EditPostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { showSnackbar } = useSnackbar();
   const { post: original, loading } = usePost(id ?? '');
 
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -316,7 +318,8 @@ export default function EditPostScreen() {
       } else if (mediaMode === 'video' && pendingVideo?.kind === 'upload') {
         await uploadPostVideo(id, pendingVideo.uri);
       }
-      router.back();
+      showSnackbar('Post updated!');
+      router.dismissTo('/content?tab=posts' as any);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (/file too large/i.test(message)) {

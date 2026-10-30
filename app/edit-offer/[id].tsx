@@ -206,7 +206,7 @@ export default function EditOfferScreen() {
       });
       if (localImageUri) await uploadOfferImage(draft.id, localImageUri);
       showSnackbar('Offer updated successfully');
-      router.back();
+      router.dismissTo('/content?tab=offers' as any);
     } catch (err: unknown) {
       showSnackbar(err instanceof Error ? err.message : 'Failed to update offer');
     } finally {

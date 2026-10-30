@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
   Paragraph,
   Snackbar,
 } from 'react-native-paper';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   Pencil,
   Plus,
@@ -46,6 +46,8 @@ import { usePosts } from '@/hooks/usePosts';
 import { type Post } from '@/api/services/postsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSideDrawer } from '@/contexts/SideDrawerContext';
+import { PostMedia } from '@/components/feed/PostMedia';
+import { formatEventPrice } from '@/components/events/EventExtras';
 
 const PURPLE = '#1A5C35';
 const PURPLE_SURFACE = '#F3F0FF';
@@ -203,14 +205,18 @@ function discountSummary(discountType: string | null, discountValue: number | nu
   }
 }
 
+const isTabKey = (value: string | undefined): value is TabKey =>
+  value === 'offers' || value === 'events' || value === 'posts';
+
 export default function ManageContentScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { open: openDrawer } = useSideDrawer();
   const { updateStatus, removeItem } = useManageContent();
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   const { offers: realOffers, toggleStatus, removeOffer, refresh: refreshOffers } = useOffers(offerFilter);
   const [eventFilter, setEventFilter] = useState<EventFilter>('upcoming');
-  const { events: realEvents, refresh: refreshEvents, cancelEvent: doCancelEvent } = useEvents(eventFilter);
+  const { events: realEvents, refresh: refreshEvents, cancelEvent: doCancelEvent, removeEvent } = useEvents(eventFilter);
   const [postFilter, setPostFilter] = useState<PostFilter>('active');
   const {
     posts: realPosts,
@@ -228,10 +234,21 @@ export default function ManageContentScreen() {
       refreshOffers(offerFilter);
       refreshEvents(eventFilter);
       refreshPosts(postFilter);
+      // Collapse any inline video player when the screen loses focus, so it doesn't
+      // keep playing in the background after the user navigates away.
+      return () => setExpandedPostId(null);
     }, [refreshOffers, offerFilter, refreshEvents, eventFilter, refreshPosts, postFilter, authLoading, isAuthenticated])
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>('offers');
+  const [activeTab, setActiveTab] = useState<TabKey>(isTabKey(params.tab) ? params.tab : 'offers');
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+
+  // A redirect from create/edit (e.g. /content?tab=posts) can land on an already-mounted
+  // instance of this screen rather than remounting it, so the initializer above alone
+  // wouldn't pick up a new tab param on a repeat visit — sync it explicitly too.
+  useEffect(() => {
+    if (isTabKey(params.tab)) setActiveTab(params.tab);
+  }, [params.tab]);
 
   const { unlocked: businessUnlocked, lockMessage } = useBusinessUnlockStatus();
 
@@ -250,6 +267,11 @@ export default function ManageContentScreen() {
   }>({ visible: false, action: null, item: null });
 
   const [cancelConfirm, setCancelConfirm] = useState<{
+    visible: boolean;
+    event: Event | null;
+  }>({ visible: false, event: null });
+
+  const [eventDeleteConfirm, setEventDeleteConfirm] = useState<{
     visible: boolean;
     event: Event | null;
   }>({ visible: false, event: null });
@@ -352,6 +374,18 @@ export default function ManageContentScreen() {
     setCancelConfirm({ visible: false, event: null });
   }, [cancelConfirm, doCancelEvent, refreshEvents, eventFilter, showSnackbar]);
 
+  const handleDeleteEvent = useCallback(async () => {
+    const { event } = eventDeleteConfirm;
+    if (!event) { setEventDeleteConfirm({ visible: false, event: null }); return; }
+    try {
+      await removeEvent(event.id);
+      showSnackbar(`"${event.title}" deleted`);
+    } catch (err: unknown) {
+      showSnackbar(err instanceof Error ? err.message : 'Failed to delete event');
+    }
+    setEventDeleteConfirm({ visible: false, event: null });
+  }, [eventDeleteConfirm, removeEvent, showSnackbar]);
+
   const handlePostConfirmAction = useCallback(async () => {
     const { action, post } = postConfirm;
     if (!post || !action) {
@@ -450,7 +484,7 @@ export default function ManageContentScreen() {
     }
     if (item.type === 'event') {
       const event = item as unknown as Event;
-      const priceLabel = event.is_free ? 'Free' : event.price ? event.price : null;
+      const priceLabel = event.is_free ? 'Free' : event.price ? formatEventPrice(event.price) : null;
       return `${formatDateTime(event.starts_at)}${priceLabel ? ` · ${priceLabel}` : ''}`;
     }
     return `Posted ${relativeTime(item.created_at)}`;
@@ -479,6 +513,7 @@ export default function ManageContentScreen() {
       const event = item as unknown as Event;
       const category = EVENT_CATEGORIES[event.category];
       if (category) chips.push(`${category.emoji} ${category.label}`);
+      if (event.event_type && event.event_type !== 'In Person') chips.push(event.event_type);
       if (event.is_hot) chips.push('🔥 Hot');
       (event.tags ?? []).forEach(t => chips.push(t));
     }
@@ -562,6 +597,19 @@ export default function ManageContentScreen() {
                   </TouchableOpacity>
                 </>
               )}
+              {(effectiveStatus === 'past' || effectiveStatus === 'cancelled') && (
+                <>
+                  <View style={styles.actionDivider} />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => setEventDeleteConfirm({ visible: true, event: event! })}
+                    testID={`delete-event-${item.id}`}
+                  >
+                    <Trash2 size={16} color={DANGER} />
+                    <Text style={[styles.actionText, { color: DANGER }]}>Delete</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -632,9 +680,16 @@ export default function ManageContentScreen() {
         {post.image_url ? (
           <Image source={{ uri: post.image_url }} style={styles.thumb} />
         ) : post.video_url ? (
-          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+          <TouchableOpacity
+            style={[styles.thumb, styles.thumbPlaceholder]}
+            onPress={(e) => {
+              e.stopPropagation();
+              setExpandedPostId(expandedPostId === post.id ? null : post.id);
+            }}
+            testID={`play-inline-${post.id}`}
+          >
             <Play size={22} color={PURPLE} fill={PURPLE} />
-          </View>
+          </TouchableOpacity>
         ) : (
           <View style={[styles.thumb, styles.thumbPlaceholder]}>
             <Text style={styles.thumbEmoji}>📝</Text>
@@ -659,6 +714,24 @@ export default function ManageContentScreen() {
           <Text style={styles.cardSubtitle}>Posted {relativeTime(post.created_at)}</Text>
         </View>
       </TouchableOpacity>
+
+      {expandedPostId === post.id && post.video_url ? (
+        <View style={styles.inlinePlayerWrap}>
+          <PostMedia
+            videoUrl={post.video_url}
+            videoType={post.video_type}
+            imageUrl={null}
+            style={styles.inlinePlayer}
+          />
+          <TouchableOpacity
+            style={styles.inlineCloseBtn}
+            onPress={() => setExpandedPostId(null)}
+            testID={`close-inline-${post.id}`}
+          >
+            <X size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <Divider style={styles.cardDivider} />
 
@@ -960,6 +1033,36 @@ export default function ManageContentScreen() {
 
       <Portal>
         <Dialog
+          visible={eventDeleteConfirm.visible}
+          onDismiss={() => setEventDeleteConfirm({ visible: false, event: null })}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Delete this event?</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogBody}>
+              This cannot be undone.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setEventDeleteConfirm({ visible: false, event: null })}
+              textColor={TEXT_MUTED}
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={handleDeleteEvent}
+              textColor={DANGER}
+              testID="delete-event-confirm"
+            >
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      <Portal>
+        <Dialog
           visible={postConfirm.visible}
           onDismiss={() => setPostConfirm({ visible: false, action: null, post: null })}
           style={styles.dialog}
@@ -1084,6 +1187,29 @@ const styles = StyleSheet.create({
   },
   thumbEmoji: {
     fontSize: 28,
+  },
+  inlinePlayerWrap: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#14241C',
+    marginTop: 12,
+  },
+  inlinePlayer: {
+    width: '100%',
+    height: '100%',
+  },
+  inlineCloseBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   cardTitle: {
     fontSize: 15,

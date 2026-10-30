@@ -100,6 +100,11 @@ export async function cancelEvent(id: string): Promise<Event> {
   return resolveEvent(result.data!.event);
 }
 
+export async function deleteEvent(id: string): Promise<void> {
+  const result = await apiClient.delete<{ id: string }>(`/events/${id}`);
+  if (!result.success) throw new Error(result.error ?? 'Failed to delete event');
+}
+
 async function buildEventFormData(uri: string): Promise<FormData> {
   const form = new FormData();
   if (Platform.OS === 'web') {

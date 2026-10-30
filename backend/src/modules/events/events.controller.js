@@ -56,6 +56,21 @@ const cancelEventHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const deleteEventHandler = asyncHandler(async (req, res) => {
+  try {
+    await eventsService.deleteEvent(req.user.userId, req.params.id);
+    res.json(ok({ id: req.params.id }));
+  } catch (err) {
+    if (err.message === 'Event not found') {
+      return res.status(404).json(fail(err.message));
+    }
+    if (err.status === 400) {
+      return res.status(400).json(fail(err.message));
+    }
+    throw err;
+  }
+});
+
 const getBusinessEventsHandler = asyncHandler(async (req, res) => {
   const events = await eventsService.getEventsForBusiness(req.params.businessId, req.query.filter, req.user.activeProfileId, req.user.userId);
   res.json(ok({ events }));
@@ -95,4 +110,5 @@ module.exports = {
   cancelEventHandler,
   toggleEventStatusHandler,
   uploadEventImageHandler,
+  deleteEventHandler,
 };

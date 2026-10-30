@@ -9,7 +9,7 @@
  * profile state, and NO react-query. It is the clean production auth layer.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import createContextHook from '@nkzw/create-context-hook';
@@ -142,6 +142,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   // accountType: 'personal' or 'business'. Read from AsyncStorage on mount.
   // authLoading: true while restoreSession is running on app startup.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  // holdAuthRedirect: when true, the (auth) group's "already authenticated, bounce to feed"
+  // guard (app/(auth)/_layout.tsx) skips firing even though isAuthenticated just flipped true.
+  // Sign-up sets this right before loginWithTokens so it can show its own success Snackbar and
+  // perform a content-aware redirect (e.g. back to the business that invited the new user)
+  // once the user dismisses it, instead of the guard immediately unmounting that screen first.
+  // Deliberately a ref, not state: the guard's effect only needs to read the current value at
+  // the moment isAuthenticated flips true. If this were state, releasing the hold afterwards
+  // (setHoldAuthRedirect(false)) would itself be a dependency change that re-fires the guard
+  // effect a second time — racing its own router.replace('/feed') against the redirect sign-up
+  // just performed, and winning because it fires after. A ref lets sign-up release the hold
+  // without retriggering that effect at all.
+  const holdAuthRedirectRef = useRef(false);
+  const setHoldAuthRedirect = useCallback((value: boolean) => {
+    holdAuthRedirectRef.current = value;
+  }, []);
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<'personal' | 'business'>('personal');
   const [authLoading, setAuthLoading] = useState<boolean>(true);
@@ -426,6 +441,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     profiles,            // ProfileEntry[] — all profiles for this user
     authLoading,
     isAuthenticated: !!authUser,
+    holdAuthRedirectRef,
+    setHoldAuthRedirect,
     loginWithTokens,
     updateAuthUser,
     logout,

@@ -513,6 +513,38 @@ export default function BusinessProfileScreen() {
     );
   }
 
+  // Backend returns a null business for any non-owner viewer until the business has completed
+  // its profile and at least started its Stripe trial (see getPublicBusinessProfile in
+  // business.service.js) — it's deliberately not visible to the public yet. Without this gate the
+  // screen below would render with every field falling back to its EMPTY_BUSINESS default (blank
+  // name/logo, 0 stats) while still showing live Subscribe/Message buttons and offer/event/post
+  // tabs wired to a business ID that, as far as this viewer is concerned, doesn't exist.
+  if (!profileLoading && !realBusiness) {
+    return (
+      <View style={styles.notAvailableRoot}>
+        <SafeAreaView edges={['top']} style={styles.notAvailableSafeArea}>
+          <TouchableOpacity
+            style={styles.notAvailableBackBtn}
+            onPress={() => router.back()}
+            hitSlop={12}
+            testID="business-profile-back"
+          >
+            <ArrowLeft size={20} color={ACCENT} />
+          </TouchableOpacity>
+        </SafeAreaView>
+        <View style={styles.notAvailableBody}>
+          <Lock size={40} color={ACCENT} strokeWidth={1.5} />
+          <Text style={styles.notAvailableTitle}>This business isn't available yet</Text>
+          <Text style={styles.notAvailableSubtitle}>
+            {profileError === 'Business not found'
+              ? "This business hasn't finished setting up yet. Check back once it's live."
+              : (profileError ?? 'Something went wrong loading this business.')}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -2647,6 +2679,43 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#F6F5FA',
+  },
+  notAvailableRoot: {
+    flex: 1,
+    backgroundColor: '#F6F5FA',
+  },
+  notAvailableSafeArea: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  notAvailableBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: ACCENT_LIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notAvailableBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    marginTop: -40,
+  },
+  notAvailableTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  notAvailableSubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   qrSection: {
     marginHorizontal: 16,

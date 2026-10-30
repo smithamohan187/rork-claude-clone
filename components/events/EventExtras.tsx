@@ -16,6 +16,16 @@ export function EventHotBadge() {
   );
 }
 
+// Price is free text, so a user may or may not have typed a currency symbol already
+// (e.g. "15", "$15", "15 per person"). Strip any leading non-digit characters and
+// prefix with £ so the badge always shows a pound sign for a numeric price, without
+// mangling free-text entries that don't start with a number.
+export function formatEventPrice(price: string): string {
+  const trimmed = price.trim();
+  const numericPart = trimmed.replace(/^[^0-9]*/, '');
+  return numericPart ? `£${numericPart}` : trimmed;
+}
+
 export function EventPriceBadge({ isFree, price }: { isFree: boolean; price: string | null }) {
   if (isFree) {
     return (
@@ -27,7 +37,7 @@ export function EventPriceBadge({ isFree, price }: { isFree: boolean; price: str
   if (price) {
     return (
       <View style={[styles.badge, { backgroundColor: PRICE_BG }]}>
-        <Text style={[styles.badgeText, { color: PRICE_FG }]}>{price}</Text>
+        <Text style={[styles.badgeText, { color: PRICE_FG }]}>{formatEventPrice(price)}</Text>
       </View>
     );
   }

@@ -28,7 +28,7 @@ import { ArrowLeft, ImagePlus, Calendar, MapPin, ChevronDown, Check } from 'luci
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useEvent, useEvents } from '@/hooks/useEvents';
-import { uploadEventImage, type Event, type EventCategory, type UpdateEventPayload } from '@/api/services/eventsService';
+import { uploadEventImage, type Event, type EventCategory, type EventType, type UpdateEventPayload } from '@/api/services/eventsService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 
 const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[] = [
@@ -40,6 +40,12 @@ const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[]
   { value: 'wellness', label: 'Wellness', emoji: '🧘' },
   { value: 'market', label: 'Market', emoji: '🛍️' },
   { value: 'nightlife', label: 'Nightlife', emoji: '🌙' },
+];
+
+const EVENT_TYPES: { value: EventType; label: string }[] = [
+  { value: 'In Person', label: 'In Person' },
+  { value: 'Online', label: 'Online' },
+  { value: 'Hybrid', label: 'Hybrid' },
 ];
 
 async function toDisplayUri(uri: string): Promise<string> {
@@ -76,6 +82,7 @@ interface DraftEvent {
   ends_at: string | null;
   image_url: string | null;
   category: EventCategory;
+  event_type: EventType;
   is_free: boolean;
   price: string;
   tags: string;
@@ -91,6 +98,7 @@ function eventToDraft(e: Event): DraftEvent {
     ends_at: e.ends_at ?? null,
     image_url: e.image_url,
     category: e.category,
+    event_type: e.event_type,
     is_free: e.is_free,
     price: e.price ?? '',
     tags: (e.tags ?? []).join(', '),
@@ -183,6 +191,7 @@ export default function EditEventScreen() {
         starts_at:   draft.starts_at ?? undefined,
         ends_at:     draft.ends_at,
         category:    draft.category,
+        event_type:  draft.event_type,
         is_free:     draft.is_free,
         price:       draft.is_free ? null : (draft.price.trim() || null),
         tags:        draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
@@ -192,7 +201,7 @@ export default function EditEventScreen() {
       await editEvent(id!, payload);
       if (localImageUri) await uploadEventImage(id!, localImageUri);
       showSnackbar('Event updated successfully');
-      router.back();
+      router.dismissTo('/content?tab=events' as any);
     } catch (err: unknown) {
       showSnackbar(err instanceof Error ? err.message : 'Failed to update event');
     } finally {
@@ -339,6 +348,23 @@ export default function EditEventScreen() {
               })}
             </View>
           )}
+
+          <Text style={styles.sectionLabel}>Event Type</Text>
+          <View style={styles.typeRow}>
+            {EVENT_TYPES.map((item) => {
+              const isActive = draft.event_type === item.value;
+              return (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.typeBtn, isActive && styles.typeBtnActive]}
+                  onPress={() => set('event_type', item.value)}
+                  testID={`event-type-${item.value}`}
+                >
+                  <Text style={[styles.typeBtnText, isActive && styles.typeBtnTextActive]}>{item.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>Free Event</Text>
@@ -572,4 +598,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: TEXT_DARK },
+  typeRow: { flexDirection: 'row' as const, gap: 8, marginTop: 8, marginBottom: 4 },
+  typeBtn: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: '#fff',
+  },
+  typeBtnActive: { backgroundColor: PURPLE, borderColor: PURPLE },
+  typeBtnText: { fontSize: 13, fontWeight: '600' as const, color: TEXT_MUTED },
+  typeBtnTextActive: { color: '#fff' },
 });

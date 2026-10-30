@@ -6,6 +6,7 @@ import {
   createEvent,
   updateEvent,
   cancelEvent as cancelEventService,
+  deleteEvent as deleteEventService,
   type Event,
   type CreateEventPayload,
   type UpdateEventPayload,
@@ -55,7 +56,12 @@ export function useEvents(initialFilter?: string) {
     setEvents(prev => prev.map(e => e.id === id ? updated : e));
   }, []);
 
-  return { events, loading, error, refresh: load, addEvent, editEvent, cancelEvent: doCancel };
+  const removeEvent = useCallback(async (id: string): Promise<void> => {
+    await deleteEventService(id);
+    setEvents(prev => prev.filter(e => e.id !== id));
+  }, []);
+
+  return { events, loading, error, refresh: load, addEvent, editEvent, cancelEvent: doCancel, removeEvent };
 }
 
 export function useEvent(id: string) {

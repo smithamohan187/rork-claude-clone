@@ -50,7 +50,8 @@ import { createPost, updatePost, uploadPostVideo } from '@/api/services/postsSer
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
 import { createOffer, updateOffer, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
 import { useEvents } from '@/hooks/useEvents';
-import { type EventCategory } from '@/api/services/eventsService';
+import { type EventCategory, type EventType } from '@/api/services/eventsService';
+import { useSnackbar } from '@/contexts/SnackbarContext';
 
 registerTranslation('en', en);
 
@@ -112,6 +113,12 @@ const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[]
   { value: 'nightlife', label: 'Nightlife', emoji: '🌙' },
 ];
 
+const EVENT_TYPES: { value: EventType; label: string }[] = [
+  { value: 'In Person', label: 'In Person' },
+  { value: 'Online', label: 'Online' },
+  { value: 'Hybrid', label: 'Hybrid' },
+];
+
 type MediaSource = 'stock' | 'uploads';
 
 const MEDIA_SOURCES: { key: MediaSource; label: string; icon: 'globe' | 'upload' }[] = [
@@ -142,6 +149,7 @@ interface FormErrors {
 export default function CreatePostScreen() {
   const router = useRouter();
   const { authUser, accountType } = useAuth();
+  const { showSnackbar } = useSnackbar();
 
   // ---- Tab mode (Post / Event / Offer) ----
   // Defaults to 'post' — this screen is also reached from the dashboard checklist's
@@ -345,6 +353,7 @@ export default function CreatePostScreen() {
   const [eventTimeOpen, setEventTimeOpen] = useState<boolean>(false);
   const [eventImage, setEventImage] = useState<string>('');
   const [eventCategory, setEventCategory] = useState<EventCategory>('community');
+  const [eventType, setEventType] = useState<EventType>('In Person');
   const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
   const [eventIsFree, setEventIsFree] = useState<boolean>(true);
   const [eventIsHot, setEventIsHot] = useState<boolean>(false);
@@ -366,7 +375,7 @@ export default function CreatePostScreen() {
       setOfferIsHot(false); setOfferPromoCode('');
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventImage('');
-      setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
+      setEventCategory('community'); setEventType('In Person'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     } else if (value === 'event') {
       setOfferTitle(''); setOfferDescription(''); setOfferType('promotion');
@@ -377,7 +386,7 @@ export default function CreatePostScreen() {
     } else {
       setEventTitle(''); setEventDescription(''); setEventLocation('');
       setEventDate(null); setEventImage('');
-      setEventCategory('community'); setEventIsFree(true); setEventIsHot(false);
+      setEventCategory('community'); setEventType('In Person'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     }
     Animated.spring(tabIndicatorAnim, {
@@ -446,9 +455,8 @@ export default function CreatePostScreen() {
           Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
           Animated.delay(800),
         ]).start(() => {
-          Alert.alert('Post Published!', 'Your post is now live on the feed.', [
-            { text: 'Great', onPress: () => router.back() },
-          ]);
+          showSnackbar('Post published!');
+          router.dismissTo('/content?tab=posts' as any);
         });
       } catch (err) {
         setIsSubmitting(false);
@@ -493,9 +501,8 @@ export default function CreatePostScreen() {
           Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
           Animated.delay(800),
         ]).start(() => {
-          Alert.alert('Offer Created!', `"${offer.title}" is now live for your subscribers.`, [
-            { text: 'Great', onPress: () => router.back() },
-          ]);
+          showSnackbar(`"${offer.title}" is now live for your subscribers.`);
+          router.dismissTo('/content?tab=offers' as any);
         });
       } catch (err) {
         setIsSubmitting(false);
@@ -514,6 +521,7 @@ export default function CreatePostScreen() {
         location: eventLocation.trim() || null,
         starts_at: eventDate!.toISOString(),
         ends_at: null,
+        event_type: eventType,
         category: eventCategory,
         is_free: eventIsFree,
         price: eventIsFree ? null : (eventPrice.trim() || null),
@@ -528,9 +536,8 @@ export default function CreatePostScreen() {
         Animated.timing(successAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         Animated.delay(800),
       ]).start(() => {
-        Alert.alert('Event Created!', `"${event.title}" will now appear on the community newsfeed.`, [
-          { text: 'Great', onPress: () => router.back() },
-        ]);
+        showSnackbar(`"${event.title}" will now appear on the community newsfeed.`);
+        router.dismissTo('/content?tab=events' as any);
       });
     } catch (err) {
       setIsSubmitting(false);
@@ -538,11 +545,12 @@ export default function CreatePostScreen() {
     }
   }, [
     activeTab, isFormValid, charCount, content, selectedType, selectedImage, pendingVideo, successAnim, router,
+    showSnackbar,
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
     validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventImage, addEvent, editEvent,
-    eventCategory, eventIsFree, eventPrice, eventTags, eventIsHot,
+    eventCategory, eventType, eventIsFree, eventPrice, eventTags, eventIsHot,
   ]);
 
   const isSubmitDisabled = activeTab === 'post' ? !isFormValid : isSubmitting;
@@ -1583,6 +1591,25 @@ export default function CreatePostScreen() {
             })}
           </View>
         )}
+      </View>
+
+      <View style={styles.formSection}>
+        {renderSectionHeader(<Globe size={14} color="#fff" />, 'Event Type')}
+        <View style={styles.pillRow}>
+          {EVENT_TYPES.map((item) => {
+            const isSelected = eventType === item.value;
+            return (
+              <Pressable
+                key={item.value}
+                style={[styles.pill, isSelected && styles.pillSelected]}
+                onPress={() => setEventType(item.value)}
+                testID={`event-type-${item.value}`}
+              >
+                <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>{item.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <View style={styles.formSection}>

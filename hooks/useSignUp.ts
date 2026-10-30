@@ -34,7 +34,7 @@ function isValidEmail(email: string): boolean {
 const SPECIAL_CHAR_RE = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/;
 
 export function useSignUp() {
-  const { loginWithTokens } = useAuth();
+  const { loginWithTokens, setHoldAuthRedirect } = useAuth();
 
   // ── Form fields ───────────────────────────────────────────────────────────
   const [fullName, setFullName]               = useState('');
@@ -177,6 +177,10 @@ export function useSignUp() {
       };
 
       const data = await signUp(payload);
+      // Hold off the (auth) layout's "already authenticated, bounce to feed" guard — it would
+      // otherwise unmount this screen the instant loginWithTokens flips isAuthenticated, before
+      // the success Snackbar below ever gets a chance to show or redirect anywhere but feed.
+      setHoldAuthRedirect(true);
       await loginWithTokens(data, email.trim().toLowerCase());
 
       // Customer-invite / business-QR-scan signup: auto-subscribe to the inviting business and
@@ -223,13 +227,14 @@ export function useSignUp() {
       const msg = err instanceof Error ? err.message : 'Unexpected error. Please try again.';
       if (__DEV__) console.error('[useSignUp] handleRegister error:', err);
       setAuthError(msg);
+      setHoldAuthRedirect(false);
     } finally {
       setLoading(false);
     }
   }, [
     loading, fullName, email, phoneNumber,
     password, confirmPassword, location, interests, referralCode,
-    loginWithTokens,
+    loginWithTokens, setHoldAuthRedirect,
   ]);
 
   return {

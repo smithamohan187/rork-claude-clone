@@ -15,6 +15,7 @@ const {
   cancelEventHandler,
   toggleEventStatusHandler,
   uploadEventImageHandler,
+  deleteEventHandler,
 } = require('./events.controller');
 
 //const uploadDir = path.join(__dirname, '../../../../uploads/events');
@@ -44,6 +45,7 @@ router.post('/', authenticate, validateRequest(createEventSchema), createEventHa
 router.patch('/:id', authenticate, validateRequest(updateEventSchema), updateEventHandler);
 router.patch('/:id/cancel', authenticate, cancelEventHandler);
 router.patch('/:id/toggle-status', authenticate, toggleEventStatusHandler);
+router.delete('/:id', authenticate, deleteEventHandler);
 router.post('/:id/image', authenticate, upload.single('image'), uploadEventImageHandler);
 
 module.exports = router;

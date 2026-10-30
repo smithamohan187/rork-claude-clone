@@ -23,6 +23,13 @@ async function subscribeToBusiness(userId, businessId) {
   if (business.owner_user_id === userId) {
     throw Object.assign(new Error('You cannot subscribe to your own business'), { status: 400 });
   }
+  // Mirrors getPublicBusinessProfile's own gate (business.service.js) — a business isn't public
+  // until its Stripe subscription has at least started trialing. Without this, a customer who
+  // already knows the business ID (e.g. a stale/shared link) could subscribe for real to a
+  // business whose profile 404s for them, via this endpoint directly.
+  if (!(await billingService.isSubscriptionActive(businessId))) {
+    throw Object.assign(new Error('This business is not available yet'), { status: 403 });
+  }
 
   // Wrap subscription upsert + welcome-bonus award in a single transaction so
   // both succeed or both roll back. ON CONFLICT DO NOTHING on the unique partial

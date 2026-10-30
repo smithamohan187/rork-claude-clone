@@ -18,6 +18,7 @@ import { Snackbar } from 'react-native-paper';
 import { THEME } from '@/theme/tokens';
 import { ArrowLeft, Eye, EyeOff, MapPin } from 'lucide-react-native';
 import { useSignUp } from '@/hooks/useSignUp';
+import { useAuth } from '@/contexts/AuthContext';
 import { fetchCategories, Category } from '@/api/services/categoriesService';
 
 const PRIMARY      = THEME.colors.primary;
@@ -69,6 +70,7 @@ export default function SignUpScreen() {
     inputBlur,
     clearOnChange,
   } = useSignUp();
+  const { setHoldAuthRedirect } = useAuth();
 
   // ── Local validation state ────────────────────────────────────────────────
   const [phoneError, setPhoneError]               = useState('');
@@ -105,6 +107,9 @@ export default function SignUpScreen() {
 
   const handleSnackbarDismiss = () => {
     setSnackbarVisible(false);
+    // Release the (auth) layout's bounce-to-feed guard now that we're performing our own
+    // redirect below — see the matching setHoldAuthRedirect(true) in useSignUp's handleRegister.
+    setHoldAuthRedirect(false);
     // If the user arrived via a content-share deep link, land them on the shared detail screen;
     // otherwise fall back to the default feed landing.
     if (postSignupRedirect) {

@@ -3,6 +3,8 @@ const eventsModel = require('./events.model');
 const notificationsService = require('../notifications/notifications.service');
 const businessService = require('../businesses/business.service');
 const subscriptionModel = require('../subscriptions/subscription.model');
+const likesModel = require('../likes/likes.model');
+const commentsModel = require('../comments/comments.model');
 const { getClient } = require('../../config/database');
 
 async function verifyEventOwnership(userId, eventId) {
@@ -103,6 +105,29 @@ async function uploadEventImage(userId, eventId, imageUrl) {
   return eventsModel.updateEventImageUrl(eventId, imageUrl);
 }
 
+async function deleteEvent(userId, eventId) {
+  const { event } = await verifyEventOwnership(userId, eventId);
+  // Upcoming events may have live RSVPs/saves riding on them — deleting (as opposed to
+  // cancelling) is only allowed once an event is cancelled or past, so a hard delete can
+  // never silently wipe a customer's commitment to an event that's still happening.
+  if (event.effective_status === 'upcoming') {
+    throw Object.assign(
+      new Error('Only cancelled or past events can be deleted — cancel it first'),
+      { status: 400 }
+    );
+  }
+  const deleted = await eventsModel.deleteEvent(eventId);
+  if (!deleted) throw new Error('Event not found');
+  // Events are hard-deleted, so their likes/comments (generic polymorphic tables keyed on
+  // content_type/content_id, no FK) would otherwise be orphaned forever — clean them up too.
+  // event_rsvps and saved_events have real FKs with ON DELETE CASCADE, so those clear on their own.
+  await likesModel.deleteLikesOnCommentsOfContent('event', eventId);
+  await Promise.all([
+    likesModel.deleteByContent('event', eventId),
+    commentsModel.deleteByContent('event', eventId),
+  ]);
+}
+
 module.exports = {
   createEvent,
   listMyEvents,
@@ -112,4 +137,5 @@ module.exports = {
   getEventsForBusiness,
   toggleEventStatus,
   uploadEventImage,
+  deleteEvent,
 };

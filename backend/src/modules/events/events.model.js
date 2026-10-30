@@ -188,6 +188,14 @@ async function updateEventImageUrl(eventId, imageUrl) {
   return rows[0] ?? null;
 }
 
+async function deleteEvent(eventId) {
+  const { rows } = await query(
+    `DELETE FROM events WHERE id = $1 RETURNING id`,
+    [eventId]
+  );
+  return rows[0] ?? null;
+}
+
 module.exports = {
   getBusinessIdByUserId,
   getBusinessNameById,
@@ -199,4 +207,5 @@ module.exports = {
   cancelEvent,
   restoreEvent,
   updateEventImageUrl,
+  deleteEvent,
 };
