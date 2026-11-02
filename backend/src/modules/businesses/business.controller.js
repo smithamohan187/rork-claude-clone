@@ -40,7 +40,7 @@ const uploadLogoHandler = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
   }
   const logoUrl = await uploadFileToGCS(req.file, 'businesses');
-  const result = await uploadBusinessLogo(req.params.id, logoUrl);
+  const result = await uploadBusinessLogo(req.params.id, logoUrl, req.user.userId);
   res.status(200).json(ok(result));
 });
 
@@ -59,12 +59,12 @@ const uploadPhotoHandler = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, data: null, error: 'No file uploaded' });
   }
   const photoUrl = await uploadFileToGCS(req.file, 'businesses');
-  const result = await uploadBusinessCoverPhoto(req.params.id, photoUrl);
+  const result = await uploadBusinessCoverPhoto(req.params.id, photoUrl, req.user.userId);
   res.status(200).json(ok(result));
 });
 
 const completeOnboardingHandler = asyncHandler(async (req, res) => {
-  await completeOnboarding(req.params.id);
+  await completeOnboarding(req.params.id, req.user.userId);
   res.status(200).json(ok({ onboarding_complete: true }));
 });
 

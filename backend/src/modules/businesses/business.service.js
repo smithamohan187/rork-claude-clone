@@ -181,15 +181,30 @@ async function fetchMyBusiness(userId) {
   return { ...business, hours };
 }
 
-async function uploadBusinessLogo(businessId, filePath) {
+// Shared ownership guard — these three mutate a business purely by :id with no other
+// scoping, so without this any authenticated user could upload a logo/cover photo to, or
+// flip the onboarding_complete flag on, an arbitrary business (including unlocking the
+// profile-completeness half of isBusinessUnlocked for someone else's business).
+async function assertOwnsBusiness(businessId, requestingUserId) {
+  const business = await getBusinessById(businessId);
+  if (!business) throw Object.assign(new Error('Business not found'), { status: 404 });
+  if (business.owner_user_id !== requestingUserId) {
+    throw Object.assign(new Error('Not authorised to modify this business'), { status: 403 });
+  }
+}
+
+async function uploadBusinessLogo(businessId, filePath, requestingUserId) {
+  await assertOwnsBusiness(businessId, requestingUserId);
   return updateBusinessLogo(businessId, filePath);
 }
 
-async function uploadBusinessCoverPhoto(businessId, filePath) {
+async function uploadBusinessCoverPhoto(businessId, filePath, requestingUserId) {
+  await assertOwnsBusiness(businessId, requestingUserId);
   return updateBusinessCoverPhoto(businessId, filePath);
 }
 
-async function completeOnboarding(businessId) {
+async function completeOnboarding(businessId, requestingUserId) {
+  await assertOwnsBusiness(businessId, requestingUserId);
   return setOnboardingComplete(businessId);
 }
 
