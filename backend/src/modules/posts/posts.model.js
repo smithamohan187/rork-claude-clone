@@ -38,7 +38,8 @@ async function getPostById(id, profileId) {
        (SELECT COUNT(*)::int FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id) AS like_count,
        (SELECT EXISTS(SELECT 1 FROM likes l WHERE l.content_type = 'post' AND l.content_id = posts.id AND l.profile_id = $2::uuid)) AS liked_by_me,
        (SELECT COUNT(*)::int FROM comments c WHERE c.content_type = 'post' AND c.content_id = posts.id AND c.is_deleted = FALSE) AS comment_count,
-       (SELECT EXISTS(SELECT 1 FROM businesses b WHERE b.id = posts.business_id AND b.profile_id = $2::uuid)) AS is_owner
+       (SELECT EXISTS(SELECT 1 FROM businesses b WHERE b.id = posts.business_id AND b.profile_id = $2::uuid)) AS is_owner,
+       (SELECT EXISTS(SELECT 1 FROM saved_posts sp WHERE sp.post_id = posts.id AND sp.profile_id = $2::uuid)) AS is_saved
      FROM posts WHERE id = $1`,
     [id, profileId ?? null]
   );

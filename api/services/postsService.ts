@@ -22,6 +22,7 @@ export interface Post {
   liked_by_me?: boolean;
   comment_count?: number;
   is_owner?: boolean;
+  is_saved?: boolean;
 }
 
 export interface CreatePostPayload {

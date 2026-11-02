@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
+  Bookmark,
   Calendar,
   MessageCircle,
   Share2,
@@ -29,6 +30,7 @@ import {
 } from 'react-native-paper';
 import { fetchPostById, type Post } from '@/api/services/postsService';
 import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/businessProfileService';
+import { toggleSavePost } from '@/api/services/savedPostService';
 
 const PURPLE = '#1A5C35';
 const LIGHT_PURPLE = '#E8F5EE';
@@ -69,6 +71,8 @@ export default function ViewPostScreen() {
   const [snackbarText, setSnackbarText] = useState('');
   const [sharing, setSharing] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!postId) {
@@ -80,6 +84,7 @@ export default function ViewPostScreen() {
       setLoading(true);
       const postData = await fetchPostById(postId);
       setPost(postData);
+      setSaved(postData.is_saved ?? false);
       const bizId = paramBizId || postData.business_id;
       const bizData: BusinessProfile = await fetchBusinessProfile(bizId);
       setBusiness({
@@ -117,6 +122,22 @@ export default function ViewPostScreen() {
   }, [sharing, post, business]);
 
   const isActive = useMemo(() => post?.is_active ?? false, [post]);
+
+  const handleToggleSave = useCallback(async () => {
+    if (savingBookmark || !post) return;
+    setSavingBookmark(true);
+    const next = !saved;
+    setSaved(next);
+    try {
+      const result = await toggleSavePost(post.id);
+      setSaved(result.saved);
+    } catch (e) {
+      if (__DEV__) console.log('[ViewPost] toggle save error', e);
+      setSaved(!next);
+    } finally {
+      setSavingBookmark(false);
+    }
+  }, [savingBookmark, saved, post]);
 
   if (loading) {
     return (
@@ -264,6 +285,18 @@ export default function ViewPostScreen() {
               initialCommentCount={post.comment_count ?? 0}
               onClose={() => setCommentOpen(false)}
             />
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleToggleSave}
+              hitSlop={8}
+              disabled={savingBookmark}
+              testID="view-post-save-btn"
+            >
+              <Bookmark size={18} color={saved ? '#DC2626' : '#6B7280'} fill={saved ? '#DC2626' : 'transparent'} />
+              <Text style={[styles.saveBtnText, saved && styles.saveBtnTextActive]}>
+                {saved ? 'Saved' : 'Save'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -384,6 +417,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto',
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  saveBtnTextActive: {
+    color: '#DC2626',
   },
   bottomBarWrap: {
     position: 'absolute',
