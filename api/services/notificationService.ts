@@ -10,7 +10,8 @@ export type NotificationType =
   | 'invited_business_joined'
   | 'new_message'
   | 'offer_referral_subscribed'
-  | 'business_referral_subscribed';
+  | 'business_referral_subscribed'
+  | 'new_subscriber';
 
 export interface AppNotification {
   id: string;

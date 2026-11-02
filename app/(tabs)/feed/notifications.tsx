@@ -38,6 +38,7 @@ const TYPE_CONFIG: Record<NotificationType, { icon: typeof Tag; color: string; b
   offer_referral_subscribed: { icon: Tag,    color: '#7C3AED', bg: '#F0E9FD' },
   business_referral_subscribed: { icon: Users, color: '#7C3AED', bg: '#F0E9FD' },
   customer_subscribed: { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
+  new_subscriber:      { icon: Users,        color: '#7C3AED', bg: '#F0E9FD' },
   invited_business_joined: { icon: Building2, color: '#0D9488', bg: '#F0FDFA' },
   new_message:         { icon: MessageSquare, color: '#0D9488', bg: '#F0FDFA' },
 };
@@ -89,6 +90,7 @@ function routeFor(item: NotificationDisplay): { pathname: string; params?: Recor
     case 'points_earned':
     case 'referral_joined':
     case 'customer_subscribed':
+    case 'new_subscriber':
     case 'invited_business_joined':
     case 'business_referral_subscribed':
     default:

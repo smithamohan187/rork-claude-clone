@@ -91,7 +91,7 @@ async function resolvePendingBusinessReferral(userId, referralCode) {
         await notificationsService.createNotification(client, {
           profileId: referral.sharer_profile_id,
           type: 'business_referral_subscribed',
-          title: 'Your referral joined!',
+          title: 'Someone joined using your referral link',
           body: `Someone subscribed to ${result.business.name} using your referral link. You earned ${bonus} points.`,
           data: { business_id: referral.business_id, points: bonus },
         });

@@ -298,12 +298,20 @@ export default function BusinessAnalyticsScreen() {
               <Text style={styles.loadingText}>Loading analytics…</Text>
             </View>
           ) : error && !analytics ? (
-            <View style={styles.loadingWrap}>
-              <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryBtn} onPress={() => refresh()}>
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </Pressable>
-            </View>
+            error === 'Business not found' ? (
+              <View style={styles.loadingWrap}>
+                <Text style={styles.errorText}>
+                  You don't have a business profile to view analytics for.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.loadingWrap}>
+                <Text style={styles.errorText}>{error}</Text>
+                <Pressable style={styles.retryBtn} onPress={() => refresh()}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </Pressable>
+              </View>
+            )
           ) : (
             <>
               <View style={styles.metricsGrid}>

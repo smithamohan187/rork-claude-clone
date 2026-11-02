@@ -179,7 +179,9 @@ async function bulkCreateCustomerInvites(userId, { business_id, rows }) {
 
 // Called after a successful subscribe. Matches the new subscriber's phone/email against
 // any pending invite for this business, marks it subscribed, and notifies the business owner.
-// No match => no-op; organic subscribe behavior is unchanged.
+// Returns true if a match was found (and the owner notified), false otherwise — the caller
+// (subscription.service.js) uses this to decide whether to send its own generic fallback
+// notification instead.
 async function resolveCustomerInviteOnSubscribe(subscriberProfileId, businessId) {
   const client = await getClient();
   try {
@@ -205,13 +207,14 @@ async function resolveCustomerInviteOnSubscribe(subscriberProfileId, businessId)
 
     if (!invite) {
       await client.query('COMMIT');
-      return;
+      return false;
     }
 
     const updated = await customerInviteModel.markSubscribed(client, invite.id);
     await notifyBusinessOwner(client, businessId, updated);
 
     await client.query('COMMIT');
+    return true;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

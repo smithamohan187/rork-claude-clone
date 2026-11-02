@@ -12,7 +12,7 @@ async function subscribeToBusiness(userId, businessId) {
   if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
 
   const { rows } = await query(
-    `SELECT businesses.id, businesses.name, p.user_id AS owner_user_id
+    `SELECT businesses.id, businesses.name, businesses.profile_id AS owner_profile_id, p.user_id AS owner_user_id
      FROM businesses
      JOIN profiles p ON p.id = businesses.profile_id
      WHERE businesses.id = $1`,
@@ -66,8 +66,22 @@ async function subscribeToBusiness(userId, businessId) {
   await maybeLinkTrustedFriend(profileId, businessId, business.name);
 
   // Customer-invite stage 2: if this subscriber matches a pending invite for this business,
-  // mark it subscribed and notify the business owner. No match => organic subscribe, no-op.
-  await customerInviteService.resolveCustomerInviteOnSubscribe(profileId, businessId);
+  // mark it subscribed and notify the business owner with the richer, invite-specific copy.
+  // No match => organic subscribe (or a referral-based one, which has its own sharer-facing
+  // notification but never tells the owner) — notify the owner with a generic "new subscriber"
+  // notification instead, so the owner always hears about every subscriber exactly once.
+  const inviteMatched = await customerInviteService.resolveCustomerInviteOnSubscribe(profileId, businessId);
+  if (!inviteMatched) {
+    const { rows: subscriberRows } = await query('SELECT display_name FROM profiles WHERE id = $1', [profileId]);
+    const subscriberName = subscriberRows[0]?.display_name;
+    await notificationsService.createNotification(null, {
+      profileId: business.owner_profile_id,
+      type: 'new_subscriber',
+      title: 'New subscriber!',
+      body: subscriberName ? `${subscriberName} subscribed to your business.` : 'Someone subscribed to your business.',
+      data: { business_id: businessId, subscriber_profile_id: profileId },
+    });
+  }
 
   return { subscribed: true, subscription, welcomePoints, business: { id: business.id, name: business.name } };
 }
