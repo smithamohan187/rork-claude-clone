@@ -78,6 +78,7 @@ export default function PersonalisedFeedScreen() {
     toggleInterested,
     toggleSavePost,
     toggleFeedLike,
+    updateCommentCount,
     setSelectedCategory,
   } = usePersonalisedFeed();
 
@@ -374,6 +375,7 @@ const header = useMemo(() => {
           likedByMe={item.post.liked_by_me}
           isOwner={item.post.is_owner}
           onToggleLike={() => toggleFeedLike('post', postId)}
+          commentCount={item.post.comment_count}
         />
       );
     }
@@ -502,6 +504,7 @@ const header = useMemo(() => {
         onToggleBookmark={toggleBookmark}
         onToggleInterested={toggleInterested}
         onShowToast={showToast}
+        onCommentCountChange={updateCommentCount}
         currentUser={CURRENT_USER}
       />
 

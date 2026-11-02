@@ -20,7 +20,6 @@ import {
   ChevronRight,
   User as UserIcon,
   Star,
-  CreditCard,
   Bookmark,
   Heart,
   Users,
@@ -60,7 +59,6 @@ interface MenuItem {
 const ACCOUNT_ITEMS: MenuItem[] = [
   { key: 'edit-profile', label: 'Edit Profile', Icon: UserIcon, route: '/my-profile' },
   { key: 'rewards', label: 'My Rewards & Points', Icon: Star, route: '/(tabs)/rewards' },
-  { key: 'memberships', label: 'My Memberships', Icon: CreditCard, route: '/business-list' },
   { key: 'saved-businesses', label: 'Saved Businesses', Icon: Bookmark, route: '/saved-activity' },
   { key: 'saved-offers', label: 'Saved Offers', Icon: Heart, route: '/saved-activity' },
 ];

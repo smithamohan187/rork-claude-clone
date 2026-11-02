@@ -25,6 +25,20 @@ export interface CommentItem {
   hasLiked: boolean;
   isBusinessReply: boolean;
   parentId: string | null;
+  profileId: string | null;
+  isDeleted: boolean;
+  replyCount: number;
+}
+
+// A deleted top-level comment only counts while it still anchors a live reply (preserving the
+// thread); a deleted reply never counts. Shared by the initial fetch and every mutation so the
+// displayed count can never drift from what's actually rendered.
+function countVisible(list: Comment[]): number {
+  return list.reduce((acc, c) => {
+    const liveReplies = (c.replies ?? []).filter((r) => !r.is_deleted).length;
+    const selfCounts = !c.is_deleted || liveReplies > 0;
+    return acc + (selfCounts ? 1 : 0) + liveReplies;
+  }, 0);
 }
 
 const AVATAR_COLORS = ['#1A5C35', '#3B82F6', '#EC4899', '#F59E0B', '#8B5CF6', '#10B981'];
@@ -53,6 +67,9 @@ export function mapCommentToItem(c: Comment): CommentItem {
     hasLiked: c.liked_by_me ?? false,
     isBusinessReply: false,
     parentId: c.parent_comment_id,
+    profileId: c.profile_id,
+    isDeleted: c.is_deleted,
+    replyCount: c.reply_count ?? 0,
   };
 }
 
@@ -98,8 +115,7 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
       offsetRef.current = offset + page.length;
       setHasMore(page.length === PAGE_SIZE);
       if (reset) {
-        const total = page.reduce((acc, c) => acc + 1 + (c.replies?.length ?? 0), 0);
-        setCommentCount((prev) => Math.max(prev, total));
+        setCommentCount(countVisible(page));
       }
     } catch {
       // silently fail — comments are non-critical
@@ -204,15 +220,18 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
       });
 
     const prev = comments;
-    setComments(applyDelete);
-    setCommentCount((n) => Math.max(0, n - 1));
+    const updated = applyDelete(prev);
+    setComments(updated);
+    // Recompute from the full updated list, not a delta — deleting the last live reply under an
+    // already-deleted parent must also drop that parent's tombstone from the count in one step.
+    setCommentCount(countVisible(updated));
 
     try {
       await apiDeleteComment(commentId);
     } catch {
       if (!mountedRef.current) return;
       setComments(prev);
-      setCommentCount((n) => n + 1);
+      setCommentCount(countVisible(prev));
       throw new Error('Failed to delete comment');
     }
   }, [comments]);

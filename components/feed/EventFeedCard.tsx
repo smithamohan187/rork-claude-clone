@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image, type ImageLoadEventData } from 'expo-image';
@@ -66,6 +66,11 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
   const [localCommentCount, setLocalCommentCount] = useState<number>(event.comment_count ?? 0);
+  // Re-sync when the parent's authoritative count changes (e.g. after adding/deleting a
+  // comment from the full-screen viewer, a separate component instance with its own count).
+  useEffect(() => {
+    setLocalCommentCount(event.comment_count ?? 0);
+  }, [event.comment_count]);
   const initials = event.businessName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   const coverUri = useMemo(
     () => event.image_url || pickFeedImage(event.id, ['events', event.title, event.venue, event.businessName]),

@@ -42,8 +42,10 @@ import { useLike } from '@/hooks/useLike';
 import { CommentSection } from '@/components/feed/CommentSection';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
+import LikersSheet from '@/components/feed/LikersSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 import { formatRelativeTime } from '@/mocks/posts';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type ViewerEntry =
   | { kind: 'post'; key: string; post: PostFeedItem }
@@ -57,6 +59,7 @@ interface Props {
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
   onShowToast: (msg: string) => void;
+  onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
 }
 
@@ -79,6 +82,7 @@ export function FullScreenFeedViewer({
   onToggleBookmark,
   onToggleInterested,
   onShowToast,
+  onCommentCountChange,
   currentUser,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -154,10 +158,11 @@ export function FullScreenFeedViewer({
         onToggleBookmark={onToggleBookmark}
         onToggleInterested={onToggleInterested}
         onShowToast={onShowToast}
+        onCommentCountChange={onCommentCountChange}
         currentUser={currentUser}
       />
     ),
-    [activeIndex, SCREEN_W, SCREEN_H, insets.top, insets.bottom, onClose, onToggleBookmark, onToggleInterested, onShowToast, currentUser],
+    [activeIndex, SCREEN_W, SCREEN_H, insets.top, insets.bottom, onClose, onToggleBookmark, onToggleInterested, onShowToast, onCommentCountChange, currentUser],
   );
 
   return (
@@ -241,6 +246,7 @@ interface ViewerPageProps {
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
   onShowToast: (msg: string) => void;
+  onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
 }
 
@@ -254,6 +260,7 @@ const ViewerPage = React.memo(function ViewerPage({
   onToggleBookmark,
   onToggleInterested,
   onShowToast,
+  onCommentCountChange,
   currentUser,
 }: ViewerPageProps) {
   if (entry.kind === 'post') {
@@ -266,6 +273,7 @@ const ViewerPage = React.memo(function ViewerPage({
         insetTop={insetTop}
         insetBottom={insetBottom}
         onShowToast={onShowToast}
+        onCommentCountChange={onCommentCountChange}
         currentUser={currentUser}
       />
     );
@@ -281,6 +289,7 @@ const ViewerPage = React.memo(function ViewerPage({
       onToggleBookmark={onToggleBookmark}
       onToggleInterested={onToggleInterested}
       onShowToast={onShowToast}
+      onCommentCountChange={onCommentCountChange}
       currentUser={currentUser}
     />
   );
@@ -294,6 +303,7 @@ interface PostPageProps {
   insetTop: number;
   insetBottom: number;
   onShowToast: (msg: string) => void;
+  onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
 }
 
@@ -304,6 +314,7 @@ function PostPage({
   insetTop,
   insetBottom,
   onShowToast,
+  onCommentCountChange,
   currentUser,
 }: PostPageProps) {
   const { likeCount, hasLiked: liked, toggle: toggleLike } = useLike({
@@ -313,11 +324,12 @@ function PostPage({
     initialHasLiked: post.liked_by_me,
     isOwner: post.is_owner,
   });
-  const { comments: rawComments, submitComment: postComment, toggleCommentLike } = useComments({
+  const { comments: rawComments, commentCount, loading: commentsLoading, submitComment: postComment, removeComment, toggleCommentLike } = useComments({
     contentType: 'post',
     contentId: post.id,
     enabled: true,
   });
+  const { activeProfileId } = useAuth();
   const comments = useMemo<CommentItem[]>(() => {
     const flat: CommentItem[] = [];
     for (const c of rawComments) {
@@ -326,11 +338,29 @@ function PostPage({
     }
     return flat;
   }, [rawComments]);
+  // Report the live count up to the feed screen so the small card (a separate component
+  // instance with its own count) re-syncs instead of staying stale after this viewer closes.
+  // Gated on the initial fetch having resolved, so the hook's 0-before-data-loads default
+  // never clobbers the feed card's already-correct count.
+  useEffect(() => {
+    if (!commentsLoading) onCommentCountChange?.('post', post.id, commentCount);
+  }, [commentCount, commentsLoading, onCommentCountChange, post.id]);
+  // Excludes deleted comments with nothing left to preserve a thread for — matches
+  // CommentSection's own rendered count (same rule as FeedPage's liveCommentCount below).
+  const liveCommentCount = useMemo(() => {
+    const parentsWithLiveReplies = new Set(
+      comments.filter((c) => c.parentId && !c.isDeleted).map((c) => c.parentId)
+    );
+    return comments.filter(
+      (c) => !c.isDeleted || (c.parentId === null && parentsWithLiveReplies.has(c.id))
+    ).length;
+  }, [comments]);
   const [saved, setSaved] = useState<boolean>(false);
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
   const [shareOpen, setShareOpen] = useState<boolean>(false);
   const [referOpen, setReferOpen] = useState<boolean>(false);
   const [moreOpen, setMoreOpen] = useState<boolean>(false);
+  const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [expanded, setExpanded] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -399,11 +429,12 @@ function PostPage({
             haptic();
             toggleLike();
           }}
+          onLabelPress={likeCount > 0 ? () => setLikersOpen(true) : undefined}
           testID="viewer-post-like"
         />
         <RailButton
           icon={<MessageCircle size={26} color="#fff" />}
-          label={String(post.comment_count)}
+          label={String(liveCommentCount)}
           onPress={() => setCommentOpen(true)}
           testID="viewer-post-comment"
         />
@@ -459,6 +490,8 @@ function PostPage({
         onSubmit={handleSubmit}
         onLikeComment={toggleCommentLike}
         onReply={handleReplyToComment}
+        onDelete={removeComment}
+        currentProfileId={activeProfileId ?? null}
         replyingToName={replyTarget?.author ?? null}
         onDismissReply={handleDismissReply}
         currentUser={currentUser}
@@ -497,6 +530,14 @@ function PostPage({
         onClose={() => setMoreOpen(false)}
         onToast={onShowToast}
       />
+
+      <LikersSheet
+        visible={likersOpen}
+        contentType="post"
+        contentId={post.id}
+        likeCount={likeCount}
+        onClose={() => setLikersOpen(false)}
+      />
     </PageShell>
   );
 }
@@ -511,6 +552,7 @@ interface FeedPageProps {
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
   onShowToast: (msg: string) => void;
+  onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
 }
 
@@ -523,6 +565,7 @@ function FeedPage({
   onToggleBookmark,
   onToggleInterested,
   onShowToast,
+  onCommentCountChange,
   currentUser,
 }: FeedPageProps) {
   const isOffer = item.feedType === 'offer';
@@ -535,11 +578,12 @@ function FeedPage({
     initialHasLiked: item.liked_by_me,
     isOwner: item.is_owner,
   });
-  const { comments: rawComments, submitComment: postComment, toggleCommentLike } = useComments({
+  const { comments: rawComments, commentCount, loading: commentsLoading, submitComment: postComment, removeComment, toggleCommentLike } = useComments({
     contentType: item.feedType,
     contentId: item.id,
     enabled: true,
   });
+  const { activeProfileId } = useAuth();
   const comments = useMemo<CommentItem[]>(() => {
     const flat: CommentItem[] = [];
     for (const c of rawComments) {
@@ -548,6 +592,25 @@ function FeedPage({
     }
     return flat;
   }, [rawComments]);
+  // Excludes deleted comments with nothing left to preserve a thread for — matches
+  // CommentSection's own rendered count, so the rail button's number never overcounts
+  // tombstones the user won't actually see. Live-reply presence is computed from the actual
+  // flat list, not the static replyCount field, so it stays correct after a reply is deleted.
+  const liveCommentCount = useMemo(() => {
+    const parentsWithLiveReplies = new Set(
+      comments.filter((c) => c.parentId && !c.isDeleted).map((c) => c.parentId)
+    );
+    return comments.filter(
+      (c) => !c.isDeleted || (c.parentId === null && parentsWithLiveReplies.has(c.id))
+    ).length;
+  }, [comments]);
+  // Report the live count up to the feed screen so the small card (a separate component
+  // instance with its own count) re-syncs instead of staying stale after this viewer closes.
+  // Gated on the initial fetch having resolved, so the hook's 0-before-data-loads default
+  // never clobbers the feed card's already-correct count.
+  useEffect(() => {
+    if (!commentsLoading) onCommentCountChange?.(item.feedType, item.id, commentCount);
+  }, [commentCount, commentsLoading, onCommentCountChange, item.feedType, item.id]);
   const [commentText, setCommentText] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [replyTarget, setReplyTarget] = useState<CommentItem | null>(null);
@@ -577,6 +640,7 @@ function FeedPage({
   const [shareOpen, setShareOpen] = useState<boolean>(false);
   const [referOpen, setReferOpen] = useState<boolean>(false);
   const [moreOpen, setMoreOpen] = useState<boolean>(false);
+  const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [expanded, setExpanded] = useState<boolean>(false);
 
   const handleReferShared = useCallback(
@@ -671,11 +735,12 @@ function FeedPage({
             haptic();
             toggleLike();
           }}
+          onLabelPress={reactionCount > 0 ? () => setLikersOpen(true) : undefined}
           testID="viewer-feed-like"
         />
         <RailButton
           icon={<MessageCircle size={26} color="#fff" />}
-          label={String(comments.length)}
+          label={String(liveCommentCount)}
           onPress={() => setCommentOpen(true)}
           testID="viewer-feed-comment"
         />
@@ -733,6 +798,8 @@ function FeedPage({
         onSubmit={handleSubmitComment}
         onLikeComment={toggleCommentLike}
         onReply={handleReplyToComment}
+        onDelete={removeComment}
+        currentProfileId={activeProfileId ?? null}
         replyingToName={replyTarget?.author ?? null}
         onDismissReply={handleDismissReply}
         currentUser={currentUser}
@@ -769,6 +836,14 @@ function FeedPage({
         visible={moreOpen}
         onClose={() => setMoreOpen(false)}
         onToast={onShowToast}
+      />
+
+      <LikersSheet
+        visible={likersOpen}
+        contentType={item.feedType}
+        contentId={item.id}
+        likeCount={reactionCount}
+        onClose={() => setLikersOpen(false)}
       />
     </PageShell>
   );
@@ -908,14 +983,29 @@ interface RailButtonProps {
   onPress: () => void;
   active?: boolean;
   testID?: string;
+  onLabelPress?: () => void;
 }
-function RailButton({ icon, label, onPress, active, testID }: RailButtonProps) {
+function RailButton({ icon, label, onPress, active, testID, onLabelPress }: RailButtonProps) {
+  // When the label has its own action (e.g. "view who liked this"), give it a real, generously
+  // hit-slopped Pressable of its own instead of nesting a bare Text.onPress inside the icon's
+  // Pressable — a touch landing a few pixels off a small digit should still register, and the
+  // underline makes it visually obvious the number itself is tappable.
+  if (onLabelPress) {
+    return (
+      <View style={styles.railBtn} testID={testID}>
+        <Pressable onPress={onPress} hitSlop={10} style={styles.railIconWrap} testID={`${testID}-icon`}>
+          {icon}
+        </Pressable>
+        <Pressable onPress={onLabelPress} hitSlop={12} style={styles.railLabelBtn} testID={`${testID}-label`}>
+          <Text style={[styles.railLabel, styles.railLabelLink, active && { color: '#fff' }]}>{label}</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <Pressable onPress={onPress} style={styles.railBtn} hitSlop={8} testID={testID}>
       <View style={styles.railIconWrap}>{icon}</View>
-      {label ? (
-        <Text style={[styles.railLabel, active && { color: '#fff' }]}>{label}</Text>
-      ) : null}
+      {label ? <Text style={[styles.railLabel, active && { color: '#fff' }]}>{label}</Text> : null}
     </Pressable>
   );
 }
@@ -1032,6 +1122,8 @@ interface CommentSheetProps {
   onSubmit: () => void;
   onLikeComment: (commentId: string) => void;
   onReply: (comment: CommentItem) => void;
+  onDelete: (commentId: string) => void;
+  currentProfileId: string | null;
   replyingToName?: string | null;
   onDismissReply?: () => void;
   currentUser: { name: string; initials: string; color: string };
@@ -1046,6 +1138,8 @@ function CommentSheet({
   onSubmit,
   onLikeComment,
   onReply,
+  onDelete,
+  currentProfileId,
   replyingToName,
   onDismissReply,
   currentUser,
@@ -1074,6 +1168,8 @@ function CommentSheet({
               onSubmit={onSubmit}
               onLikeComment={onLikeComment}
               onReply={onReply}
+              onDelete={onDelete}
+              currentProfileId={currentProfileId}
               replyingToName={replyingToName}
               onDismissReply={onDismissReply}
               currentUserInitials={currentUser.initials}
@@ -1221,6 +1317,16 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  railLabelBtn: {
+    marginTop: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+  },
+  railLabelLink: {
+    marginTop: 0,
+    textDecorationLine: 'underline',
   },
 
   bottomPanel: {

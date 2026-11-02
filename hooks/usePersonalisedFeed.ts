@@ -219,6 +219,7 @@ export interface UsePersonalisedFeedResult {
   toggleInterested: (eventId: string) => void;
   toggleSavePost: (postId: string) => void;
   toggleFeedLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
+  updateCommentCount: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   selectedCategory: string | null;
   setSelectedCategory: (cat: string | null) => void;
 }
@@ -457,6 +458,19 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
     }
   }, []);
 
+  // Lets a separate component instance (e.g. FullScreenFeedViewer's own useComments) report
+  // back the live count so the feed card — which has its own independent comment-count state —
+  // can re-sync instead of staying pinned at whatever it showed before the viewer was opened.
+  const updateCommentCount = useCallback((contentType: 'offer' | 'event' | 'post', contentId: string, count: number): void => {
+    if (contentType === 'post') {
+      setPostItems((prev) => prev.map((it) => (it.id === contentId ? { ...it, comment_count: count } : it)));
+    } else {
+      setFeedItems((prev) =>
+        prev.map((it) => (it.feedType === contentType && it.id === contentId ? { ...it, comment_count: count } : it))
+      );
+    }
+  }, []);
+
   const toggleSavePostCallback = useCallback((postId: string): void => {
     setPostItems((prev) =>
       prev.map((it) => {
@@ -495,6 +509,7 @@ export function usePersonalisedFeed(): UsePersonalisedFeedResult {
     toggleInterested,
     toggleSavePost: toggleSavePostCallback,
     toggleFeedLike,
+    updateCommentCount,
     selectedCategory,
     setSelectedCategory,
   };

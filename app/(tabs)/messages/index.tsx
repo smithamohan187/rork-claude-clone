@@ -15,7 +15,10 @@ import { MessageSquare, Heart } from 'lucide-react-native';
 import HeaderAvatarTrigger from '@/components/HeaderAvatarTrigger';
 import { useConversations } from '@/hooks/useConversations';
 import { useSubscribedBusinesses, useFriends } from '@/hooks/useChatRosters';
+import { useMyBusinessMembers } from '@/hooks/useMyBusinessMembers';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Conversation } from '@/api/services/chatService';
+import type { BusinessMember } from '@/api/services/subscriptionService';
 
 const ACCENT = '#1A5C35';
 const ACCENT_SOFT = '#E8F5EE';
@@ -52,6 +55,18 @@ interface FriendRow {
   isYou: boolean;
 }
 
+interface MemberRow {
+  key: string;
+  targetProfileId: string;
+  name: string;
+  initials: string;
+  color: string;
+  preview: string | null;
+  time: string | null;
+  unread: number;
+  isYou: boolean;
+}
+
 const initialsOf = (name: string): string =>
   (name.trim().split(/\s+/).map((w) => w[0] ?? '').slice(0, 2).join('') || 'C').toUpperCase();
 
@@ -71,6 +86,8 @@ function formatRelative(iso: string | null): string | null {
 
 export default function ChatListScreen() {
   const router = useRouter();
+  const { accountType } = useAuth();
+  const isBusinessOwner = accountType === 'business';
   const [query, setQuery] = useState<string>('');
   const [segment, setSegment] = useState<SegmentKey>('businesses');
 
@@ -78,6 +95,7 @@ export default function ChatListScreen() {
   const { friends, loading: friendsLoading } = useFriends();
   const { conversations: bizConvos } = useConversations('business');
   const { conversations: friendConvos } = useConversations('friend');
+  const { members, isLoading: membersLoading } = useMyBusinessMembers();
 
   // Index conversations by the other participant's profile id for O(1) decoration.
   const bizConvoByProfile = useMemo(() => {
@@ -91,6 +109,32 @@ export default function ChatListScreen() {
     friendConvos.forEach((c) => m.set(c.other_profile_id, c));
     return m;
   }, [friendConvos]);
+
+  // bizConvos also carries the business's own conversations with its subscribed
+  // members when the active profile is the business side of the same chat type.
+  const memberConvoByProfile = bizConvoByProfile;
+
+  const memberRows = useMemo<MemberRow[]>(() => {
+    const q = query.trim().toLowerCase();
+    return members
+      .map((m: BusinessMember) => {
+        const convo = memberConvoByProfile.get(m.profile_id);
+        return {
+          key: m.profile_id,
+          targetProfileId: m.profile_id,
+          name: m.display_name,
+          initials: initialsOf(m.display_name),
+          color: ACCENT,
+          preview: convo?.last_message_body ?? null,
+          time: formatRelative(convo?.last_message_at ?? null),
+          unread: convo?.unread_count ?? 0,
+          isYou:
+            !!convo?.last_message_sender_id &&
+            convo.last_message_sender_id !== convo.other_profile_id,
+        };
+      })
+      .filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [members, memberConvoByProfile, query]);
 
   const businessRows = useMemo<BusinessRow[]>(() => {
     const q = query.trim().toLowerCase();
@@ -140,6 +184,22 @@ export default function ChatListScreen() {
   const peopleTotalUnread = useMemo(
     () => friendConvos.reduce((s, c) => s + (c.unread_count ?? 0), 0),
     [friendConvos],
+  );
+
+  const openMember = useCallback(
+    (row: MemberRow) => {
+      router.push({
+        pathname: '/chat-detail/[id]' as never,
+        params: {
+          id: row.targetProfileId,
+          targetProfileId: row.targetProfileId,
+          type: 'business',
+          name: row.name,
+          businessColor: row.color,
+        },
+      } as never);
+    },
+    [router],
   );
 
   const openBusiness = useCallback(
@@ -222,6 +282,50 @@ export default function ChatListScreen() {
     [openBusiness],
   );
 
+  const renderMember = useCallback(
+    ({ item }: { item: MemberRow }) => (
+      <TouchableOpacity
+        testID={`member-chat-row-${item.key}`}
+        style={styles.row}
+        onPress={() => openMember(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarWrap}>
+          <View style={[styles.avatar, { backgroundColor: item.color }]}>
+            <Text style={styles.avatarText}>{item.initials}</Text>
+          </View>
+          {item.unread > 0 && <View style={styles.avatarDot} />}
+        </View>
+        <View style={styles.rowMain}>
+          <View style={styles.rowTop}>
+            <Text style={styles.name} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {item.time && <Text style={styles.time}>{item.time}</Text>}
+          </View>
+          <View style={styles.rowBottom}>
+            <Text style={styles.preview} numberOfLines={1}>
+              {item.preview ? (
+                <>
+                  {item.isYou && <Text style={styles.youPrefix}>You: </Text>}
+                  {item.preview}
+                </>
+              ) : (
+                'Tap to start chatting'
+              )}
+            </Text>
+            {item.unread > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{item.unread}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    ),
+    [openMember],
+  );
+
   const renderFriend = useCallback(
     ({ item }: { item: FriendRow }) => (
       <TouchableOpacity
@@ -272,6 +376,60 @@ export default function ChatListScreen() {
   const isBusinessSegment = segment === 'businesses';
   const isEmpty = isBusinessSegment && !bizLoading && businessRows.length === 0 && query.trim().length === 0;
   const isPeopleEmpty = !isBusinessSegment && !friendsLoading && friendRows.length === 0 && query.trim().length === 0;
+  const isMembersEmpty = !membersLoading && memberRows.length === 0 && query.trim().length === 0;
+
+  if (isBusinessOwner) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <HeaderAvatarTrigger />
+          <Text style={styles.headerTitle}>Messages</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <View style={styles.searchWrap}>
+          <Searchbar
+            testID="chat-search"
+            placeholder="Search customers..."
+            value={query}
+            onChangeText={setQuery}
+            style={styles.search}
+            inputStyle={styles.searchInput}
+            iconColor={ACCENT}
+            elevation={0}
+          />
+        </View>
+
+        {membersLoading && memberRows.length === 0 ? (
+          <View style={styles.loadingFill}>
+            <ActivityIndicator color={ACCENT} />
+          </View>
+        ) : isMembersEmpty ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}>
+              <MessageSquare size={36} color={ACCENT} />
+            </View>
+            <Text style={styles.emptyTitle}>No messages yet</Text>
+            <Text style={styles.emptySub}>Subscribers will appear here once they join</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={memberRows}
+            keyExtractor={(it) => it.key}
+            renderItem={renderMember}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <View style={styles.noResults}>
+                <Text style={styles.emptyTitle}>No customers found</Text>
+                <Text style={styles.emptySub}>Try a different search term</Text>
+              </View>
+            }
+          />
+        )}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

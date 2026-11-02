@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { X, Send, CornerDownRight, ThumbsUp } from 'lucide-react-native';
+import { X, Send, CornerDownRight, ThumbsUp, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useComments } from '@/hooks/useComments';
 import { useAuth } from '@/contexts/AuthContext';
@@ -76,7 +76,7 @@ interface CommentRowProps {
 function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplies, onToggleLike, isReply = false }: CommentRowProps) {
   const canDelete = !comment.is_deleted && currentProfileId && comment.profile_id === currentProfileId;
 
-  const handleLongPress = useCallback(() => {
+  const confirmDelete = useCallback(() => {
     if (!canDelete) return;
     Alert.alert('Delete comment', 'Remove this comment?', [
       { text: 'Cancel', style: 'cancel' },
@@ -90,7 +90,7 @@ function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplie
   return (
     <View style={isReply ? styles.replyWrapper : undefined}>
       <Pressable
-        onLongPress={handleLongPress}
+        onLongPress={confirmDelete}
         style={({ pressed }) => [styles.commentRow, pressed && styles.commentRowPressed]}
       >
         <Avatar name={comment.display_name} url={comment.avatar_url} size={isReply ? 28 : 34} />
@@ -122,23 +122,31 @@ function CommentRow({ comment, currentProfileId, onReply, onDelete, onLoadReplie
                   <Text style={styles.replyBtnText}>Reply</Text>
                 </TouchableOpacity>
               )}
+              {canDelete && (
+                <TouchableOpacity onPress={confirmDelete} hitSlop={8} style={styles.replyBtn} testID={`delete-comment-${comment.id}`}>
+                  <Trash2 size={12} color="#E24B4A" />
+                  <Text style={[styles.replyBtnText, { color: '#E24B4A' }]}>Delete</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
       </Pressable>
 
-      {shownReplies.map((r) => (
-        <CommentRow
-          key={r.id}
-          comment={r}
-          currentProfileId={currentProfileId}
-          onReply={onReply}
-          onDelete={onDelete}
-          onLoadReplies={onLoadReplies}
-          onToggleLike={onToggleLike}
-          isReply
-        />
-      ))}
+      {shownReplies
+        .filter((r) => !r.is_deleted)
+        .map((r) => (
+          <CommentRow
+            key={r.id}
+            comment={r}
+            currentProfileId={currentProfileId}
+            onReply={onReply}
+            onDelete={onDelete}
+            onLoadReplies={onLoadReplies}
+            onToggleLike={onToggleLike}
+            isReply
+          />
+        ))}
 
       {hiddenCount > 0 && (
         <TouchableOpacity onPress={() => onLoadReplies(comment.id)} style={styles.loadRepliesBtn}>
@@ -198,7 +206,11 @@ export default function CommentSheet({ visible, contentType, contentId, initialC
     }
   }, [inputText, sending, replyTarget, submitComment]);
 
-  const displayCount = Math.max(commentCount, initialCommentCount);
+  // Trust the live, server-derived count once the first fetch has resolved — it already
+  // excludes soft-deleted comments and updates immediately on delete. Only fall back to the
+  // feed card's cached initialCommentCount during the brief pre-fetch window, so the header
+  // doesn't flash "Comments" before data loads, and never again get pinned above the true count.
+  const displayCount = loading && commentCount === 0 ? initialCommentCount : commentCount;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -221,7 +233,7 @@ export default function CommentSheet({ visible, contentType, contentId, initialC
           </View>
 
           <FlatList
-            data={comments}
+            data={comments.filter((c) => !c.is_deleted || (c.replies ?? []).some((r) => !r.is_deleted))}
             keyExtractor={(c) => c.id}
             style={styles.list}
             contentContainerStyle={styles.listContent}

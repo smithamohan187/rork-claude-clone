@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -77,6 +77,11 @@ export default function PostFeedCard({
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
   const [localCommentCount, setLocalCommentCount] = useState<number>(commentCount ?? post.comments.length ?? 0);
+  // Re-sync when the parent's authoritative count changes (e.g. after adding/deleting a
+  // comment from the full-screen viewer, a separate component instance with its own count).
+  useEffect(() => {
+    if (commentCount !== undefined) setLocalCommentCount(commentCount);
+  }, [commentCount]);
   const [localSaved, setLocalSaved] = useState<boolean>(false);
   const saved = isSaved !== undefined ? isSaved : localSaved;
   const [saveTooltip, setSaveTooltip] = useState<boolean>(false);

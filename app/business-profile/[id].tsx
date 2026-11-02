@@ -168,7 +168,11 @@ export default function BusinessProfileScreen() {
           refresh: refreshBusinessProfile,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
   const { authUser, activeProfile, authLoading, isAuthenticated } = useAuth();
-  const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '', refreshBusinessProfile);
+  const [referralRefreshKey, setReferralRefreshKey] = useState(0);
+  const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '', useCallback(() => {
+    refreshBusinessProfile();
+    setReferralRefreshKey((k) => k + 1);
+  }, [refreshBusinessProfile]));
   const { isSaved, isSaving, save: saveBusinessFn, unsave: unsaveBusinessFn } = useSavedBusiness(id ?? '');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
@@ -860,6 +864,7 @@ export default function BusinessProfileScreen() {
             businessId={id ?? ''}
             businessName={business.name}
             onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
+            refreshKey={referralRefreshKey}
           />
         )}
 
@@ -2343,14 +2348,19 @@ function ReferralCard({
   businessId,
   businessName,
   onShowSnack,
+  refreshKey,
 }: {
   businessId: string;
   businessName: string;
   onShowSnack: (msg: string) => void;
+  refreshKey: number;
 }) {
   // Rendered only while isSubscribed (see call site below), matching the backend's own gate on
   // GET /subscriber-referrals/business/:businessId/mine — see hooks/useBusinessReferral.ts.
-  const { referral, loading } = useBusinessReferral(businessId, true);
+  // refreshKey retries the fetch once a subscribe action actually confirms server-side (the
+  // initial mount can otherwise race ahead of the optimistic isSubscribed flip — see
+  // useBusinessReferral.ts for why).
+  const { referral, loading } = useBusinessReferral(businessId, true, refreshKey);
 
   const referralCode = referral?.referralCode ?? '';
   const referralLink = referral?.referralLink ?? '';

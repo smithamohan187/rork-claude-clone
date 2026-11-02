@@ -1,6 +1,8 @@
 const chatService = require('./chat.service');
+const conversationModel = require('./conversation.model');
 const { listConversationsQuerySchema } = require('./chat.validation');
 const { ok } = require('../../utils/apiResponse');
+const { getIO, profileRoom } = require('../../realtime/socket');
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -59,6 +61,20 @@ const sendMessageHandler = asyncHandler(async (req, res, next) => {
   try {
     const message = await chatService.sendMessage(req.user.userId, req.params.id, req.body.body);
     res.status(201).json(ok({ message }));
+    // Best-effort real-time fan-out so a REST-originated send (anything other than the
+    // socket 'send_message' path, which already broadcasts this itself) still reaches an
+    // already-open chat screen live, instead of only appearing on next reload/refocus.
+    try {
+      const io = getIO();
+      io.to(req.params.id).emit('new_message', message);
+      const participants = await conversationModel.getParticipants(req.params.id);
+      participants.forEach((p) => {
+        io.to(profileRoom(p.profile_id)).emit('conversation_updated', { conversationId: req.params.id });
+      });
+    } catch (broadcastErr) {
+      // Socket layer unavailable or not initialized — message is already persisted and
+      // returned to the caller, so this must never fail the request.
+    }
   } catch (err) {
     sendKnownError(err, res, next);
   }

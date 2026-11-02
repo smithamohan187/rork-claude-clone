@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image, type ImageLoadEventData } from 'expo-image';
@@ -80,6 +80,11 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   const [likersOpen, setLikersOpen] = useState<boolean>(false);
   const [commentSheetOpen, setCommentSheetOpen] = useState<boolean>(false);
   const [localCommentCount, setLocalCommentCount] = useState<number>(offer.comment_count ?? 0);
+  // Re-sync when the parent's authoritative count changes (e.g. after adding/deleting a
+  // comment from the full-screen viewer, a separate component instance with its own count).
+  useEffect(() => {
+    setLocalCommentCount(offer.comment_count ?? 0);
+  }, [offer.comment_count]);
 
   const expiryInfo = useMemo(() => {
     if (!offer.expiryDate) return { label: null as string | null, urgent: false };
