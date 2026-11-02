@@ -1,6 +1,7 @@
 const { query } = require('../../config/database');
 const shareReferralsModel = require('./shareReferrals.model');
 const customerInviteModel = require('../customerInvites/customerInvite.model');
+const businessReferralModel = require('../businessReferrals/businessReferral.model');
 const referralModel = require('../referrals/referral.model');
 const marketplaceModel = require('../marketplace/marketplace.model');
 const offersModel = require('../offers/offers.model');
@@ -96,7 +97,21 @@ async function resolveReferral(referral_code) {
     };
   }
 
-  // Not a customer-invite code either — check the business-invite namespace (read-only lookup;
+  // Not a customer-invite code either — check the subscriber-referral namespace (a subscribed
+  // customer's own standing per-business code, distinct from a one-shot customer-invite code;
+  // read-only lookup, resolution/crediting happens in businessReferral.service.js).
+  const subscriberReferral = await businessReferralModel.findByReferralCode(referral_code);
+  if (subscriberReferral) {
+    return {
+      content_type: 'business_subscriber_referral',
+      content_id: subscriberReferral.business_id,
+      business_id: subscriberReferral.business_id,
+      route: '/business-profile/[id]',
+      id_param: 'id',
+    };
+  }
+
+  // Not a subscriber-referral code either — check the business-invite namespace (read-only lookup;
   // actual linking only happens later, at business-registration time, not here).
   const businessInvite = await marketplaceModel.getInviteByCode(referral_code);
   if (businessInvite) {

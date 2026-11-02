@@ -81,6 +81,7 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useBusinessReferral } from '@/hooks/useBusinessReferral';
 import { useSavedBusiness } from '@/hooks/useSavedBusiness';
 import { useBusinessScanCode } from '@/hooks/useBusinessScanCode';
 import { useBusinessUnlockStatus } from '@/hooks/useBusinessUnlockStatus';
@@ -164,9 +165,10 @@ function validateDraft(
 export default function BusinessProfileScreen() {
   const { id, subscribe: subscribeParam, welcomePoints: welcomePointsParam } = useLocalSearchParams<{ id: string; subscribe?: string; welcomePoints?: string }>();
   const { business: realBusiness, loading: profileLoading, error: profileError,
+          refresh: refreshBusinessProfile,
           formattedHours, formattedAddress } = useBusinessProfile(id ?? '');
   const { authUser, activeProfile, authLoading, isAuthenticated } = useAuth();
-  const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '');
+  const { isSubscribed, isToggling, subscribe, unsubscribe } = useSubscription(id ?? '', refreshBusinessProfile);
   const { isSaved, isSaving, save: saveBusinessFn, unsave: unsaveBusinessFn } = useSavedBusiness(id ?? '');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('offers');
@@ -855,9 +857,9 @@ export default function BusinessProfileScreen() {
 
         {isSubscribed && (
           <ReferralCard
+            businessId={id ?? ''}
             businessName={business.name}
             onShowSnack={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
-            onOpenReferrals={() => router.push('/my-referrals' as never)}
           />
         )}
 
@@ -2338,19 +2340,25 @@ function AboutTab({
 }
 
 function ReferralCard({
+  businessId,
   businessName,
   onShowSnack,
-  onOpenReferrals,
 }: {
+  businessId: string;
   businessName: string;
   onShowSnack: (msg: string) => void;
-  onOpenReferrals: () => void;
 }) {
-  const referralCode = 'SAM-X7K2';
-  const referralLink = `https://touchpoint.app/join-biz?ref=${referralCode}&biz=biz-001`;
-  const shareMessage = `Hey! I shop at ${businessName} and I think you'll love it! Use my code ${referralCode} to join on TouchPoint and we BOTH earn 75 reward points after your first purchase! ${referralLink}`;
+  // Rendered only while isSubscribed (see call site below), matching the backend's own gate on
+  // GET /subscriber-referrals/business/:businessId/mine — see hooks/useBusinessReferral.ts.
+  const { referral, loading } = useBusinessReferral(businessId, true);
+
+  const referralCode = referral?.referralCode ?? '';
+  const referralLink = referral?.referralLink ?? '';
+  const bonus = referral?.bonusPerReferral ?? 0;
+  const shareMessage = `Hey! I shop at ${businessName} and I think you'll love it! Use my link to join on TouchPoint: ${referralLink}`;
 
   const handleCopy = useCallback(async () => {
+    if (!referralLink) return;
     try {
       await Clipboard.setStringAsync(referralLink);
       if (Platform.OS !== 'web') {
@@ -2363,20 +2371,31 @@ function ReferralCard({
   }, [referralLink, onShowSnack]);
 
   const handleWhatsApp = useCallback(async () => {
+    if (!referralLink) return;
     try {
       await Share.share({ message: shareMessage });
     } catch (e) {
       console.log('[ReferralCard] WhatsApp share error:', e);
     }
-  }, [shareMessage]);
+  }, [shareMessage, referralLink]);
 
   const handleMoreOptions = useCallback(async () => {
+    if (!referralLink) return;
     try {
       await Share.share({ message: shareMessage });
     } catch (e) {
       console.log('[ReferralCard] Share error:', e);
     }
-  }, [shareMessage]);
+  }, [shareMessage, referralLink]);
+
+  if (loading && !referral) {
+    return (
+      <View style={styles.referralCard} testID="referral-card">
+        <ActivityIndicator size="small" color="#1A5C35" />
+      </View>
+    );
+  }
+  if (!referral) return null;
 
   return (
     <View style={styles.referralCard} testID="referral-card">
@@ -2384,12 +2403,14 @@ function ReferralCard({
         <View style={{ flex: 1 }}>
           <Text style={styles.referralTitle}>Refer friends here</Text>
           <Text style={styles.referralSubtitle}>
-            You both earn 75 pts after their first purchase
+            {bonus > 0 ? `You earn ${bonus} pts when they subscribe` : 'Share your link to grow this business'}
           </Text>
         </View>
-        <View style={styles.referralPointsBadge}>
-          <Text style={styles.referralPointsBadgeText}>+75 pts each</Text>
-        </View>
+        {bonus > 0 && (
+          <View style={styles.referralPointsBadge}>
+            <Text style={styles.referralPointsBadgeText}>+{bonus} pts</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.referralLinkWrap}>
@@ -2431,27 +2452,18 @@ function ReferralCard({
 
       <View style={styles.referralStatsRow}>
         <View style={styles.referralStatItem}>
-          <Text style={[styles.referralStatValue, { color: '#1A5C35' }]}>2 referred</Text>
+          <Text style={[styles.referralStatValue, { color: '#1A5C35' }]}>{referral.stats.referredCount} referred</Text>
           <Text style={styles.referralStatLabel}>Friends</Text>
         </View>
         <View style={styles.referralStatItem}>
-          <Text style={[styles.referralStatValue, { color: '#0F6E56' }]}>1 completed</Text>
-          <Text style={styles.referralStatLabel}>Purchases</Text>
+          <Text style={[styles.referralStatValue, { color: '#0F6E56' }]}>{referral.stats.completedCount} subscribed</Text>
+          <Text style={styles.referralStatLabel}>Friends</Text>
         </View>
         <View style={styles.referralStatItem}>
-          <Text style={[styles.referralStatValue, { color: '#854F0B' }]}>75 earned</Text>
+          <Text style={[styles.referralStatValue, { color: '#854F0B' }]}>{referral.stats.pointsEarned} earned</Text>
           <Text style={styles.referralStatLabel}>Points</Text>
         </View>
       </View>
-
-      <TouchableOpacity
-        onPress={onOpenReferrals}
-        hitSlop={8}
-        testID="referral-see-list-btn"
-        style={styles.referralSeeListWrap}
-      >
-        <Text style={styles.referralSeeListText}>See my referral list →</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -2950,15 +2962,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#1A5C35',
     marginTop: 2,
-  },
-  referralSeeListWrap: {
-    marginTop: 8,
-    alignSelf: 'flex-end',
-  },
-  referralSeeListText: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: '#1A5C35',
   },
   scroll: {
     flex: 1,

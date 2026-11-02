@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { signIn, SignInPayload } from '@/api/services/authService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
+import { resolvePendingBusinessReferral } from '@/api/services/businessReferralService';
 import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
 function isValidEmail(val: string): boolean {
@@ -93,6 +94,23 @@ export function useSignIn() {
           }
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignIn] resolvePendingInvite error:', resolveErr);
+        }
+      }
+
+      // Same as the customer-invite branch above, but reached via a subscriber's own standing
+      // referral link — resolved by code, landing via pending.business_id (the resolve call
+      // itself returns no business object, only matched/welcomePoints, unlike resolvePendingInvite).
+      if (pending?.content_type === 'business_subscriber_referral' && pending.business_id) {
+        try {
+          const resolved = await resolvePendingBusinessReferral(pending.referral_code);
+          await clearPendingShareReferral();
+          router.replace({
+            pathname: '/business-profile/[id]' as never,
+            params: { id: pending.business_id, welcomePoints: String(resolved.welcomePoints) } as never,
+          });
+          return;
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignIn] resolvePendingBusinessReferral error:', resolveErr);
         }
       }
 

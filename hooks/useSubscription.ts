@@ -8,7 +8,7 @@ import {
   getSubscriptionStatus,
 } from '@/api/services/subscriptionService';
 
-export function useSubscription(businessId: string) {
+export function useSubscription(businessId: string, onChange?: () => void) {
   const { authUser } = useAuth();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -28,13 +28,14 @@ export function useSubscription(businessId: string) {
     setIsSubscribed(true);
     try {
       await subscribeToBusiness(businessId);
+      onChange?.();
     } catch {
       setIsSubscribed(false);
       Alert.alert('Error', 'Could not subscribe. Please try again.');
     } finally {
       setIsToggling(false);
     }
-  }, [businessId, isToggling]);
+  }, [businessId, isToggling, onChange]);
 
   const unsubscribe = useCallback(async () => {
     if (isToggling) return;
@@ -42,13 +43,14 @@ export function useSubscription(businessId: string) {
     setIsSubscribed(false);
     try {
       await unsubscribeFromBusiness(businessId);
+      onChange?.();
     } catch {
       setIsSubscribed(true);
       Alert.alert('Error', 'Could not unsubscribe. Please try again.');
     } finally {
       setIsToggling(false);
     }
-  }, [businessId, isToggling]);
+  }, [businessId, isToggling, onChange]);
 
   return { isSubscribed, isToggling, subscribe, unsubscribe };
 }

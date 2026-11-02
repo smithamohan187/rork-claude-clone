@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { signUp, SignupPayload } from '@/api/services/authService';
 import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
+import { resolvePendingBusinessReferral } from '@/api/services/businessReferralService';
 import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
 
 // Where to land the user after signup: the shared detail screen when they arrived via a share
@@ -163,6 +164,10 @@ export function useSignUp() {
       // Business QR scan — resolved via businessId directly (scanSubscribeToBusiness below), not a
       // referral code the signup endpoint knows about.
       const isBusinessQrScan = pending?.content_type === 'business_qr';
+      // Subscriber-referral code (a subscribed customer's own standing per-business link) — same
+      // shape as the QR-scan case: resolved post-login via resolvePendingBusinessReferral below,
+      // not submitted in the signup payload itself.
+      const isSubscriberReferral = pending?.content_type === 'business_subscriber_referral';
 
       const payload: SignupPayload = {
         email:         email.trim().toLowerCase(),
@@ -172,7 +177,7 @@ export function useSignUp() {
         location:      location.trim()   || undefined,
         interests:     interests.length  ? interests : undefined,
         referral_code: isAppReferral ? pending?.referral_code : (referralCode.trim().toUpperCase() || undefined),
-        share_referral_code: isCustomerInvite || isAppReferral || isBusinessInvite || isBusinessQrScan ? undefined : pending?.referral_code,
+        share_referral_code: isCustomerInvite || isAppReferral || isBusinessInvite || isBusinessQrScan || isSubscriberReferral ? undefined : pending?.referral_code,
         customer_invite_code: isCustomerInvite ? pending?.referral_code : undefined,
       };
 
@@ -204,6 +209,14 @@ export function useSignUp() {
           resolvedWelcomePoints = resolved.welcomePoints;
         } catch (resolveErr) {
           if (__DEV__) console.error('[useSignUp] scanSubscribeToBusiness error:', resolveErr);
+        }
+      }
+      if (isSubscriberReferral && pending?.referral_code) {
+        try {
+          const resolved = await resolvePendingBusinessReferral(pending.referral_code);
+          if (resolved.matched) resolvedWelcomePoints = resolved.welcomePoints;
+        } catch (resolveErr) {
+          if (__DEV__) console.error('[useSignUp] resolvePendingBusinessReferral error:', resolveErr);
         }
       }
 

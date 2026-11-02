@@ -41,6 +41,7 @@ const { businessRouter: couponsBusinessRouter, couponRouter } = require('./modul
 const { getScanLandingPageHandler } = require('./modules/businesses/business.controller');
 const billingRoutes = require('./modules/billing/billing.routes');
 const { stripeWebhookHandler } = require('./modules/billing/billing.controller');
+const businessReferralRoutes = require('./modules/businessReferrals/businessReferral.routes');
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.use('/analytics',         analyticsRoutes);
 app.use('/businesses',        couponsBusinessRouter);
 app.use('/coupons',           couponRouter);
 app.use('/billing',           billingRoutes);
+app.use('/subscriber-referrals', businessReferralRoutes);
 app.use('/',                  rewardConfigRoutes);
 
 app.use('/api/v1', api);

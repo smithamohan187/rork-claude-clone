@@ -6,6 +6,7 @@ import { resolveShareReferral } from '@/api/services/sharesService';
 import { parseReferralFromUrl, parseBusinessScanFromUrl, setPendingShareReferral } from '@/utils/shareReferral';
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
 import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
+import { resolvePendingBusinessReferral } from '@/api/services/businessReferralService';
 
 // Handles inbound content-share deep links (expo-linking). Mounted once at the app root.
 //
@@ -89,16 +90,19 @@ export function useShareDeepLink(): void {
         return;
       }
 
-      if (resolved.content_type === 'business') {
-        // Already logged in and tapping a customer-invite link — auto-subscribe and credit any
-        // configured welcome points right away, same as the register/login flows, instead of just
-        // landing on the business page and requiring a manual Subscribe tap.
+      if (resolved.content_type === 'business' || resolved.content_type === 'business_subscriber_referral') {
+        // Already logged in and tapping a customer-invite or subscriber-referral link —
+        // auto-subscribe and credit any configured welcome/referral points right away, same as
+        // the register/login flows, instead of just landing on the business page and requiring a
+        // manual Subscribe tap.
         let welcomePoints = 0;
         try {
-          const resolvedInvite = await resolvePendingInvite(code);
+          const resolvedInvite = resolved.content_type === 'business_subscriber_referral'
+            ? await resolvePendingBusinessReferral(code)
+            : await resolvePendingInvite(code);
           if (resolvedInvite.matched) welcomePoints = resolvedInvite.welcomePoints;
         } catch (err) {
-          if (__DEV__) console.error('[useShareDeepLink] resolvePendingInvite error:', err);
+          if (__DEV__) console.error('[useShareDeepLink] resolve pending referral error:', err);
         }
         router.push({
           pathname: resolved.route as never,
