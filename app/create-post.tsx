@@ -148,7 +148,7 @@ interface FormErrors {
 
 export default function CreatePostScreen() {
   const router = useRouter();
-  const { authUser, accountType } = useAuth();
+  const { authUser, accountType, authLoading } = useAuth();
   const { showSnackbar } = useSnackbar();
 
   // ---- Tab mode (Post / Event / Offer) ----
@@ -194,6 +194,7 @@ export default function CreatePostScreen() {
   const [offerImage, setOfferImage] = useState<string>('');
 
   const loadMyUploads = useCallback(async (offset: number, replace: boolean) => {
+    if (authLoading) return;
     setMyUploadsLoading(true);
     try {
       const { items, hasMore } = await fetchMyUploads(20, offset);
@@ -204,12 +205,12 @@ export default function CreatePostScreen() {
     } finally {
       setMyUploadsLoading(false);
     }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
-    if (isBusiness) loadMyUploads(0, true);
+    if (isBusiness && !authLoading) loadMyUploads(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBusiness]);
+  }, [isBusiness, authLoading]);
 
   const handleLoadMoreUploads = useCallback(() => {
     if (myUploadsLoading || !myUploadsHasMore) return;

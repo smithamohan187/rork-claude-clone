@@ -6,14 +6,17 @@ import {
   deletePost as deletePostService,
   type Post,
 } from '@/api/services/postsService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type PostFilter = 'all' | 'active' | 'disabled';
 
 export function useBusinessPosts(businessId: string, filter: PostFilter) {
+  const { authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (authLoading) return;
     if (!businessId) return;
     setIsLoading(true);
     try {
@@ -25,7 +28,7 @@ export function useBusinessPosts(businessId: string, filter: PostFilter) {
     } finally {
       setIsLoading(false);
     }
-  }, [businessId, filter]);
+  }, [businessId, filter, authLoading]);
 
   useEffect(() => {
     refresh();

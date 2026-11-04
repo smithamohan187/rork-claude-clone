@@ -1,12 +1,15 @@
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getBusinessMembers, removeBusinessMember, type BusinessMember } from '@/api/services/subscriptionService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useBusinessMembers(businessId: string) {
+  const { authLoading } = useAuth();
   const [members, setMembers] = useState<BusinessMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (authLoading) return;
     if (!businessId) return;
     setIsLoading(true);
     try {
@@ -16,7 +19,7 @@ export function useBusinessMembers(businessId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [businessId]);
+  }, [businessId, authLoading]);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 

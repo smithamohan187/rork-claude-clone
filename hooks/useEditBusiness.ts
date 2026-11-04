@@ -49,7 +49,7 @@ export type FieldErrors = Record<string, string>;
 // hours, photo) into one save, reusing the same upsert endpoint the onboarding wizard uses.
 export function useEditBusiness() {
   const router = useRouter();
-  const { refreshProfiles } = useAuth();
+  const { refreshProfiles, authLoading } = useAuth();
 
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('');
@@ -133,18 +133,23 @@ export function useEditBusiness() {
   }, []);
 
   const pickPhoto = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images' as ImagePicker.MediaType,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(await toDisplayUri(result.assets[0].uri));
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images' as ImagePicker.MediaType,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setPhotoUri(await toDisplayUri(result.assets[0].uri));
+      }
+    } catch {
+      setError('Unsupported file. Please choose a JPG, PNG, or WebP image.');
     }
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     let cancelled = false;
     (async () => {
       try {
@@ -179,7 +184,7 @@ export function useEditBusiness() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [authLoading]);
 
   const validate = useCallback((): boolean => {
     const errs: FieldErrors = {};

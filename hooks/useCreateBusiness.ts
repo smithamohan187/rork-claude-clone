@@ -321,33 +321,41 @@ export function useCreateBusiness() {
   }, []);
 
   const pickLogo = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images' as ImagePicker.MediaType,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      // Convert to stable display URI immediately — blob URLs get revoked on web
-      const displayUri = await toDisplayUri(result.assets[0].uri);
-      console.log('[pickLogo] displayUri:', displayUri);
-      setLogoUri(displayUri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images' as ImagePicker.MediaType,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        // Convert to stable display URI immediately — blob URLs get revoked on web
+        const displayUri = await toDisplayUri(result.assets[0].uri);
+        console.log('[pickLogo] displayUri:', displayUri);
+        setLogoUri(displayUri);
+      }
+    } catch {
+      showSnackbar('Unsupported file. Please choose a JPG, PNG, or WebP image.');
     }
-  }, []);
+  }, [showSnackbar]);
 
   const pickCover = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images' as ImagePicker.MediaType,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      // Convert to stable display URI immediately — blob URLs get revoked on web
-      const displayUri = await toDisplayUri(result.assets[0].uri);
-      setCoverUri(displayUri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images' as ImagePicker.MediaType,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        // Convert to stable display URI immediately — blob URLs get revoked on web
+        const displayUri = await toDisplayUri(result.assets[0].uri);
+        setCoverUri(displayUri);
+      }
+    } catch {
+      showSnackbar('Unsupported file. Please choose a JPG, PNG, or WebP image.');
     }
-  }, []);
+  }, [showSnackbar]);
 
   const finishAndNavigate = useCallback(async (message?: string) => {
     updateAuthUser({ role: 'business' });

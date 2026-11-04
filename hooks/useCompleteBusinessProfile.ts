@@ -55,9 +55,6 @@ export function useCompleteBusinessProfile() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [initialPhotoUri, setInitialPhotoUri] = useState<string | null>(null);
 
-  // Round-tripped unchanged — not exposed as a field in this form, but required by the
-  // backend schema; sending inhouse_referral: false unconditionally (as this screen used
-  // to) would silently turn off an existing in-house referral program on every save.
   const [inhouseReferral, setInhouseReferral] = useState(false);
   const [inhouseReferralUrl, setInhouseReferralUrl] = useState<string | null>(null);
 
@@ -105,14 +102,18 @@ export function useCompleteBusinessProfile() {
   }, []);
 
   const pickPhoto = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images' as ImagePicker.MediaType,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(await toDisplayUri(result.assets[0].uri));
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images' as ImagePicker.MediaType,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setPhotoUri(await toDisplayUri(result.assets[0].uri));
+      }
+    } catch {
+      setError('Unsupported file. Please choose a JPG, PNG, or WebP image.');
     }
   }, []);
 
@@ -155,6 +156,10 @@ export function useCompleteBusinessProfile() {
 
   const handleSave = useCallback(async () => {
     if (saving || !businessId) return;
+    if (inhouseReferral && !inhouseReferralUrl?.trim()) {
+      setError('Enter your in-house referral website URL, or turn the toggle off.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -203,6 +208,9 @@ export function useCompleteBusinessProfile() {
     detecting, detectError, detectLocation,
 
     photoUri, pickPhoto,
+
+    inhouseReferral, setInhouseReferral,
+    inhouseReferralUrl, setInhouseReferralUrl,
 
     loadingInitial, saving, error, saved,
     handleSave,

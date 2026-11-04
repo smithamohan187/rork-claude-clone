@@ -40,6 +40,7 @@ import { usePosts } from '@/hooks/usePosts';
 import { uploadPostImage } from '@/api/services/postsService';
 import { createOffer, updateOffer, type CreateOfferPayload, type OfferType } from '@/api/services/offersService';
 import { fetchMyUploads, uploadMedia, deleteMedia, type MediaItem } from '@/api/services/businessMediaService';
+import { useAuth } from '@/contexts/AuthContext';
 import { useEvents } from '@/hooks/useEvents';
 
 async function toDisplayUri(uri: string): Promise<string> {
@@ -92,6 +93,7 @@ const OFFER_TYPES: { value: OfferType; label: string; icon: typeof Megaphone }[]
 
 export default function CreateOfferScreen() {
   const router = useRouter();
+  const { authLoading } = useAuth();
   const publishScale = useRef(new Animated.Value(1)).current;
 
   const { tab } = useLocalSearchParams<{ tab?: string }>();
@@ -131,6 +133,7 @@ export default function CreateOfferScreen() {
   const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
 
   const loadMyUploads = useCallback(async (offset: number, replace: boolean) => {
+    if (authLoading) return;
     setMyUploadsLoading(true);
     try {
       const { items, hasMore } = await fetchMyUploads(20, offset);
@@ -141,12 +144,12 @@ export default function CreateOfferScreen() {
     } finally {
       setMyUploadsLoading(false);
     }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
     loadMyUploads(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading]);
 
   const handleLoadMoreUploads = useCallback(() => {
     if (myUploadsLoading || !myUploadsHasMore) return;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getMyBusinessReferral, type MyBusinessReferral } from '@/api/services/businessReferralService';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Loads the active profile's own standing referral code/link/stats for a business — only called
 // while the caller is subscribed (see ReferralCard's isSubscribed render guard in
@@ -12,10 +13,12 @@ import { getMyBusinessReferral, type MyBusinessReferral } from '@/api/services/b
 // 403. Bumping refreshKey only after the subscribe call resolves retries the fetch once the
 // subscription genuinely exists.
 export function useBusinessReferral(businessId: string, enabled: boolean, refreshKey?: number) {
+  const { authLoading } = useAuth();
   const [referral, setReferral] = useState<MyBusinessReferral | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
+    if (authLoading) return;
     if (!businessId || !enabled) return;
     setLoading(true);
     try {
@@ -26,7 +29,7 @@ export function useBusinessReferral(businessId: string, enabled: boolean, refres
     } finally {
       setLoading(false);
     }
-  }, [businessId, enabled]);
+  }, [businessId, enabled, authLoading]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 

@@ -25,6 +25,8 @@ export interface OfferFeedItem {
   businessId: string;
   businessName: string;
   businessLogo: string;
+  inhouseReferral: boolean;
+  inhouseReferralUrl: string | null;
   title: string;
   description: string;
   image_url: string | null;
@@ -49,6 +51,8 @@ export interface EventFeedItem {
   businessId: string;
   businessName: string;
   businessLogo: string;
+  inhouseReferral: boolean;
+  inhouseReferralUrl: string | null;
   title: string;
   description: string | null;
   image_url: string | null;
@@ -74,6 +78,8 @@ export interface PostFeedItem {
   business_id: string;
   business_name: string;
   business_logo: string;
+  inhouseReferral: boolean;
+  inhouseReferralUrl: string | null;
   title: string;
   text: string;
   image_url: string | null;
@@ -106,6 +112,8 @@ function mapToOffer(item: FeedApiItem): OfferFeedItem {
     businessId: item.business_id,
     businessName: item.business_name,
     businessLogo: item.business_logo ?? '',
+    inhouseReferral: item.inhouse_referral ?? false,
+    inhouseReferralUrl: item.inhouse_referral_url ?? null,
     title: item.title,
     description: item.content ?? '',
     image_url: item.image_url,
@@ -132,6 +140,8 @@ function mapToEvent(item: FeedApiItem): EventFeedItem {
     businessId: item.business_id,
     businessName: item.business_name,
     businessLogo: item.business_logo ?? '',
+    inhouseReferral: item.inhouse_referral ?? false,
+    inhouseReferralUrl: item.inhouse_referral_url ?? null,
     title: item.title,
     description: item.content,
     image_url: item.image_url,
@@ -159,6 +169,8 @@ function mapToPost(item: FeedApiItem): PostFeedItem {
     business_id: item.business_id,
     business_name: item.business_name,
     business_logo: item.business_logo ?? '',
+    inhouseReferral: item.inhouse_referral ?? false,
+    inhouseReferralUrl: item.inhouse_referral_url ?? null,
     title: item.title,
     text: item.content ?? '',
     image_url: item.image_url,

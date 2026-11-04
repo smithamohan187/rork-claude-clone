@@ -13,6 +13,7 @@ import { ArrowLeft, Check, CreditCard } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { fetchPlans, fetchMySubscription, type SubscriptionPlan, type BusinessSubscription } from '@/api/services/billingService';
 import { useSubscriptionCheckout } from '@/hooks/useSubscriptionCheckout';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Entry point for the dashboard checklist's "Start Stripe Trial" step. Deliberately a small,
 // standalone plan picker rather than re-entering create-business-profile's 6-step wizard — the
@@ -20,6 +21,7 @@ import { useSubscriptionCheckout } from '@/hooks/useSubscriptionCheckout';
 // see billing.service.js) is reused via useSubscriptionCheckout, unchanged.
 export default function BusinessStartTrialScreen() {
   const router = useRouter();
+  const { authLoading } = useAuth();
   const { checkout, loading: checkingOut, error: checkoutError } = useSubscriptionCheckout();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -27,6 +29,7 @@ export default function BusinessStartTrialScreen() {
   const [subscription, setSubscription] = useState<BusinessSubscription | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchPlans()
       .then(setPlans)
       .catch(() => {})
@@ -34,7 +37,7 @@ export default function BusinessStartTrialScreen() {
     fetchMySubscription()
       .then(setSubscription)
       .catch(() => {});
-  }, []);
+  }, [authLoading]);
 
   const isActive = subscription?.status === 'active' || subscription?.status === 'trial';
 

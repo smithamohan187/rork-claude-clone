@@ -105,6 +105,21 @@ async function getSubscriptionByUserId(userId, businessId) {
   return rows[0] ?? null;
 }
 
+// Mirrors getSubscriptionByUserId's "any profile the user owns" scope (not just the currently
+// active profile) but returns the profile_id itself, since callers that need to act as the
+// subscriber (e.g. a per-profile referral code) need to know which profile actually holds the
+// subscription.
+async function getSubscribedProfileId(userId, businessId) {
+  const { rows } = await query(
+    `SELECT s.profile_id FROM subscriptions s
+     JOIN profiles p ON s.profile_id = p.id
+     WHERE p.user_id = $1 AND s.business_id = $2 AND s.is_active = true
+     LIMIT 1`,
+    [userId, businessId]
+  );
+  return rows[0]?.profile_id ?? null;
+}
+
 async function getBusinessIdByUserId(userId) {
   const { rows } = await query(
     `SELECT b.id AS business_id FROM businesses b
@@ -147,6 +162,7 @@ module.exports = {
   getActiveProfileId,
   getSubscription,
   getSubscriptionByUserId,
+  getSubscribedProfileId,
   subscribe,
   subscribeWithClient,
   unsubscribe,

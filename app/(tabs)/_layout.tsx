@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,9 +73,19 @@ function TabIcon({
 }
 
 export default function TabLayout() {
-  const { accountType } = useAuth();
+  const router = useRouter();
+  const { accountType, authLoading, isAuthenticated } = useAuth();
   const isBusiness = accountType === 'business';
   const insets = useSafeAreaInsets();
+
+  // Mirrors the inverse guard in app/(auth)/_layout.tsx (TC-RTE-002): without this, a logged-out
+  // user who lands here via a direct URL/deep link/back-navigation (web) sees the tabs shell
+  // render with no real data instead of being bounced to Sign In (TC-RTE-001).
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/(auth)/sign-in' as never);
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   const screenOptions = useMemo(() => ({
     headerShown: false,
@@ -111,8 +121,6 @@ export default function TabLayout() {
       <TabIcon focused={focused} color={color} Icon={isBusiness ? BarChart3 : Gift} />
     ),
   }), [isBusiness]);
-
-  const router = useRouter();
 
   const handleMembersTabPress = useCallback((e: { preventDefault: () => void }) => {
     if (isBusiness) {
@@ -158,6 +166,12 @@ export default function TabLayout() {
       <TabIcon focused={focused} color={color} Icon={isBusiness ? Settings : User} badgeDot={showSavedDot} />
     ),
   }), [isBusiness, showSavedDot]);
+
+  // While session restore is in flight, or once we know the user is logged out and the redirect
+  // above is about to fire, show nothing rather than flashing the tabs shell with no real data.
+  if (authLoading || !isAuthenticated) {
+    return <View style={{ flex: 1 }} />;
+  }
 
   return (
     <Tabs screenOptions={screenOptions}>

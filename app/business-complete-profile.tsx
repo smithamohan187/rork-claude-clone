@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +31,8 @@ export default function BusinessCompleteProfileScreen() {
     country, setCountry,
     detecting, detectError, detectLocation,
     photoUri, pickPhoto,
+    inhouseReferral, setInhouseReferral,
+    inhouseReferralUrl, setInhouseReferralUrl,
     loadingInitial, saving, error,
     handleSave,
   } = useCompleteBusinessProfile();
@@ -146,6 +149,41 @@ export default function BusinessCompleteProfileScreen() {
               />
             </View>
 
+            <Text style={styles.sectionLabel}>REFERRAL PROGRAM</Text>
+            <View style={styles.referralRow}>
+              <Text style={styles.referralRowLabel}>Use Your In-House Referral Program</Text>
+              <Switch
+                value={inhouseReferral}
+                onValueChange={(v) => {
+                  setInhouseReferral(v);
+                  if (!v) setInhouseReferralUrl('');
+                }}
+                trackColor={{ false: '#D6D3E0', true: Colors.primaryDark }}
+                thumbColor={Platform.OS === 'android' ? (inhouseReferral ? '#fff' : '#f4f3f4') : undefined}
+                ios_backgroundColor="#D6D3E0"
+              />
+            </View>
+            <Text style={styles.referralHelper}>
+              {inhouseReferral
+                ? 'Members tapping Share on your content will be sent to your own website instead of the TouchPoint share sheet.'
+                : 'By default, members share your content through the TouchPoint referral program and both parties earn points automatically.'}
+            </Text>
+            {inhouseReferral && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Your In-House Referral URL</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://yourbusiness.com/refer"
+                  placeholderTextColor={Colors.textTertiary}
+                  value={inhouseReferralUrl ?? ''}
+                  onChangeText={setInhouseReferralUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+            )}
+
             <View style={styles.locationHeaderRow}>
               <Text style={styles.sectionLabel}>LOCATION</Text>
               <TouchableOpacity
@@ -258,6 +296,12 @@ const styles = StyleSheet.create({
   },
   typeCardRadioSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary },
   typeCardDesc: { fontSize: 12, color: Colors.textTertiary, marginTop: 4, lineHeight: 16 },
+  referralRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  referralRowLabel: { fontSize: 14, fontWeight: '600' as const, color: Colors.text, flex: 1, marginRight: 12 },
+  referralHelper: { fontSize: 12, color: Colors.textTertiary, lineHeight: 16, marginBottom: 14 },
   inputGroup: { marginBottom: 14 },
   inputLabel: { fontSize: 13, fontWeight: '600' as const, color: Colors.text, marginBottom: 6 },
   input: {

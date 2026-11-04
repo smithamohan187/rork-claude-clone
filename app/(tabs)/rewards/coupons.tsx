@@ -417,7 +417,7 @@ const cardStyles = StyleSheet.create({
 
 export default function MyCouponsScreen() {
   const router = useRouter();
-  const { getSortedCoupons, loaded, markExpired } = useCoupons();
+  const { getSortedCoupons, loaded, markExpired, markUsed } = useCoupons();
   const [coupons, setCoupons] = useState<StoredCoupon[]>([]);
 
   useEffect(() => {
@@ -433,21 +433,34 @@ export default function MyCouponsScreen() {
     return () => clearInterval(interval);
   }, [getSortedCoupons]);
 
-  // On screen focus, trigger lazy expiry check for all backend-issued active coupons.
-  // Server writes the refund transaction; we update local state if expired.
+  // Server-side status check for all backend-issued active coupons: picks up both
+  // expiry (server writes the refund) and a business having scanned the coupon on a
+  // different device, so the list doesn't keep showing "Active" after it's been used.
+  const checkServerStatuses = useCallback(() => {
+    const now = Date.now();
+    const active = getSortedCoupons().filter(
+      c => c.status === 'active' && c.expiresAt > now && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(c.id)
+    );
+    Promise.allSettled(
+      active.map(c =>
+        checkCouponExpiry(c.id).then(({ expired, status }) => {
+          if (status === 'used') markUsed(c.id);
+          else if (expired) markExpired(c.id);
+        })
+      )
+    ).then(() => setCoupons(getSortedCoupons()));
+  }, [getSortedCoupons, markExpired, markUsed]);
+
   useFocusEffect(
     useCallback(() => {
-      const now = Date.now();
-      const active = getSortedCoupons().filter(
-        c => c.status === 'active' && c.expiresAt > now && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(c.id)
-      );
-      Promise.allSettled(
-        active.map(c =>
-          checkCouponExpiry(c.id).then(({ expired }) => { if (expired) markExpired(c.id); })
-        )
-      ).then(() => setCoupons(getSortedCoupons()));
-    }, [getSortedCoupons, markExpired])
+      checkServerStatuses();
+    }, [checkServerStatuses])
   );
+
+  useEffect(() => {
+    const serverPoll = setInterval(checkServerStatuses, 10000);
+    return () => clearInterval(serverPoll);
+  }, [checkServerStatuses]);
 
   const activeCount = coupons.filter(
     (c) => c.status !== 'used' && c.expiresAt > Date.now()

@@ -162,13 +162,19 @@ export function useEditProfile() {
       setError('Camera roll permission is required to change your avatar.');
       return;
     }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1] as [number, number],
-      quality: 0.5,
-      base64: true,
-    });
+    let picked: ImagePicker.ImagePickerResult;
+    try {
+      picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1] as [number, number],
+        quality: 0.5,
+        base64: true,
+      });
+    } catch {
+      setError('Unsupported file type. Please choose a JPG, PNG, or WebP image.');
+      return;
+    }
     if (picked.canceled || !picked.assets?.[0]) return;
     const asset = picked.assets[0];
 

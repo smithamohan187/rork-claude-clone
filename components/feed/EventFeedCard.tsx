@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
+import { normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bookmark, MapPin } from 'lucide-react-native';
@@ -91,9 +91,8 @@ export const EventFeedCard = React.memo(function EventFeedCard({
   }, []);
 
   const handleToggleShare = useCallback(() => {
-    const settings = getBusinessReferralSettings(event.businessId);
-    if (!settings.optIn) {
-      const url = normaliseWebsiteUrl(settings.website);
+    if (event.inhouseReferral) {
+      const url = normaliseWebsiteUrl(event.inhouseReferralUrl);
       if (!url) {
         onShowToast("This business hasn't set up a website yet.");
         return;
@@ -106,7 +105,7 @@ export const EventFeedCard = React.memo(function EventFeedCard({
     }
     easeNext();
     onOpenPanel(activePanel === 'share' ? null : 'share');
-  }, [activePanel, onOpenPanel, event.businessId, onShowToast]);
+  }, [activePanel, onOpenPanel, event.inhouseReferral, event.inhouseReferralUrl, onShowToast]);
 
   const handleRefer = useCallback(() => {
     setReferOpen(true);

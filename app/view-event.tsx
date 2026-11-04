@@ -29,6 +29,7 @@ import CommentSheet from '@/components/feed/CommentSheet';
 import { toggleSaveEvent } from '@/api/services/savedEventService';
 import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const BG = '#F8F7FF';
@@ -72,6 +73,7 @@ export default function ViewEventScreen() {
   const params = useLocalSearchParams<{ eventId?: string; businessId?: string }>();
   const eventId = typeof params.eventId === 'string' ? params.eventId : '';
   const paramBizId = typeof params.businessId === 'string' ? params.businessId : '';
+  const { authLoading } = useAuth();
 
   const [event, setEvent] = useState<Event | null>(null);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
@@ -86,6 +88,7 @@ export default function ViewEventScreen() {
   const [savingBookmark, setSavingBookmark] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (authLoading) return;
     if (!eventId) {
       setError(true);
       setLoading(false);
@@ -104,7 +107,7 @@ export default function ViewEventScreen() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, paramBizId]);
+  }, [eventId, paramBizId, authLoading]);
 
   useEffect(() => {
     fetchData();

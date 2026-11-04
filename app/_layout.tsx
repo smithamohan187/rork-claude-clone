@@ -22,7 +22,6 @@ import { AdminProvider } from "@/contexts/AdminContext";
 import { ReferralProvider } from "@/contexts/ReferralContext";
 import { BusinessInvitationProvider } from "@/contexts/BusinessInvitationContext";
 import { CouponProvider } from "@/contexts/CouponContext";
-import { ReferralChatProvider } from "@/contexts/ReferralChatContext";
 import { PostsProvider } from "@/contexts/PostsContext";
 import { ManageContentProvider } from "@/contexts/ManageContentContext";
 import TestModeSwitcher from "@/components/TestModeSwitcher";
@@ -268,10 +267,6 @@ function RootLayoutNav() {
         options={{ headerShown: false, animation: 'slide_from_right' }}
       />
       <Stack.Screen
-        name="business-list"
-        options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
         name="public-profile"
         options={{ headerShown: false, animation: 'slide_from_right' }}
       />
@@ -306,10 +301,6 @@ function RootLayoutNav() {
       <Stack.Screen
         name="b/[id]"
         options={{ headerShown: false, animation: 'fade' }}
-      />
-      <Stack.Screen
-        name="full-feed"
-        options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
       />
       <Stack.Screen
         name="new-post"
@@ -398,21 +389,19 @@ export default function RootLayout() {
                 <ReferralProvider>
                   <BusinessInvitationProvider>
                     <CouponProvider>
-                      <ReferralChatProvider>
-                        <PostsProvider>
-                        <ManageContentProvider>
-                        <SnackbarProvider>
-                          <SideDrawerProvider>
-                            <RootLayoutNav />
-                            <ShareDeepLinkHandler />
-                            <SideDrawer />
-                            <TestModeSwitcher />
-                            <GlobalSnackbar />
-                          </SideDrawerProvider>
-                        </SnackbarProvider>
-                        </ManageContentProvider>
-                        </PostsProvider>
-                      </ReferralChatProvider>
+                      <PostsProvider>
+                      <ManageContentProvider>
+                      <SnackbarProvider>
+                        <SideDrawerProvider>
+                          <RootLayoutNav />
+                          <ShareDeepLinkHandler />
+                          <SideDrawer />
+                          <TestModeSwitcher />
+                          <GlobalSnackbar />
+                        </SideDrawerProvider>
+                      </SnackbarProvider>
+                      </ManageContentProvider>
+                      </PostsProvider>
                     </CouponProvider>
                   </BusinessInvitationProvider>
                 </ReferralProvider>

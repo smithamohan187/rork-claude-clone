@@ -31,6 +31,7 @@ import {
 import { fetchPostById, type Post } from '@/api/services/postsService';
 import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/businessProfileService';
 import { toggleSavePost } from '@/api/services/savedPostService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const LIGHT_PURPLE = '#E8F5EE';
@@ -61,6 +62,7 @@ export default function ViewPostScreen() {
   const postId = typeof params.postId === 'string' ? params.postId : '';
   const paramBizId = typeof params.businessId === 'string' ? params.businessId : '';
   const router = useRouter();
+  const { authLoading } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
@@ -75,6 +77,7 @@ export default function ViewPostScreen() {
   const [savingBookmark, setSavingBookmark] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (authLoading) return;
     if (!postId) {
       setError(true);
       setLoading(false);
@@ -100,7 +103,7 @@ export default function ViewPostScreen() {
     } finally {
       setLoading(false);
     }
-  }, [postId, paramBizId]);
+  }, [postId, paramBizId, authLoading]);
 
   useEffect(() => {
     fetchData();

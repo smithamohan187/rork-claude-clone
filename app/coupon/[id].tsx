@@ -266,7 +266,7 @@ export default function CouponDisplayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getById, markExpired } = useCoupons();
+  const { getById, markExpired, markUsed } = useCoupons();
   const prevUsedRef = useRef<boolean>(false);
 
   const [coupon, setCoupon] = useState<StoredCoupon | undefined>(() =>
@@ -287,15 +287,22 @@ export default function CouponDisplayScreen() {
     refresh();
   }, [refresh]);
 
-  // Lazy server-side expiry check — only for backend-issued coupons (UUID format).
-  // If the server confirms expiry, the refund transaction is written and local state is updated.
-  useEffect(() => {
+  // Server-side status check — only for backend-issued coupons (UUID format).
+  // Picks up both expiry (server writes the refund) and a business scanning the coupon
+  // on a different device, so this screen doesn't keep showing "Active" after it's been used.
+  const checkServerStatus = useCallback(() => {
     if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(id)) return;
     checkCouponExpiry(id)
-      .then(({ expired }) => { if (expired) markExpired(id); })
+      .then(({ expired, status }) => {
+        if (status === 'used') markUsed(id);
+        else if (expired) markExpired(id);
+      })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, markUsed, markExpired]);
+
+  useEffect(() => {
+    checkServerStatus();
+  }, [checkServerStatus]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -306,14 +313,20 @@ export default function CouponDisplayScreen() {
   }, [refresh]);
 
   useEffect(() => {
+    const serverPoll = setInterval(checkServerStatus, 5000);
+    return () => clearInterval(serverPoll);
+  }, [checkServerStatus]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') {
         refresh();
         setNowTs(Date.now());
+        checkServerStatus();
       }
     });
     return () => sub.remove();
-  }, [refresh]);
+  }, [refresh, checkServerStatus]);
 
   useEffect(() => {
     let originalBrightness: number | null = null;

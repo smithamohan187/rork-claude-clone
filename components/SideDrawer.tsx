@@ -65,7 +65,7 @@ const ACCOUNT_ITEMS: MenuItem[] = [
 
 const COMMUNITY_ITEMS: MenuItem[] = [
   { key: 'referrals', label: 'My Referrals', Icon: Users, route: '/my-referrals' },
-  { key: 'following', label: 'Businesses I Follow', Icon: Store, route: '/business-list' },
+  { key: 'following', label: 'Businesses I Follow', Icon: Store, route: '/subscribed-businesses' },
   { key: 'coupons', label: 'Coupons & Redemptions', Icon: Gift, route: '/(tabs)/rewards/coupons' },
 ];
 

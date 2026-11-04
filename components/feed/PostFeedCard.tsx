@@ -10,7 +10,7 @@ import {
   LayoutAnimation,
   Linking,
 } from 'react-native';
-import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
+import { normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image } from 'expo-image';
 import { Bookmark, MoreVertical, Edit3, Trash2 } from 'lucide-react-native';
 import ExpandableText from '../ExpandableText';
@@ -48,6 +48,8 @@ interface Props {
   isOwner?: boolean;
   onToggleLike?: () => void;
   commentCount?: number;
+  inhouseReferral?: boolean;
+  inhouseReferralUrl?: string | null;
 }
 
 const DEFAULT_USER = { name: 'You', initials: 'YO', color: '#1A5C35' };
@@ -68,6 +70,8 @@ export default function PostFeedCard({
   isOwner = false,
   onToggleLike,
   commentCount,
+  inhouseReferral = false,
+  inhouseReferralUrl = null,
 }: Props) {
   const router = useRouter();
   const { likedIds, toggleLike: contextToggleLike, deletePost } = usePosts();
@@ -105,9 +109,8 @@ export default function PostFeedCard({
   }, []);
 
   const handleToggleShare = useCallback(() => {
-    const settings = getBusinessReferralSettings(post.business_id);
-    if (!settings.optIn) {
-      const url = normaliseWebsiteUrl(settings.website);
+    if (inhouseReferral) {
+      const url = normaliseWebsiteUrl(inhouseReferralUrl);
       if (!url) {
         onShowToast?.("This business hasn't set up a website yet.");
         return;
@@ -120,7 +123,7 @@ export default function PostFeedCard({
     }
     easeNext();
     setPanel(panel === 'share' ? null : 'share');
-  }, [panel, setPanel, post.business_id, onShowToast]);
+  }, [panel, setPanel, inhouseReferral, inhouseReferralUrl, onShowToast]);
 
   const handleRefer = useCallback(() => {
     setReferOpen(true);

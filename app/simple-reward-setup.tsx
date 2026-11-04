@@ -56,16 +56,20 @@ export default function SimpleRewardSetupScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.9,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.9,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
-      animateIn();
+      if (!result.canceled && result.assets[0]) {
+        setImageUri(result.assets[0].uri);
+        animateIn();
+      }
+    } catch {
+      Alert.alert('Unsupported File', 'Please choose a JPG, PNG, or WebP image.');
     }
   };
 

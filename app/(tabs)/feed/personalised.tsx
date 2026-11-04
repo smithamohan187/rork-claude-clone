@@ -376,6 +376,8 @@ const header = useMemo(() => {
           isOwner={item.post.is_owner}
           onToggleLike={() => toggleFeedLike('post', postId)}
           commentCount={item.post.comment_count}
+          inhouseReferral={item.post.inhouseReferral}
+          inhouseReferralUrl={item.post.inhouseReferralUrl}
         />
       );
     }

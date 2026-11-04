@@ -45,9 +45,15 @@ export async function redeemReward(businessId: string, rewardId: string): Promis
   };
 }
 
-export async function checkCouponExpiry(couponId: string): Promise<{ expired: boolean }> {
-  const res = await apiClient.post<{ expired: boolean }>(`/coupons/${couponId}/expire-check`, {});
-  return res.data as { expired: boolean };
+export async function checkCouponExpiry(
+  couponId: string
+): Promise<{ expired: boolean; status?: 'active' | 'used' | 'expired' }> {
+  const res = await apiClient.post<{ expired: boolean; coupon?: { status?: string } }>(
+    `/coupons/${couponId}/expire-check`,
+    {}
+  );
+  const data = res.data as { expired: boolean; coupon?: { status?: string } };
+  return { expired: data.expired, status: data.coupon?.status as 'active' | 'used' | 'expired' | undefined };
 }
 
 export type ScanCouponResult =

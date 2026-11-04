@@ -31,6 +31,7 @@ import {
 import { fetchOfferById, type Offer as ServiceOffer } from '@/api/services/offersService';
 import { fetchBusinessProfile } from '@/api/services/businessProfileService';
 import { EventHotBadge, EventTagChips } from '@/components/events/EventExtras';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PURPLE = '#1A5C35';
 const LIGHT_PURPLE = '#E8F5EE';
@@ -140,6 +141,7 @@ export default function ViewOfferScreen() {
   const sharedByInitials = typeof params.sharedByInitials === 'string' ? params.sharedByInitials : '';
   const sharedByColor = typeof params.sharedByColor === 'string' && params.sharedByColor ? params.sharedByColor : '#1A5C35';
   const router = useRouter();
+  const { authLoading } = useAuth();
 
   const [offer, setOffer] = useState<Offer | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
@@ -154,6 +156,7 @@ export default function ViewOfferScreen() {
   const { isSubscribed, isToggling: subscribing, subscribe } = useSubscription(offer?.business_id || business?.id || businessId);
 
   const fetchData = useCallback(async () => {
+    if (authLoading) return;
     if (!offerId) {
       setError(true);
       setLoading(false);
@@ -212,7 +215,7 @@ export default function ViewOfferScreen() {
     } finally {
       setLoading(false);
     }
-  }, [offerId, businessId]);
+  }, [offerId, businessId, authLoading]);
 
   useEffect(() => {
     fetchData();

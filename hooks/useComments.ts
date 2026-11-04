@@ -8,6 +8,7 @@ import {
   type ContentType,
 } from '@/api/services/commentsService';
 import { toggleLike as apiToggleLike } from '@/api/services/likesService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PAGE_SIZE = 20;
 
@@ -92,6 +93,7 @@ interface UseCommentsResult {
 }
 
 export function useComments({ contentType, contentId, enabled }: UseCommentsOptions): UseCommentsResult {
+  const { authLoading } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentCount, setCommentCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -105,7 +107,7 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
   }, []);
 
   const fetchPage = useCallback(async (reset: boolean) => {
-    if (!enabled || loading) return;
+    if (authLoading || !enabled || loading) return;
     setLoading(true);
     try {
       const offset = reset ? 0 : offsetRef.current;
@@ -122,17 +124,17 @@ export function useComments({ contentType, contentId, enabled }: UseCommentsOpti
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [contentType, contentId, enabled, loading]);
+  }, [contentType, contentId, enabled, loading, authLoading]);
 
   useEffect(() => {
-    if (enabled) {
+    if (enabled && !authLoading) {
       offsetRef.current = 0;
       setComments([]);
       setHasMore(true);
       fetchPage(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, contentType, contentId]);
+  }, [enabled, contentType, contentId, authLoading]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) fetchPage(false);

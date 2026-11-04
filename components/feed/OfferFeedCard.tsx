@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getBusinessReferralSettings, normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
+import { normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 import { Image, type ImageLoadEventData } from 'expo-image';
 
 // Instagram-style clamp: never let the cover photo go taller than a 4:5 portrait or
@@ -121,9 +121,8 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
   }, []);
 
   const handleToggleShare = useCallback(() => {
-    const settings = getBusinessReferralSettings(offer.businessId);
-    if (!settings.optIn) {
-      const url = normaliseWebsiteUrl(settings.website);
+    if (offer.inhouseReferral) {
+      const url = normaliseWebsiteUrl(offer.inhouseReferralUrl);
       if (!url) {
         onShowToast("This business hasn't set up a website yet.");
         return;
@@ -136,7 +135,7 @@ export const OfferFeedCard = React.memo(function OfferFeedCard({
     }
     easeNext();
     onOpenPanel(activePanel === 'share' ? null : 'share');
-  }, [activePanel, onOpenPanel, offer.businessId, onShowToast]);
+  }, [activePanel, onOpenPanel, offer.inhouseReferral, offer.inhouseReferralUrl, onShowToast]);
 
   const handleRefer = useCallback(() => {
     setReferOpen(true);

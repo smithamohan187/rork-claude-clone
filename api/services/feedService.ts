@@ -7,6 +7,8 @@ export interface FeedApiItem {
   business_id: string;
   business_name: string;
   business_logo: string | null;
+  inhouse_referral: boolean;
+  inhouse_referral_url: string | null;
   title: string;
   content: string | null;
   image_url: string | null;

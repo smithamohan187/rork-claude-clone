@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchBusinessProfile, type BusinessProfile } from '@/api/services/businessProfileService';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -13,11 +14,13 @@ export interface UseBusinessProfileResult {
 }
 
 export function useBusinessProfile(id: string): UseBusinessProfileResult {
+  const { authLoading } = useAuth();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (authLoading) return;
     if (!id) return;
     setLoading(true);
     setError(null);
@@ -29,7 +32,7 @@ export function useBusinessProfile(id: string): UseBusinessProfileResult {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, authLoading]);
 
   useEffect(() => { load(); }, [load]);
 

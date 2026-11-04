@@ -24,11 +24,14 @@ async function resolveProfileId(userId) {
 // subscribe to, plus live stats. Gated on an active subscription — mirrors the ReferralCard's own
 // isSubscribed render guard as defense in depth, same pattern used throughout this codebase
 // (see getBusinessMembers/removeBusinessMember in subscription.service.js).
+//
+// Scoped to ANY profile the user owns, not just their currently-active one (matches
+// getSubscriptionStatus's "any profile" scope — see subscriptionModel.getSubscriptionByUserId) —
+// otherwise a user who subscribed as their personal profile but is currently switched into their
+// business profile would see "Subscribed" on the business-profile screen yet get a 403 here.
 async function getMyReferralForBusiness(userId, businessId) {
-  const profileId = await resolveProfileId(userId);
-
-  const subscription = await subscriptionModel.getSubscription(profileId, businessId);
-  if (!subscription?.is_active) {
+  const profileId = await subscriptionModel.getSubscribedProfileId(userId, businessId);
+  if (!profileId) {
     throw Object.assign(new Error('Subscribe to this business to get your referral link'), { status: 403 });
   }
 

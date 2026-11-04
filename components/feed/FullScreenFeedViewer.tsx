@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  Linking,
   Modal as RNModal,
   Platform,
   Pressable,
@@ -46,6 +47,7 @@ import LikersSheet from '@/components/feed/LikersSheet';
 import { pickFeedImage } from '@/constants/feedImages';
 import { formatRelativeTime } from '@/mocks/posts';
 import { useAuth } from '@/contexts/AuthContext';
+import { normaliseWebsiteUrl } from '@/services/businessReferralRegistry';
 
 export type ViewerEntry =
   | { kind: 'post'; key: string; post: PostFeedItem }
@@ -374,6 +376,22 @@ function PostPage({
   );
   const handleReferError = useCallback((msg: string) => onShowToast(msg), [onShowToast]);
 
+  const handleToggleShare = useCallback(() => {
+    if (post.inhouseReferral) {
+      const url = normaliseWebsiteUrl(post.inhouseReferralUrl);
+      if (!url) {
+        onShowToast("This business hasn't set up a website yet.");
+        return;
+      }
+      Linking.openURL(url).catch((e) => {
+        console.log('[FullScreenFeedViewer] openURL failed', e);
+        onShowToast("Couldn't open the business website.");
+      });
+      return;
+    }
+    setShareOpen(true);
+  }, [post.inhouseReferral, post.inhouseReferralUrl, onShowToast]);
+
   const handleSubmit = useCallback(async () => {
     const body = commentText.trim();
     if (!body) return;
@@ -441,7 +459,7 @@ function PostPage({
         <RailButton
           icon={<Share2 size={26} color="#fff" />}
           label="Share"
-          onPress={() => setShareOpen(true)}
+          onPress={handleToggleShare}
           testID="viewer-post-share"
         />
         <RailButton
@@ -652,6 +670,22 @@ function FeedPage({
   );
   const handleReferError = useCallback((msg: string) => onShowToast(msg), [onShowToast]);
 
+  const handleToggleShare = useCallback(() => {
+    if (item.inhouseReferral) {
+      const url = normaliseWebsiteUrl(item.inhouseReferralUrl);
+      if (!url) {
+        onShowToast("This business hasn't set up a website yet.");
+        return;
+      }
+      Linking.openURL(url).catch((e) => {
+        console.log('[FullScreenFeedViewer] openURL failed', e);
+        onShowToast("Couldn't open the business website.");
+      });
+      return;
+    }
+    setShareOpen(true);
+  }, [item.inhouseReferral, item.inhouseReferralUrl, onShowToast]);
+
   const coverUri = useMemo(
     () => item.image_url || pickFeedImage(item.id, [item.title, description, item.businessName]),
     [item.image_url, item.id, item.title, description, item.businessName],
@@ -747,7 +781,7 @@ function FeedPage({
         <RailButton
           icon={<Share2 size={26} color="#fff" />}
           label="Share"
-          onPress={() => setShareOpen(true)}
+          onPress={handleToggleShare}
           testID="viewer-feed-share"
         />
         <RailButton
