@@ -21,6 +21,9 @@ import { format } from 'date-fns';
 import { useEvents } from '@/hooks/useEvents';
 import { uploadEventImage, type EventType } from '@/api/services/eventsService';
 
+// Matches the 10MB server-side multer limit on events.routes.js's image upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
   return new Promise((resolve, reject) => {
@@ -92,7 +95,12 @@ export default function CreateEventScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const stable = await toDisplayUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+          return;
+        }
+        const stable = await toDisplayUri(asset.uri);
         setImageUri(stable);
       }
     } catch {

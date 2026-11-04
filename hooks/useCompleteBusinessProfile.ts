@@ -11,6 +11,9 @@ import {
   type BusinessFullData,
 } from '@/api/services/businessService';
 
+// Matches the 10MB server-side multer limit on business.routes.js's logo/photo upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 // Converts a local image URI to a stable display URI immediately after picking.
 // On Expo web, ImagePicker returns a blob: URL that gets revoked between renders,
 // causing the preview image to disappear. Converting to base64 right away keeps it
@@ -110,7 +113,12 @@ export function useCompleteBusinessProfile() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        setPhotoUri(await toDisplayUri(result.assets[0].uri));
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          setError('Image is too large. Please choose a file under 10MB.');
+          return;
+        }
+        setPhotoUri(await toDisplayUri(asset.uri));
       }
     } catch {
       setError('Unsupported file. Please choose a JPG, PNG, or WebP image.');

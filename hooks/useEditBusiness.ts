@@ -8,11 +8,15 @@ import {
   completeOnboarding,
   uploadBusinessLogo,
   uploadBusinessCoverPhoto,
+  removeBusinessPhoto,
   type BusinessFullData,
   type BusinessHour,
 } from '@/api/services/businessService';
 import { fetchBusinessCategories, type Category } from '@/api/services/categoriesService';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Matches the 10MB server-side multer limit on business.routes.js's logo/photo upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const DEFAULT_HOURS: BusinessHour[] = [0, 1, 2, 3, 4, 5, 6].map(day_of_week => ({
   day_of_week,
@@ -73,6 +77,7 @@ export function useEditBusiness() {
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [initialPhotoUri, setInitialPhotoUri] = useState<string | null>(null);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
 
   const [detecting, setDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
@@ -141,12 +146,34 @@ export function useEditBusiness() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        setPhotoUri(await toDisplayUri(result.assets[0].uri));
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          setError('Image is too large. Please choose a file under 10MB.');
+          return;
+        }
+        setPhotoUri(await toDisplayUri(asset.uri));
       }
     } catch {
       setError('Unsupported file. Please choose a JPG, PNG, or WebP image.');
     }
   }, []);
+
+  // Removal is applied immediately (not deferred to Save) since it's a dedicated
+  // DELETE endpoint, not part of the general update payload.
+  const removePhoto = useCallback(async () => {
+    if (!businessId || removingPhoto) return;
+    setRemovingPhoto(true);
+    setError(null);
+    try {
+      await removeBusinessPhoto(businessId);
+      setPhotoUri(null);
+      setInitialPhotoUri(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove photo. Please try again.');
+    } finally {
+      setRemovingPhoto(false);
+    }
+  }, [businessId, removingPhoto]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -258,7 +285,7 @@ export function useEditBusiness() {
 
     hours, updateHour,
 
-    photoUri, pickPhoto,
+    photoUri, pickPhoto, removePhoto, removingPhoto,
 
     loadingInitial, saving, error, fieldErrors,
     handleSave,

@@ -89,6 +89,8 @@ type PendingVideo =
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const VIDEO_TOO_LARGE_TITLE = 'Video Too Large';
 const VIDEO_TOO_LARGE_MESSAGE = 'This video is over 100MB. Please choose a shorter video or compress it before uploading.';
+// Mirrors the multer fileSize limit on businessMedia.routes.js's image upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const POST_TYPE_OPTIONS: { value: PostType; label: string; icon: 'megaphone' | 'bell' | 'file' }[] = [
   { value: 'promotion', label: 'Promotion', icon: 'megaphone' },
@@ -231,6 +233,10 @@ export default function CreatePostScreen() {
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
+      if (result.assets[0].fileSize && result.assets[0].fileSize > MAX_IMAGE_BYTES) {
+        Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
       const stable = await toDisplayUri(result.assets[0].uri);
       setPickingPhoto(true);
       const media = await uploadMedia(stable);
@@ -283,6 +289,10 @@ export default function CreatePostScreen() {
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
+      if (result.assets[0].fileSize && result.assets[0].fileSize > MAX_IMAGE_BYTES) {
+        Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
       const stable = await toDisplayUri(result.assets[0].uri);
       setPickingOfferPhoto(true);
       const media = await uploadMedia(stable);
@@ -310,6 +320,10 @@ export default function CreatePostScreen() {
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
+      if (result.assets[0].fileSize && result.assets[0].fileSize > MAX_IMAGE_BYTES) {
+        Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+        return;
+      }
       const stable = await toDisplayUri(result.assets[0].uri);
       setPickingEventPhoto(true);
       const media = await uploadMedia(stable);

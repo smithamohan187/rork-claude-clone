@@ -15,6 +15,7 @@ const {
   cancelEventHandler,
   toggleEventStatusHandler,
   uploadEventImageHandler,
+  removeEventImageHandler,
   deleteEventHandler,
 } = require('./events.controller');
 
@@ -27,7 +28,7 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });*/
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, matches posts image upload convention
 
 const router = Router();
 
@@ -47,5 +48,6 @@ router.patch('/:id/cancel', authenticate, cancelEventHandler);
 router.patch('/:id/toggle-status', authenticate, toggleEventStatusHandler);
 router.delete('/:id', authenticate, deleteEventHandler);
 router.post('/:id/image', authenticate, upload.single('image'), uploadEventImageHandler);
+router.delete('/:id/image', authenticate, removeEventImageHandler);
 
 module.exports = router;

@@ -63,6 +63,15 @@ const uploadPhotoHandler = asyncHandler(async (req, res) => {
   res.status(200).json(ok(result));
 });
 
+// Clears both logo_url and cover_url — the Edit Business screen exposes a single "Business
+// Photo" field that the save flow writes to both (see useEditBusiness.ts's handleSave), so
+// removing it must clear both to keep them in sync.
+const removePhotoHandler = asyncHandler(async (req, res) => {
+  await uploadBusinessLogo(req.params.id, null, req.user.userId);
+  const result = await uploadBusinessCoverPhoto(req.params.id, null, req.user.userId);
+  res.status(200).json(ok(result));
+});
+
 const completeOnboardingHandler = asyncHandler(async (req, res) => {
   await completeOnboarding(req.params.id, req.user.userId);
   res.status(200).json(ok({ onboarding_complete: true }));
@@ -120,6 +129,7 @@ module.exports = {
   registerBusinessHandler,
   uploadLogoHandler,
   uploadPhotoHandler,
+  removePhotoHandler,
   completeOnboardingHandler,
   getBusinessProfileHandler,
   getScanCodeHandler,

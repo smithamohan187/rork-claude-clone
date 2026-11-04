@@ -36,7 +36,7 @@ export default function EditBusinessScreen() {
     country, setCountry,
     detecting, detectError, detectLocation,
     hours, updateHour,
-    photoUri, pickPhoto,
+    photoUri, pickPhoto, removePhoto, removingPhoto,
     loadingInitial, saving, error, fieldErrors,
     handleSave,
   } = useEditBusiness();
@@ -145,9 +145,21 @@ export default function EditBusinessScreen() {
               </View>
               {photoUri ? (
                 <View style={styles.uploadedLogoWrap}>
-                  <Image source={{ uri: photoUri }} style={styles.uploadedLogo} contentFit="cover" />
-                  <TouchableOpacity style={styles.removeImageBtn} onPress={pickPhoto} activeOpacity={0.7}>
-                    <X size={14} color="#fff" />
+                  <TouchableOpacity onPress={pickPhoto} activeOpacity={0.7} testID="change-business-photo">
+                    <Image source={{ uri: photoUri }} style={styles.uploadedLogo} contentFit="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={removePhoto}
+                    activeOpacity={0.7}
+                    disabled={removingPhoto}
+                    testID="remove-business-photo"
+                  >
+                    {removingPhoto ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <X size={14} color="#fff" />
+                    )}
                   </TouchableOpacity>
                 </View>
               ) : (

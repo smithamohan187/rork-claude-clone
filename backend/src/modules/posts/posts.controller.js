@@ -94,6 +94,11 @@ const uploadPostVideoHandler = asyncHandler(async (req, res) => {
   res.json(ok({ post }));
 });
 
+const removePostImageHandler = asyncHandler(async (req, res) => {
+  const post = await postsService.uploadPostImage(req.user.userId, req.params.id, null);
+  res.json(ok({ post }));
+});
+
 module.exports = {
   getPostsHandler,
   getPostByIdHandler,
@@ -103,5 +108,6 @@ module.exports = {
   toggleStatusHandler,
   deletePostHandler,
   uploadPostImageHandler,
+  removePostImageHandler,
   uploadPostVideoHandler,
 };

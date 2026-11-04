@@ -83,6 +83,11 @@ const uploadOfferImageHandler = asyncHandler(async (req, res) => {
   res.json(ok({ offer }));
 });
 
+const removeOfferImageHandler = asyncHandler(async (req, res) => {
+  const offer = await offersService.uploadOfferImage(req.user.userId, req.params.id, null);
+  res.json(ok({ offer }));
+});
+
 module.exports = {
   listMyOffersHandler,
   getOfferHandler,
@@ -92,4 +97,5 @@ module.exports = {
   deleteOfferHandler,
   toggleStatusHandler,
   uploadOfferImageHandler,
+  removeOfferImageHandler,
 };

@@ -18,6 +18,7 @@ const {
   deleteOfferHandler,
   toggleStatusHandler,
   uploadOfferImageHandler,
+  removeOfferImageHandler,
 } = require('./offers.controller');
 
 //const uploadDir = path.join(__dirname, '../../../../uploads/offers');
@@ -29,7 +30,7 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage }); */
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, matches posts image upload convention
 
 const router = Router();
 
@@ -45,5 +46,6 @@ router.put('/:id', authenticate, validateRequest(updateOfferSchema), updateOffer
 router.delete('/:id', authenticate, deleteOfferHandler);
 router.patch('/:id/status', authenticate, validateRequest(toggleStatusSchema), toggleStatusHandler);
 router.post('/:id/image', authenticate, upload.single('image'), uploadOfferImageHandler);
+router.delete('/:id/image', authenticate, removeOfferImageHandler);
 
 module.exports = router;

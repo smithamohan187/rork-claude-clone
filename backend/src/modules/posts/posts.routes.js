@@ -14,6 +14,7 @@ const {
   toggleStatusHandler,
   deletePostHandler,
   uploadPostImageHandler,
+  removePostImageHandler,
   uploadPostVideoHandler,
 } = require('./posts.controller');
 
@@ -41,6 +42,7 @@ router.put('/:id',         authenticate, validateRequest(updatePostSchema), upda
 router.patch('/:id/status', authenticate, validateRequest(toggleStatusSchema), toggleStatusHandler);
 router.delete('/:id',      authenticate, deletePostHandler);
 router.post('/:id/image',  authenticate, upload.single('image'), uploadPostImageHandler);
+router.delete('/:id/image', authenticate, removePostImageHandler);
 router.post('/:id/video',  authenticate, uploadVideo.single('video'), uploadPostVideoHandler);
 
 module.exports = router;

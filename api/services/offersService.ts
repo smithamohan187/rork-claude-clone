@@ -131,3 +131,9 @@ export async function uploadOfferImage(offerId: string, uri: string): Promise<Of
   if (!response.ok) throw new Error(data.error ?? 'Image upload failed');
   return resolveOffer(data.data.offer);
 }
+
+export async function removeOfferImage(offerId: string): Promise<Offer> {
+  const res = await apiClient.delete<{ offer: Offer }>(`/offers/${offerId}/image`);
+  if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to remove image');
+  return resolveOffer(res.data.offer);
+}

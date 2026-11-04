@@ -10,6 +10,7 @@ const {
   registerBusinessHandler,
   uploadLogoHandler,
   uploadPhotoHandler,
+  removePhotoHandler,
   completeOnboardingHandler,
   getBusinessProfileHandler,
   getScanCodeHandler,
@@ -25,7 +26,7 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });*/
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, matches posts image upload convention
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.get('/:id', optionalAuthenticate, getBusinessProfileHandler);
 router.post('/register', authenticate, validateRequest(registerBusinessSchema), registerBusinessHandler);
 router.post('/:id/logo', authenticate, upload.single('logo'), uploadLogoHandler);
 router.post('/:id/photo', authenticate, upload.single('photo'), uploadPhotoHandler);
+router.delete('/:id/photo', authenticate, removePhotoHandler);
 router.patch('/:id/onboarding-complete', authenticate, completeOnboardingHandler);
 
 module.exports = router;

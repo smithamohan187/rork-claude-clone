@@ -124,6 +124,13 @@ export async function uploadBusinessCoverPhoto(id: string, uri: string): Promise
   return data.data?.cover_url ?? '';
 }
 
+// Clears both logo_url and cover_url server-side in one call — see
+// business.controller.js's removePhotoHandler for why both are cleared together.
+export async function removeBusinessPhoto(id: string): Promise<void> {
+  const result = await apiClient.delete<{ cover_url: string | null }>(`/businesses/${id}/photo`);
+  if (!result.success) throw new Error(result.error ?? 'Failed to remove photo');
+}
+
 export async function updateMyBusiness(payload: RegisterBusinessPayload): Promise<BusinessData> {
   const result = await apiClient.post<BusinessData>('/businesses/register', payload);
   if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to update business');

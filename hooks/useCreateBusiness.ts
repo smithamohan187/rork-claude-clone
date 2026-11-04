@@ -22,6 +22,9 @@ export type { BusinessHour };
 
 export type BusinessType = 'goodwill' | 'incentivised' | '';
 
+// Matches the 10MB server-side multer limit on business.routes.js's logo/photo upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 const DEFAULT_HOURS: BusinessHour[] = [0, 1, 2, 3, 4, 5, 6].map(day_of_week => ({
   day_of_week,
   open_time: '09:00',
@@ -329,8 +332,13 @@ export function useCreateBusiness() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          showSnackbar('Image is too large. Please choose a file under 10MB.');
+          return;
+        }
         // Convert to stable display URI immediately — blob URLs get revoked on web
-        const displayUri = await toDisplayUri(result.assets[0].uri);
+        const displayUri = await toDisplayUri(asset.uri);
         console.log('[pickLogo] displayUri:', displayUri);
         setLogoUri(displayUri);
       }
@@ -348,8 +356,13 @@ export function useCreateBusiness() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          showSnackbar('Image is too large. Please choose a file under 10MB.');
+          return;
+        }
         // Convert to stable display URI immediately — blob URLs get revoked on web
-        const displayUri = await toDisplayUri(result.assets[0].uri);
+        const displayUri = await toDisplayUri(asset.uri);
         setCoverUri(displayUri);
       }
     } catch {

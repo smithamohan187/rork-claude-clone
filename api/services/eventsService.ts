@@ -131,3 +131,9 @@ export async function uploadEventImage(eventId: string, uri: string): Promise<Ev
   if (!response.ok) throw new Error(data.error ?? 'Image upload failed');
   return resolveEvent(data.data.event);
 }
+
+export async function removeEventImage(eventId: string): Promise<Event> {
+  const res = await apiClient.delete<{ event: Event }>(`/events/${eventId}/image`);
+  if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to remove image');
+  return resolveEvent(res.data.event);
+}

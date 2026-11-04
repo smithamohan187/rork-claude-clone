@@ -101,6 +101,11 @@ const uploadEventImageHandler = asyncHandler(async (req, res) => {
   res.json(ok({ event }));
 });
 
+const removeEventImageHandler = asyncHandler(async (req, res) => {
+  const event = await eventsService.uploadEventImage(req.user.userId, req.params.id, null);
+  res.json(ok({ event }));
+});
+
 module.exports = {
   listMyEventsHandler,
   getEventHandler,
@@ -110,5 +115,6 @@ module.exports = {
   cancelEventHandler,
   toggleEventStatusHandler,
   uploadEventImageHandler,
+  removeEventImageHandler,
   deleteEventHandler,
 };

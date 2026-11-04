@@ -28,7 +28,7 @@ import { ArrowLeft, ImagePlus, Calendar, MapPin, ChevronDown, Check } from 'luci
 import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useEvent, useEvents } from '@/hooks/useEvents';
-import { uploadEventImage, type Event, type EventCategory, type EventType, type UpdateEventPayload } from '@/api/services/eventsService';
+import { uploadEventImage, removeEventImage, type Event, type EventCategory, type EventType, type UpdateEventPayload } from '@/api/services/eventsService';
 import { useSnackbar } from '@/contexts/SnackbarContext';
 
 const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[] = [
@@ -47,6 +47,9 @@ const EVENT_TYPES: { value: EventType; label: string }[] = [
   { value: 'Online', label: 'Online' },
   { value: 'Hybrid', label: 'Hybrid' },
 ];
+
+// Matches the 10MB server-side multer limit on events.routes.js's image upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
@@ -125,6 +128,7 @@ export default function EditEventScreen() {
 
   const [draft, setDraft]           = useState<DraftEvent | null>(null);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
   const [errors, setErrors]         = useState<Errors>({});
   const [discardVisible, setDiscardVisible] = useState(false);
   const [saving, setSaving]         = useState(false);
@@ -159,8 +163,14 @@ export default function EditEventScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const stable = await toDisplayUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+          return;
+        }
+        const stable = await toDisplayUri(asset.uri);
         setLocalImageUri(stable);
+        setImageRemoved(false);
         set('image_url', stable);
       }
     } catch {
@@ -170,6 +180,7 @@ export default function EditEventScreen() {
 
   const handleRemovePhoto = useCallback(() => {
     setLocalImageUri(null);
+    setImageRemoved(true);
     set('image_url', null);
   }, [set]);
 
@@ -200,10 +211,17 @@ export default function EditEventScreen() {
         price:       draft.is_free ? null : (draft.price.trim() || null),
         tags:        draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
         is_hot:      draft.is_hot,
-        ...(!localImageUri && { image_url: draft.image_url }),
       };
       await editEvent(id!, payload);
-      if (localImageUri) await uploadEventImage(id!, localImageUri);
+      if (localImageUri) {
+        await uploadEventImage(id!, localImageUri);
+      } else if (imageRemoved) {
+        // The general update endpoint's image_url column uses COALESCE, which can't
+        // distinguish "clear it" from "don't touch it" — removal must go through the
+        // dedicated DELETE endpoint instead (same reason events.service.js's
+        // uploadEventImage is reused directly for this on the backend).
+        await removeEventImage(id!);
+      }
       showSnackbar('Event updated successfully');
       router.dismissTo('/content?tab=events' as any);
     } catch (err: unknown) {
@@ -211,7 +229,7 @@ export default function EditEventScreen() {
     } finally {
       setSaving(false);
     }
-  }, [draft, id, localImageUri, editEvent, showSnackbar, router]);
+  }, [draft, id, localImageUri, imageRemoved, editEvent, showSnackbar, router]);
 
   if (eventLoading) {
     return (

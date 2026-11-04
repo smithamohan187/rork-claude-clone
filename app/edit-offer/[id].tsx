@@ -36,6 +36,9 @@ const OFFER_TYPES: { value: OfferType; label: string }[] = [
   { value: 'flash_sale', label: 'Flash Sale' },
 ];
 
+// Matches the 10MB server-side multer limit on offers.routes.js's image upload.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 async function toDisplayUri(uri: string): Promise<string> {
   if (!uri.startsWith('blob:') && !uri.startsWith('http')) return uri;
   return new Promise((resolve, reject) => {
@@ -128,7 +131,12 @@ export default function EditOfferScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const stable = await toDisplayUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+          Alert.alert('Image Too Large', 'Please choose an image under 10MB.');
+          return;
+        }
+        const stable = await toDisplayUri(asset.uri);
         setLocalImageUri(stable);
         set('image_url', stable);
       }

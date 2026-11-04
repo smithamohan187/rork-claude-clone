@@ -7,7 +7,7 @@ const {
   deleteMediaHandler,
 } = require('./businessMedia.controller');
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, matches posts image upload convention
 
 const router = Router();
 

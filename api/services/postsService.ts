@@ -117,6 +117,12 @@ export async function uploadPostImage(postId: string, uri: string): Promise<Post
   return resolvePost(data.data.post);
 }
 
+export async function removePostImage(postId: string): Promise<Post> {
+  const res = await apiClient.delete<{ post: Post }>(`/posts/${postId}/image`);
+  if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to remove image');
+  return resolvePost(res.data.post);
+}
+
 async function buildPostVideoFormData(uri: string): Promise<FormData> {
   const form = new FormData();
   if (Platform.OS === 'web') {
