@@ -3,7 +3,7 @@
  *
  * Covers:
  *   - GET /businesses/me/dashboard-summary  (extended with total_redemption_count)
- *   - GET /dashboard/feed/recent-activity?limit&offset
+ *   - GET /dashboard/feed/recent-activity?limit&offset (incl. actorAvatar + quoted comment-body preview)
  *   - GET /dashboard/feed/redemptions?limit&offset
  *
  * Prerequisites:
@@ -122,6 +122,28 @@ async function testRecentActivity() {
   console.log(`    INFO  activity types present: ${typesSeen.join(', ') || '(none)'}`);
 }
 
+async function testCommentPreview() {
+  console.log('\n[4b] comment-type activity messages include a quoted preview of the comment body');
+  const { status, body } = await req('GET', '/dashboard/feed/recent-activity?limit=50&offset=0');
+  if (status !== 200 || !Array.isArray(body.data)) { fail('recent-activity (preview check)', `status=${status}`); return; }
+  const comments = body.data.filter((i) => i.type === 'comment');
+  if (comments.length === 0) { console.log('    INFO  No comment-type activity for this business — skipping preview check'); return; }
+
+  const withPreview = comments.filter((c) => /commented on your \w+: ".+"/.test(c.message));
+  if (withPreview.length === comments.length) {
+    pass(`all ${comments.length} comment activity message(s) include a quoted preview`);
+  } else {
+    fail('some comment activity missing quoted preview', JSON.stringify(comments.filter((c) => !/commented on your \w+: ".+"/.test(c.message)).slice(0, 3)));
+  }
+
+  const tooLong = withPreview.filter((c) => {
+    const m = c.message.match(/: "(.+)"$/);
+    return m && m[1].length > 60;
+  });
+  if (tooLong.length === 0) pass('no preview exceeds the 60-char truncation limit');
+  else fail('preview exceeds truncation limit', JSON.stringify(tooLong.slice(0, 3)));
+}
+
 async function testActivityPagination() {
   console.log('\n[5] recent-activity pagination — page 2 has no overlap with page 1');
   const p1 = (await req('GET', '/dashboard/feed/recent-activity?limit=2&offset=0')).body.data ?? [];
@@ -193,6 +215,7 @@ async function testNoBusinessReturns404() {
     await testSummaryShape();
     await testRedeemIncrementsCount();
     await testRecentActivity();
+    await testCommentPreview();
     await testActivityPagination();
     await testRedemptions();
     await testOwnershipIsolation();
