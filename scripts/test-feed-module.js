@@ -3,7 +3,7 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE         = 'http://localhost:3000';
+const BASE         = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const TEST_EMAIL   = process.env.TEST_EMAIL   || 'pinky@test.com';
 const TEST_PASSWORD = process.env.TEST_PASSWORD || 'Pinky123#';
 // A user with NO subscriptions (or a fresh account) to test the recommendations fallback

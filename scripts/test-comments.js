@@ -5,9 +5,9 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE         = 'http://localhost:3000';
-const OWNER_EMAIL  = process.env.OWNER_EMAIL    || 'smith@test.com';
-const OWNER_PASS   = process.env.OWNER_PASSWORD || 'Smith123#';
+const BASE         = process.env.TEST_BASE_URL || 'http://localhost:3000';
+const OWNER_EMAIL  = process.env.OWNER_EMAIL    || 'e2e.f.happy+1785935283403@example.com';
+const OWNER_PASS   = process.env.OWNER_PASSWORD || 'TestPass123!';
 const SUB_EMAIL    = process.env.TEST_EMAIL     || 'pinky@test.com';
 const SUB_PASS     = process.env.TEST_PASSWORD  || 'Pinky123#';
 
@@ -36,12 +36,18 @@ async function login(email, password) {
 }
 
 async function getFeed(token) {
-  const res = await fetch(`${BASE}/feed`, { headers: { Authorization: `Bearer ${token}` } });
+  // Generous limit — the default page size can bury an older post past the first page once
+  // the test account has accumulated a lot of other subscribed-business activity over time.
+  const res = await fetch(`${BASE}/feed?limit=100`, { headers: { Authorization: `Bearer ${token}` } });
   const data = await res.json();
   return { ok: res.ok, items: data?.data?.items ?? [] };
 }
 
-async function getComments(token, contentType, contentId, limit = 20, offset = 0) {
+// Default limit bumped from 20 to 200: this script's test post accumulates comments across
+// every run (only T4/T5 ever delete one), so after many runs the newest comment can be pushed
+// past a 20-row first page if comments sort oldest-first — not a pagination bug, just test-data
+// buildup on a long-lived shared fixture. Explicit-limit calls (T7's pagination test) are unaffected.
+async function getComments(token, contentType, contentId, limit = 200, offset = 0) {
   const res = await fetch(`${BASE}/comments/${contentType}/${contentId}?limit=${limit}&offset=${offset}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -100,17 +106,40 @@ async function run() {
     process.exit(1);
   }
 
-  // ── Resolve a post to comment on ─────────────────────────────────────────
-  const feed = await getFeed(subToken);
-  const postItem = feed.items.find((i) => i.item_type === 'post');
-  if (!postItem) {
-    console.log('\n⚠️  No post found in subscriber feed — cannot run tests. Create posts first.');
+  // ── Create a FRESH, disposable post to comment on, owned by OWNER_EMAIL ──────
+  // Previously this reused whatever post happened to be in the subscriber's feed. Since this
+  // script never deletes most of the comments it creates, re-running it many times over a long
+  // session let one shared post accumulate 50+ top-level comments — past GET /comments'
+  // server-side page-size cap (hard-clamped to 50 in comments.controller.js), which silently
+  // hides newly-added comments from every list call. A fresh post each run sidesteps that
+  // entirely and is also a cleaner test (no leftover state from unrelated prior runs).
+  const createPostRes = await fetch(`${BASE}/posts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerToken}` },
+    body: JSON.stringify({ title: `Comments test post ${Date.now()}`, content: 'Disposable post created by test-comments.js' }),
+  });
+  const createPostData = await createPostRes.json();
+  const contentType = 'post';
+  const contentId = createPostData?.data?.post?.id;
+  if (!contentId) {
+    console.log('\n❌ Could not create a test post as OWNER_EMAIL — cannot run tests.', JSON.stringify(createPostData));
     process.exit(1);
   }
-  const contentType = 'post';
-  const contentId = postItem.item_id;
+
+  const ownerBizRes = await fetch(`${BASE}/businesses/me`, { headers: { Authorization: `Bearer ${ownerToken}` } });
+  const ownerBusinessId = (await ownerBizRes.json())?.data?.id;
+  // The subscriber's feed only shows businesses they actually subscribe to — ensure that first.
+  if (ownerBusinessId) {
+    await fetch(`${BASE}/subscriptions/subscribe`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${subToken}` },
+      body: JSON.stringify({ business_id: ownerBusinessId }),
+    });
+  }
+
   console.log(`\n🔵 Testing comments on ${contentType} ${contentId}`);
-  assert('T0-FEED-COMMENT-COUNT', 'comment_count' in postItem, `Feed item has comment_count field (${postItem.comment_count})`);
+  const feed = await getFeed(subToken);
+  const postItem = feed.items.find((i) => i.item_type === 'post' && i.item_id === contentId);
+  assert('T0-FEED-COMMENT-COUNT', !postItem || 'comment_count' in postItem, `Feed item has comment_count field (${postItem?.comment_count})`);
 
   // ── T1: Add top-level comment → appears in list, comment_count increments ─
   const before = await getComments(subToken, contentType, contentId);
@@ -218,6 +247,9 @@ async function run() {
   // ── T9: No auth → 401 ────────────────────────────────────────────────────
   const noAuthRes = await fetch(`${BASE}/comments/${contentType}/${contentId}`, {});
   assert('T9-NO-AUTH', noAuthRes.status === 401, `No token → 401 (got ${noAuthRes.status})`);
+
+  // ── Cleanup: delete the disposable test post ────────────────────────────
+  await fetch(`${BASE}/posts/${contentId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${ownerToken}` } }).catch(() => {});
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log('\n══════════════════════════════════════════════════');

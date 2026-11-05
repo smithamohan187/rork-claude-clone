@@ -8,7 +8,8 @@
 const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const { Client } = require(path.join(__dirname, '..', 'backend', 'node_modules', 'pg'));
 
 const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
@@ -66,11 +67,11 @@ async function run() {
   console.log('══════════════════════════════════════════════════');
 
   const db = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 5432),
-    database: process.env.DB_NAME || 'touchpoint',
-    user: process.env.DB_USER || 'touchpoint_user',
-    password: process.env.DB_PASSWORD || 'touchpoint123',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || 5433),
+    database: process.env.DB_NAME || 'touchpoints',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASS || process.env.DB_PASSWORD,
   });
   await db.connect();
 
@@ -101,9 +102,49 @@ async function run() {
     assert('T2-REGISTER-FRIEND-B', FriendB.ok && FriendB.profileId, "Friend B registers with A's app code → 201", FriendB.data);
     createdProfileIds.push(FriendB.profileId); createdEmails.push(`my-refs-friendb-${stamp}@test.com`);
 
-    const bizRow = (await db.query('SELECT id, name FROM businesses ORDER BY created_at ASC LIMIT 1')).rows[0];
-    assert('T3-BUSINESS-FIXTURE', !!bizRow, 'A business exists in the dev DB to invite a customer to', bizRow);
+    // POST /invites/customer is OWNER-only (customerInvite.service.js's resolveOwnedBusinessId
+    // resolves the CALLER's own business server-side and 403s on any other business_id) — A must
+    // own the target business. Previously picked "the oldest business in the whole dev DB",
+    // which A never owned and which reliably 403'd as the DB accumulated more test data.
+    const catRow = (await db.query('SELECT id FROM business_categories LIMIT 1')).rows[0];
+    const bizRegRes = await api('POST', '/businesses/register', {
+      token: A.token,
+      body: {
+        business_name: `My Referrals Test Biz ${stamp}`,
+        business_type: 'incentivised',
+        category_id: catRow.id,
+        description: 'test',
+        phone: '1234567890',
+        address: '123 Test St', city: 'Test City', state: 'Test State', country: 'Test Country',
+        inhouse_referral: false,
+        hours: [],
+      },
+    });
+    const bizRow = bizRegRes.data?.data ? { id: bizRegRes.data.data.id, name: bizRegRes.data.data.name } : null;
+    assert('T3-BUSINESS-FIXTURE', !!bizRow, 'A registers their own business to invite a customer to', bizRegRes.data);
     if (!bizRow) { console.log('\n❌ Cannot continue without a business fixture'); process.exit(1); }
+
+    // Freshly-registered: no business_subscriptions row + onboarding_complete=false would 403
+    // isBusinessUnlocked()-gated actions, though /invites/customer itself doesn't gate on that —
+    // added for consistency/safety in case this fixture business is reused by future steps.
+    await db.query(
+      `INSERT INTO business_subscriptions (business_id, plan_id, status, current_period_end)
+       VALUES ($1, '3ea4bca7-b327-428a-a32d-83471ddce2bb', 'trial', NOW() + INTERVAL '30 days')
+       ON CONFLICT (business_id) DO NOTHING`,
+      [bizRow.id],
+    );
+    await api('PATCH', `/businesses/${bizRow.id}/onboarding-complete`, { token: A.token });
+
+    // /businesses/register switches A's active_profile_id to the new business profile as a side
+    // effect (business.service.js's registerBusiness). customerInvite.service.js's
+    // createCustomerInvite stamps inviter_profile_id with WHATEVER is active at call time (not
+    // necessarily the business profile — getBusinessIdByUserId's ownership check is separately
+    // profile_type-based, so it doesn't care). referral.model.js's getCombinedReferrals is
+    // strictly single-profileId-scoped, so for T8 below to ever see both the app-level referral
+    // (made from A's personal profile) and this business-level invite in one response, both need
+    // to be stamped with the SAME profile_id — switch back to personal before creating the
+    // invite so it's attributed to A's personal profile, like the app-level referral above.
+    await api('POST', '/auth/switch-profile', { token: A.token, body: { profile_id: A.profileId } });
 
     const inviteRes = await api('POST', '/invites/customer', {
       token: A.token,

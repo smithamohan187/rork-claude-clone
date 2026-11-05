@@ -3,13 +3,13 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE            = 'http://localhost:3000';
+const BASE            = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const TEST_EMAIL      = process.env.TEST_EMAIL      || 'pinky@test.com';
 const TEST_PASSWORD   = process.env.TEST_PASSWORD   || 'Pinky123#';
-const TEST_EMAIL_2    = process.env.TEST_EMAIL_2    || 'pinky2@test.com';
-const TEST_PASSWORD_2 = process.env.TEST_PASSWORD_2 || 'Pinky123#';
-// Must be set to the UUID of an existing business
-const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || '10c365c7-547d-4004-b431-f601ef69d44d';
+const TEST_EMAIL_2    = process.env.TEST_EMAIL_2    || 'e2e.f.happy+1785935283403@example.com';
+const TEST_PASSWORD_2 = process.env.TEST_PASSWORD_2 || 'TestPass123!';
+// Must be set to the UUID of an existing business neither test account owns
+const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || 'f8ff062c-d1de-42d8-81c8-b1e44e30561d'; // Garden Land
 
 // ── Helper ────────────────────────────────────────────────────────
 function log(step, status, msg, data) {

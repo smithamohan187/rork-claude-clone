@@ -7,10 +7,10 @@ const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...ar
 const BASE             = 'http://localhost:3000';
 const TEST_EMAIL       = process.env.TEST_EMAIL       || 'pinky@test.com';
 const TEST_PASSWORD    = process.env.TEST_PASSWORD    || 'Pinky123#';
-const TEST_EMAIL_2     = process.env.TEST_EMAIL_2     || 'pinky2@test.com';
-const TEST_PASSWORD_2  = process.env.TEST_PASSWORD_2  || 'Pinky123#';
+const TEST_EMAIL_2     = process.env.TEST_EMAIL_2     || 'e2e.f.happy+1785935283403@example.com';
+const TEST_PASSWORD_2  = process.env.TEST_PASSWORD_2  || 'TestPass123!';
 // Must be a UUID of a business owned by TEST_EMAIL's user
-const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || '10c365c7-547d-4004-b431-f601ef69d44d';
+const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || '04efd6be-8bfa-408b-9057-f4e16505358e'; // "Test Business Updated", owned by pinky@test.com
 
 // ── Helpers ───────────────────────────────────────────────────────
 function log(step, status, msg, data) {
@@ -71,7 +71,7 @@ async function run() {
     log(2, 'FAIL', 'Owner login failed — aborting', loginData1);
     return;
   }
-  const ownerLoggedInUserId = loginData1.data?.userId;
+  const ownerLoggedInUserId = loginData1.data?.user?.id;
   log(2, 'PASS', 'Owner login success', { userId: ownerLoggedInUserId });
 
   // ── Step 3: Confirm owner_user_id matches the owner's user_id ───
@@ -106,7 +106,7 @@ async function run() {
       return;
     }
   }
-  const nonOwnerUserId = loginData2.data?.userId;
+  const nonOwnerUserId = loginData2.data?.user?.id;
   log(4, 'PASS', 'Non-owner login success', { userId: nonOwnerUserId });
 
   // ── Step 5: Confirm owner_user_id does NOT match non-owner ──────

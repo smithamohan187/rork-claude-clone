@@ -4,9 +4,9 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE          = 'http://localhost:3000';
-const OWNER_EMAIL   = process.env.OWNER_EMAIL    || 'smith@test.com';
-const OWNER_PASS    = process.env.OWNER_PASSWORD || 'Smith123#';
+const BASE          = process.env.TEST_BASE_URL || 'http://localhost:3000';
+const OWNER_EMAIL   = process.env.OWNER_EMAIL    || 'e2e.f.happy+1785935283403@example.com';
+const OWNER_PASS    = process.env.OWNER_PASSWORD || 'TestPass123!';
 const SUB_EMAIL     = process.env.TEST_EMAIL     || 'pinky@test.com';
 const SUB_PASS      = process.env.TEST_PASSWORD  || 'Pinky123#';
 
@@ -96,14 +96,18 @@ async function run() {
   if (!ownerToken) { console.log('\n❌ Cannot continue without owner token'); process.exit(1); }
   if (!subToken)   { console.log('\n❌ Cannot continue without subscriber token'); process.exit(1); }
 
-  // ── Resolve business ID via owner feed ──────────────────────────────────
-  const ownerFeed = await getFeed(ownerToken);
-  const ownedItem = ownerFeed.items.find((i) => i.is_owner === true);
-  if (!ownedItem) {
-    console.log('\n⚠️  Owner has no owned items in feed — cannot determine businessId. Aborting.');
+  // ── Resolve business ID via GET /businesses/me ───────────────────────────
+  // (Not via the owner's own feed: GET /feed's posts/offers/events branches all JOIN
+  // subscriptions ON profile_id = viewer, and an owner can never subscribe to their own
+  // business — so an owned item NEVER appears in the owner's own feed, by design. The old
+  // feed-based resolution here could never succeed.)
+  const meRes = await fetch(`${BASE}/businesses/me`, { headers: { Authorization: `Bearer ${ownerToken}` } });
+  const meData = await meRes.json();
+  const businessId = meData?.data?.id;
+  if (!businessId) {
+    console.log('\n⚠️  Could not resolve OWNER_EMAIL\'s business via GET /businesses/me. Aborting.');
     process.exit(1);
   }
-  const businessId = ownedItem.business_id;
   console.log(`\n🔵 Using businessId: ${businessId}`);
 
   // ── T1: Owner fetches offers tab → like_count + liked_by_me present ─────

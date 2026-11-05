@@ -5,7 +5,9 @@
 // (if changed) which plan they're moving to at their next renewal.
 //
 // Usage: node scripts/test-tier-recheck.js
-require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
+const path = require('path');
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const billingService = require('../backend/src/modules/billing/billing.service');
 
 async function main() {

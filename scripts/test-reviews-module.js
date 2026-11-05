@@ -3,14 +3,14 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE           = 'http://localhost:3000';
+const BASE           = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const TEST_EMAIL     = process.env.TEST_EMAIL     || 'pinky@test.com';
 const TEST_PASSWORD  = process.env.TEST_PASSWORD  || 'Pinky123#';
 // A second user who is NOT subscribed to the test business
 const TEST_EMAIL_2   = process.env.TEST_EMAIL_2   || 'pinky2@test.com';
 const TEST_PASSWORD_2 = process.env.TEST_PASSWORD_2 || 'Pinky123#';
 // Must be set to the UUID of an existing business the test user IS subscribed to
-const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || '';
+const TEST_BUSINESS_ID = process.env.TEST_BUSINESS_ID || '66466941-72ea-4703-84b5-3668ee3d7239'; // E2E Test Cafe
 
 // ── Helper ────────────────────────────────────────────────────────
 function log(step, status, msg, data) {

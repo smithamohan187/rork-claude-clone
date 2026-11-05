@@ -8,7 +8,8 @@
 //   node scripts/test-business-invite-personal-code.js
 
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const { Client } = require(path.join(__dirname, '..', 'backend', 'node_modules', 'pg'));
 const marketplaceService = require(path.join(__dirname, '..', 'backend', 'src', 'modules', 'marketplace', 'marketplace.service'));
 
@@ -76,11 +77,11 @@ async function run() {
   console.log('══════════════════════════════════════════════════');
 
   const db = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 5432),
-    database: process.env.DB_NAME || 'touchpoint',
-    user: process.env.DB_USER || 'touchpoint_user',
-    password: process.env.DB_PASSWORD || 'touchpoint123',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || 5433),
+    database: process.env.DB_NAME || 'touchpoints',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASS || process.env.DB_PASSWORD,
   });
   await db.connect();
 

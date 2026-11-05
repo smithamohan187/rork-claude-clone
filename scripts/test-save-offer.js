@@ -9,7 +9,7 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const EMAIL = process.env.TEST_EMAIL || 'pinky@test.com';
 const PASSWORD = process.env.TEST_PASSWORD || 'Pinky123#';
 

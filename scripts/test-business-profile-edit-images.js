@@ -11,7 +11,7 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const DEFAULT_EMAIL = process.env.TEST_EMAIL || 'pinky@test.com';
 const DEFAULT_PASSWORD = process.env.TEST_PASSWORD || 'Pinky123#';
 
@@ -82,29 +82,30 @@ async function run() {
   log('3', 'INFO', `logo_url = ${biz.logo_url ?? 'null'}`);
   log('4', 'INFO', `cover_url = ${biz.cover_url ?? 'null'}`);
 
+  // Uploads are stored in Google Cloud Storage now (uploadFileToGCS), not on local disk — a
+  // real URL looks like https://storage.googleapis.com/..., not a relative /uploads/... path.
+  // These assertions previously expected the old pre-GCS-migration local path scheme.
+  const isRealUploadUrl = (url) => typeof url === 'string' && /^https?:\/\//.test(url);
+
   if (usingDefault) {
     // Can't guarantee images were uploaded on the default account — only check shape if present
     if (biz.logo_url) {
-      assert('3', biz.logo_url.startsWith('/uploads/'), `logo_url is a relative /uploads/ path ('${biz.logo_url}')`);
-      assert('4', biz.logo_url.includes('/uploads/'), `logo_url contains /uploads/ path`);
+      assert('3', isRealUploadUrl(biz.logo_url), `logo_url is a real GCS URL ('${biz.logo_url}')`);
     } else {
       log('3', 'INFO', 'logo_url is null on default account — skipping URL assertions');
     }
     if (biz.cover_url) {
-      assert('5', biz.cover_url.startsWith('/uploads/'), `cover_url is a relative /uploads/ path ('${biz.cover_url}')`);
-      assert('6', biz.cover_url.includes('/uploads/'), `cover_url contains /uploads/ path`);
+      assert('5', isRealUploadUrl(biz.cover_url), `cover_url is a real GCS URL ('${biz.cover_url}')`);
     } else {
       log('5', 'INFO', 'cover_url is null on default account — skipping URL assertions');
     }
   } else {
     // Dedicated owner account — assert both images are present and resolved
     assert('3', !!biz.logo_url, 'logo_url is non-null');
-    assert('4', typeof biz.logo_url === 'string' && biz.logo_url.startsWith('/uploads/'), `logo_url is a relative /uploads/ path ('${biz.logo_url}')`);
-    assert('5', biz.logo_url?.includes('/uploads/'), `logo_url contains /uploads/ path`);
+    assert('4', isRealUploadUrl(biz.logo_url), `logo_url is a real GCS URL ('${biz.logo_url}')`);
 
     assert('6', !!biz.cover_url, 'cover_url is non-null');
-    assert('7', typeof biz.cover_url === 'string' && biz.cover_url.startsWith('/uploads/'), `cover_url is a relative /uploads/ path ('${biz.cover_url}')`);
-    assert('8', biz.cover_url?.includes('/uploads/'), `cover_url contains /uploads/ path`);
+    assert('7', isRealUploadUrl(biz.cover_url), `cover_url is a real GCS URL ('${biz.cover_url}')`);
   }
 
   console.log('\n══════════════════════════════════════════════════');

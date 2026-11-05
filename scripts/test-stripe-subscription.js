@@ -6,9 +6,14 @@
 // scheme Stripe's SDK uses (see https://stripe.com/docs/webhooks/signatures#verify-manually).
 // This requires backend/.env's STRIPE_WEBHOOK_SECRET to be set to a real value for signature
 // verification to succeed — the placeholder committed to .env will make steps 4-6 fail.
-require('dotenv').config({ path: require('path').join(__dirname, '..', 'backend', '.env') });
+const path = require('path');
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const crypto = require('crypto');
-const BASE   = 'http://localhost:3000';
+// Webhook signature verification (steps 4-6) needs STRIPE_WEBHOOK_SECRET to match whichever
+// backend BASE points at — defaulting to localhost since that's whatever backend/.env's secret
+// was issued for; pass TEST_BASE_URL to point elsewhere, but only if its secret matches too.
+const BASE   = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const fetch  = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;

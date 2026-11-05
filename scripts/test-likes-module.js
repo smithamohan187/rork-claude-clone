@@ -3,13 +3,13 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE           = 'http://localhost:3000';
+const BASE           = process.env.TEST_BASE_URL || 'http://localhost:3000';
 // A subscriber account (must be subscribed to at least one business)
 const SUB_EMAIL      = process.env.TEST_EMAIL    || 'pinky@test.com';
 const SUB_PASSWORD   = process.env.TEST_PASSWORD || 'Pinky123#';
 // The business owner account (owns at least one post/offer/event)
-const OWNER_EMAIL    = process.env.OWNER_EMAIL   || 'smith@test.com';
-const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'Smith123#';
+const OWNER_EMAIL    = process.env.OWNER_EMAIL   || 'e2e.f.happy+1785935283403@example.com';
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'TestPass123!';
 
 function log(step, status, msg, data) {
   const icon = status === 'PASS' ? '✅' : status === 'FAIL' ? '❌' : '🔵';
@@ -62,7 +62,9 @@ async function getLikers(token, content_type, content_id, limit = 5, offset = 0)
 }
 
 async function getFeed(token) {
-  const res = await fetch(`${BASE}/feed`, {
+  // Generous limit — a default-sized page can bury the owner's own (possibly older) post once
+  // the test account has accumulated a lot of other subscribed-business activity over time.
+  const res = await fetch(`${BASE}/feed?limit=100`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();

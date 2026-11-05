@@ -189,7 +189,10 @@ async function loginUser(data) {
     }
 
     rawRefreshToken = `${crypto.randomUUID()}-${Date.now()}`;
-    const tokenHash = await bcrypt.hash(rawRefreshToken, 12);
+    // SHA-256, not bcrypt — see auth.model.js's saveRefreshToken for why: this is a random
+    // token, not a password, and bcrypt here only forced every fresh login's first /auth/refresh
+    // call onto the slow full-table bcrypt-compare fallback below instead of the fast hash lookup.
+    const tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
     await insertLoginRefreshToken(client, { userId: user.user_id, tokenHash, deviceInfo: device_info, expiresAt });

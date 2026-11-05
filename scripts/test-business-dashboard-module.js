@@ -4,11 +4,11 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE              = 'http://localhost:3000';
+const BASE              = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const OWNER_EMAIL       = process.env.OWNER_EMAIL    || 'pinky@test.com';
 const OWNER_PASSWORD    = process.env.OWNER_PASSWORD || 'Pinky123#';
-const CUSTOMER_EMAIL    = process.env.CUSTOMER_EMAIL    || 'customer@test.com';
-const CUSTOMER_PASSWORD = process.env.CUSTOMER_PASSWORD || 'Customer123#';
+const CUSTOMER_EMAIL    = process.env.CUSTOMER_EMAIL    || 'e2e.f.happy+1785935283403@example.com';
+const CUSTOMER_PASSWORD = process.env.CUSTOMER_PASSWORD || 'TestPass123!';
 
 function log(step, status, msg, data) {
   const icon = status === 'PASS' ? '✅' : status === 'FAIL' ? '❌' : '🔵';

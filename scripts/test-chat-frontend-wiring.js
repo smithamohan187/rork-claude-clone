@@ -8,7 +8,8 @@
 const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const { Client } = require(path.join(__dirname, '..', 'backend', 'node_modules', 'pg'));
 
 const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
@@ -51,11 +52,11 @@ async function run() {
   console.log('══════════════════════════════════════════════════');
 
   const db = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 5432),
-    database: process.env.DB_NAME || 'touchpoint',
-    user: process.env.DB_USER || 'touchpoint_user',
-    password: process.env.DB_PASSWORD || 'touchpoint123',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || 5433),
+    database: process.env.DB_NAME || 'touchpoints',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASS || process.env.DB_PASSWORD,
   });
   await db.connect();
 
@@ -84,12 +85,20 @@ async function run() {
          INSERT INTO profiles (user_id, profile_type, display_name, city, state)
          SELECT id,'business','FE Chat Biz D','Test City','TS' FROM u RETURNING id
        )
-       INSERT INTO businesses (profile_id, name, slug)
-       SELECT id,'FE Chat Biz D',$2 FROM p RETURNING id, profile_id`,
+       INSERT INTO businesses (profile_id, name, slug, onboarding_complete)
+       SELECT id,'FE Chat Biz D',$2,TRUE FROM p RETURNING id, profile_id`,
       [`${emailTag}-d@test.com`, `fe-chat-biz-${stamp}`],
     )).rows[0];
     const businessId = biz.id;
     const businessProfileId = biz.profile_id;
+    // Raw-inserted like this, the business has no business_subscriptions row — downstream
+    // isBusinessUnlocked()/isSubscriptionActive() checks would 403 without one.
+    await db.query(
+      `INSERT INTO business_subscriptions (business_id, plan_id, status, current_period_end)
+       VALUES ($1, '3ea4bca7-b327-428a-a32d-83471ddce2bb', 'trial', NOW() + INTERVAL '30 days')
+       ON CONFLICT (business_id) DO NOTHING`,
+      [businessId],
+    );
 
     await api('POST', '/subscriptions/subscribe', { token: A.token, body: { business_id: businessId } });
 

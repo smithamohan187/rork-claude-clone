@@ -3,7 +3,9 @@
  *
  * Prerequisites:
  *   - Backend running on BASE_URL
- *   - TEST_EMAIL / TEST_PASSWORD env vars set, or edit defaults below
+ *   - By default, registers a fresh throwaway account (needed since the welcome bonus is a
+ *     one-time-ever credit per profile+business) — set TEST_EMAIL/TEST_PASSWORD to use an
+ *     existing account instead, if it has never subscribed to BUSINESS_ID_A before
  *   - At least one business with welcome_bonus_points > 0 (BUSINESS_ID_A)
  *   - At least one business with welcome_bonus_points = 0 or no reward_config (BUSINESS_ID_ZERO)
  *   - A second business with a different bonus for the split test (BUSINESS_ID_B)
@@ -12,17 +14,19 @@
  * Run:  node scripts/test-join-points.js
  */
 
-const BASE_URL  = process.env.BASE_URL  || 'http://192.168.1.4:3000';
+const BASE_URL  = process.env.BASE_URL  || process.env.TEST_BASE_URL || 'https://touchpoints-backend-495493629048.asia-south1.run.app';
 const EMAIL     = process.env.TEST_EMAIL    || 'pinky@test.com';
 const PASSWORD  = process.env.TEST_PASSWORD || 'Pinky123#';
 
-// Replace these with real UUIDs from your DB before running
-// BUSINESS_ID_A    — has welcome_bonus_points > 0 (Test Business, 20 pts)
-// BUSINESS_ID_ZERO — no reward_config / 0 bonus  (Ritas Showroom)
-// BUSINESS_ID_B    — second business for split test; same as ZERO here since only 2 businesses exist
-const BUSINESS_ID_A    = process.env.BUSINESS_ID_A    || '10c365c7-547d-4004-b431-f601ef69d44d';
-const BUSINESS_ID_ZERO = process.env.BUSINESS_ID_ZERO || '14e753e9-cfec-45a6-a704-8473586a1234';
-const BUSINESS_ID_B    = process.env.BUSINESS_ID_B    || '10c365c7-547d-4004-b431-f601ef69d44d';
+// BUSINESS_ID_A    — E2E Test Cafe. Has welcome_bonus_points > 0, though the exact value drifts
+//                     (many other scripts' reward-config tests overwrite it) — this script only
+//                     asserts ">0" and "present in breakdown", never a specific number.
+// BUSINESS_ID_ZERO  — Ritas Dine-in. Confirmed on the deployed DB: no reward_config row.
+// BUSINESS_ID_B     — Andrews Breweries. Confirmed: welcome_bonus_points=10 (a different,
+//                     independently-verified value from BUSINESS_ID_A's, for the split test).
+const BUSINESS_ID_A    = process.env.BUSINESS_ID_A    || '66466941-72ea-4703-84b5-3668ee3d7239';
+const BUSINESS_ID_ZERO = process.env.BUSINESS_ID_ZERO || '4bd10fc4-1271-4251-820b-570465117b70';
+const BUSINESS_ID_B    = process.env.BUSINESS_ID_B    || '51c74168-6321-4576-9d2d-7fa7c26f3307';
  
 let token = '';
 let passed = 0;
@@ -50,13 +54,38 @@ async function req(method, path, body) {
 }
 
 async function login() {
-  console.log('\n[1] Login');
-  const { status, body } = await req('POST', '/auth/login', { identifier: EMAIL, password: PASSWORD });
-  if (status === 200 && body.data?.accessToken) {
-    token = body.data.accessToken;
-    pass('Login succeeded, token received');
-  } else {
+  // A brand-new throwaway account, not the shared TEST_EMAIL — the welcome-bonus checks below
+  // need a profile that has NEVER subscribed to BUSINESS_ID_A before, since the bonus is a
+  // one-time-ever credit (idempotent, by design) and the shared long-lived test accounts used
+  // across this whole session have long since consumed it for the common fixture businesses,
+  // which would make every "total points > 0" check below fail permanently through no fault of
+  // the app. Pass TEST_EMAIL/TEST_PASSWORD explicitly to use an existing account instead.
+  if (process.env.TEST_EMAIL) {
+    console.log('\n[1] Login (TEST_EMAIL override)');
+    const { status, body } = await req('POST', '/auth/login', { identifier: EMAIL, password: PASSWORD });
+    if (status === 200 && body.data?.accessToken) {
+      token = body.data.accessToken;
+      pass('Login succeeded, token received');
+      return;
+    }
     fail('Login', `status=${status} body=${JSON.stringify(body)}`);
+    process.exit(1);
+  }
+
+  console.log('\n[1] Register a fresh throwaway account');
+  const stamp = Date.now();
+  const { status, body } = await req('POST', '/auth/signup', {
+    email: `join-points-${stamp}@test.com`,
+    phone: `+1790${String(stamp).slice(-7)}`,
+    password: 'Test123#',
+    full_name: 'Join Points Tester',
+    location: 'Test City',
+  });
+  if (status === 201 && body.data?.accessToken) {
+    token = body.data.accessToken;
+    pass('Fresh account registered, token received');
+  } else {
+    fail('Register', `status=${status} body=${JSON.stringify(body)}`);
     process.exit(1);
   }
 }

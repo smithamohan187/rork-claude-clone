@@ -21,7 +21,7 @@ const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...ar
 const BASE        = process.env.TEST_BASE_URL || 'https://touchpoints-backend-495493629048.asia-south1.run.app';
 const EMAIL       = process.env.TEST_EMAIL    || 'pinky@test.com';
 const PASSWORD    = process.env.TEST_PASSWORD || 'Pinky123#';
-const BUSINESS_ID = process.env.BUSINESS_ID   || '';
+const BUSINESS_ID = process.env.BUSINESS_ID   || '66466941-72ea-4703-84b5-3668ee3d7239'; // E2E Test Cafe — the sharer (TEST_EMAIL) must not own this
 
 let passed = 0;
 let failed = 0;

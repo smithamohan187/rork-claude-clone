@@ -12,9 +12,9 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE            = 'http://localhost:3000';
-const OWNER_EMAIL     = process.env.OWNER_EMAIL    || 'smith@test.com';
-const OWNER_PASS      = process.env.OWNER_PASSWORD || 'Smith123#';
+const BASE            = process.env.TEST_BASE_URL || 'http://localhost:3000';
+const OWNER_EMAIL     = process.env.OWNER_EMAIL    || 'e2e.f.happy+1785935283403@example.com';
+const OWNER_PASS      = process.env.OWNER_PASSWORD || 'TestPass123!';
 const CUSTOMER_EMAIL  = process.env.CUSTOMER_EMAIL || 'pinky@test.com';
 const CUSTOMER_PASS   = process.env.CUSTOMER_PASSWORD || 'Pinky123#';
 

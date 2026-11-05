@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { query, getClient } = require('../../config/database');
 
 async function findUserByEmail(email) {
@@ -72,7 +72,13 @@ async function createReferral(client, { referralCodeId, referrerUserId, referred
 }
 
 async function saveRefreshToken(client, { userId, token }) {
-  const tokenHash = await bcrypt.hash(token, 12);
+  // SHA-256, not bcrypt: this is a high-entropy random token (not a low-entropy secret like a
+  // password), so bcrypt's slow/salted properties buy nothing here and only cost performance —
+  // matches the scheme auth.service.js's refreshAccessToken already uses for rotated tokens.
+  // A bcrypt-hashed token can never be found by the fast exact-match lookup (bcrypt salts are
+  // random per-hash), forcing every such token's refresh onto a full-table bcrypt-compare scan
+  // of every active session — this was previously the case for every single new login/signup.
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await client.query(
     `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)

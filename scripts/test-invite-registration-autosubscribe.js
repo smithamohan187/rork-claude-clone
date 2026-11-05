@@ -10,7 +10,8 @@
 const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const { Client } = require(path.join(__dirname, '..', 'backend', 'node_modules', 'pg'));
 
 const BASE     = process.env.TEST_BASE_URL || 'http://localhost:3000';
@@ -82,11 +83,11 @@ async function run() {
   console.log('══════════════════════════════════════════════════');
 
   const db = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 5432),
-    database: process.env.DB_NAME || 'touchpoint',
-    user: process.env.DB_USER || 'touchpoint_user',
-    password: process.env.DB_PASSWORD || 'touchpoint123',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || 5433),
+    database: process.env.DB_NAME || 'touchpoints',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASS || process.env.DB_PASSWORD,
   });
   await db.connect();
 
@@ -96,16 +97,16 @@ async function run() {
     assert('T0-LOGIN', A.ok && A.token && A.profileId, 'Inviter login succeeds');
     if (!A.token || !A.profileId) { console.log('\n❌ Cannot continue without inviter'); process.exit(1); }
 
-    const bizRes = await db.query(
-      `SELECT b.id, b.profile_id AS owner_profile_id
-         FROM businesses b
-        WHERE b.profile_id != $1
-        ORDER BY b.created_at LIMIT 1`,
-      [A.profileId],
-    );
-    if (bizRes.rows.length === 0) { console.log('\n❌ Need at least 1 business not owned by the inviter'); process.exit(1); }
-    const businessId = bizRes.rows[0].id;
-    const ownerProfileId = bizRes.rows[0].owner_profile_id;
+    // POST /invites/customer is OWNER-only — customerInvite.service.js's resolveOwnedBusinessId
+    // resolves the CALLER's own business server-side and 403s if a different business_id is
+    // passed. The inviter (EMAIL/A) must therefore own the target business — not "any business
+    // they don't own" as this used to pick via a live "oldest business not owned by A" DB query
+    // (which, with thousands of accumulated test rows, usually picked a business A had no
+    // authority over and silently broke everything downstream).
+    const myBizRes = await api('GET', '/businesses/me', { token: A.token });
+    const businessId = myBizRes.data?.data?.id;
+    if (!businessId) { console.log(`\n❌ ${EMAIL} does not own a business — cannot continue`); process.exit(1); }
+    const ownerProfileId = A.profileId;
 
     const stamp = Date.now();
 

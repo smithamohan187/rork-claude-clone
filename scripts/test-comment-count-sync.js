@@ -5,7 +5,7 @@
 
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 
-const BASE        = 'http://localhost:3000';
+const BASE        = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const EMAIL       = process.env.TEST_EMAIL    || 'pinky@test.com';
 const PASSWORD    = process.env.TEST_PASSWORD || 'Pinky123#';
 
@@ -80,6 +80,14 @@ async function run() {
 
   const token = await login();
   console.log('\n✅ [LOGIN] Authenticated');
+
+  // Ensure the account is subscribed to a business with real content — the feed only shows
+  // businesses the viewer actively subscribes to, and this account gets unsubscribed as cleanup
+  // by other scripts that share it.
+  await fetch(`${BASE}/subscriptions/subscribe`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ business_id: '66466941-72ea-4703-84b5-3668ee3d7239' }), // E2E Test Cafe
+  });
 
   // Find a feed item to test against
   const feedItem = await getFeedItem(token, 'post') ?? await getFeedItem(token, 'offer') ?? await getFeedItem(token, 'event');
