@@ -188,14 +188,28 @@ const QuickActionButton = React.memo(function QuickActionButton({
 const ActivityRow = React.memo(function ActivityRow({ item }: { item: RecentActivityItem }) {
   const config = ACTIVITY_CONFIG[item.type] ?? ACTIVITY_CONFIG.subscriber;
   const IconComp = config.icon;
+  const [avatarFailed, setAvatarFailed] = useState<boolean>(false);
 
   return (
     <View style={styles.activityRow} testID={`activity-${item.referenceId}`}>
-      <View style={[styles.activityDot, { backgroundColor: config.color + '20' }]}>
-        <IconComp size={14} color={config.color} />
-      </View>
+      {item.actorAvatar && !avatarFailed ? (
+        <Image
+          source={{ uri: item.actorAvatar }}
+          style={styles.activityAvatarImage}
+          onError={() => setAvatarFailed(true)}
+        />
+      ) : (
+        <View style={[styles.activityDot, { backgroundColor: config.color + '20' }]}>
+          <Text style={[styles.activityAvatarInitials, { color: config.color }]}>
+            {getChipInitials(item.actorName || 'Someone')}
+          </Text>
+        </View>
+      )}
       <View style={styles.activityContent}>
-        <Text style={styles.activityDesc} numberOfLines={2}>{item.message}</Text>
+        <View style={styles.activityHeaderRow}>
+          <IconComp size={12} color={config.color} />
+          <Text style={styles.activityDesc} numberOfLines={2}>{item.message}</Text>
+        </View>
         <Text style={styles.activityTime}>{timeAgo(item.timestamp)}</Text>
       </View>
     </View>
@@ -904,10 +918,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  activityAvatarImage: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  activityAvatarInitials: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+  },
   activityContent: {
     flex: 1,
   },
+  activityHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
   activityDesc: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '500' as const,
     color: '#1A1730',

@@ -2,6 +2,13 @@
 const dashboardFeedModel = require('./dashboardFeed.model');
 
 const CONTENT_LABEL = { offer: 'offer', event: 'event', post: 'post' };
+const PREVIEW_MAX_LENGTH = 60;
+
+function truncatePreview(text) {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return '';
+  return trimmed.length > PREVIEW_MAX_LENGTH ? `${trimmed.slice(0, PREVIEW_MAX_LENGTH - 1)}…` : trimmed;
+}
 
 // Build the human-readable message string per activity type.
 function buildMessage(row) {
@@ -14,8 +21,12 @@ function buildMessage(row) {
       return `${name} subscribed to your business`;
     case 'like':
       return `${name} liked your ${target}`;
-    case 'comment':
-      return `${name} commented on your ${target}`;
+    case 'comment': {
+      const preview = truncatePreview(row.content_preview);
+      return preview
+        ? `${name} commented on your ${target}: "${preview}"`
+        : `${name} commented on your ${target}`;
+    }
     case 'referral':
       return `${name} joined through your referral`;
     default:

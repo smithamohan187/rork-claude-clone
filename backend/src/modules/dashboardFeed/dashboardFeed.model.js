@@ -23,11 +23,12 @@ async function getBusinessIdByUserId(userId) {
 // come from BOTH customer_invites and the legacy referrals table.
 async function getRecentActivity(businessId, limit, offset) {
   const { rows } = await query(
-    `SELECT activity_type, actor_profile_id, actor_name, actor_avatar, content_type, reference_id, created_at
+    `SELECT activity_type, actor_profile_id, actor_name, actor_avatar, content_type, reference_id, created_at, content_preview
      FROM (
        SELECT 'redemption'::text AS activity_type, p.id AS actor_profile_id,
               p.display_name AS actor_name, p.avatar_url AS actor_avatar,
-              NULL::text AS content_type, c.id AS reference_id, c.used_at AS created_at
+              NULL::text AS content_type, c.id AS reference_id, c.used_at AS created_at,
+              NULL::text AS content_preview
        FROM coupons c
        JOIN rewards_catalog rc ON rc.id = c.reward_id
        JOIN profiles p ON p.id = c.profile_id
@@ -36,7 +37,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'subscriber'::text, p.id, p.display_name, p.avatar_url,
-              NULL::text, s.id, s.subscribed_at
+              NULL::text, s.id, s.subscribed_at,
+              NULL::text
        FROM subscriptions s
        JOIN profiles p ON p.id = s.profile_id
        WHERE s.business_id = $1 AND s.is_active = true
@@ -44,7 +46,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'like'::text, p.id, p.display_name, p.avatar_url,
-              l.content_type, l.id, l.created_at
+              l.content_type, l.id, l.created_at,
+              NULL::text
        FROM likes l
        JOIN offers o ON o.id = l.content_id AND l.content_type = 'offer'
        JOIN profiles p ON p.id = l.profile_id
@@ -53,7 +56,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'like'::text, p.id, p.display_name, p.avatar_url,
-              l.content_type, l.id, l.created_at
+              l.content_type, l.id, l.created_at,
+              NULL::text
        FROM likes l
        JOIN events e ON e.id = l.content_id AND l.content_type = 'event'
        JOIN profiles p ON p.id = l.profile_id
@@ -62,7 +66,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'like'::text, p.id, p.display_name, p.avatar_url,
-              l.content_type, l.id, l.created_at
+              l.content_type, l.id, l.created_at,
+              NULL::text
        FROM likes l
        JOIN posts po ON po.id = l.content_id AND l.content_type = 'post'
        JOIN profiles p ON p.id = l.profile_id
@@ -71,7 +76,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'comment'::text, p.id, p.display_name, p.avatar_url,
-              cm.content_type, cm.id, cm.created_at
+              cm.content_type, cm.id, cm.created_at,
+              cm.body AS content_preview
        FROM comments cm
        JOIN offers o ON o.id = cm.content_id AND cm.content_type = 'offer'
        JOIN profiles p ON p.id = cm.profile_id
@@ -80,7 +86,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'comment'::text, p.id, p.display_name, p.avatar_url,
-              cm.content_type, cm.id, cm.created_at
+              cm.content_type, cm.id, cm.created_at,
+              cm.body AS content_preview
        FROM comments cm
        JOIN events e ON e.id = cm.content_id AND cm.content_type = 'event'
        JOIN profiles p ON p.id = cm.profile_id
@@ -89,7 +96,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'comment'::text, p.id, p.display_name, p.avatar_url,
-              cm.content_type, cm.id, cm.created_at
+              cm.content_type, cm.id, cm.created_at,
+              cm.body AS content_preview
        FROM comments cm
        JOIN posts po ON po.id = cm.content_id AND cm.content_type = 'post'
        JOIN profiles p ON p.id = cm.profile_id
@@ -98,7 +106,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'referral'::text, p.id, p.display_name, p.avatar_url,
-              NULL::text, ci.id, COALESCE(ci.subscribed_at, ci.registered_at)
+              NULL::text, ci.id, COALESCE(ci.subscribed_at, ci.registered_at),
+              NULL::text
        FROM customer_invites ci
        JOIN profiles p ON p.id = ci.registered_profile_id
        WHERE ci.business_id = $1 AND ci.status IN ('registered', 'subscribed')
@@ -106,7 +115,8 @@ async function getRecentActivity(businessId, limit, offset) {
        UNION ALL
 
        SELECT 'referral'::text, p.id, p.display_name, p.avatar_url,
-              NULL::text, r.id, COALESCE(r.completed_at, r.created_at)
+              NULL::text, r.id, COALESCE(r.completed_at, r.created_at),
+              NULL::text
        FROM referrals r
        JOIN profiles p ON p.id = r.referred_profile_id
        WHERE r.business_id = $1 AND r.type = 'business'
