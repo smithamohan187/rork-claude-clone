@@ -78,6 +78,7 @@ import type { BusinessProfile } from '@/api/services/businessProfileService';
 import { fetchBusinessCategories } from '@/api/services/categoriesService';
 import { updateMyBusiness, type BusinessHour } from '@/api/services/businessService';
 import CommentSheet from '@/components/feed/CommentSheet';
+import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { EventHotBadge, EventPriceBadge, EventTagChips } from '@/components/events/EventExtras';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -247,6 +248,7 @@ export default function BusinessProfileScreen() {
   const welcomePointsValue = rewardData?.config?.welcome_bonus_points ?? 0;
   const [snackVisible, setSnackVisible] = useState<boolean>(false);
   const [snackMsg, setSnackMsg] = useState<string>('');
+  const [shareOffer, setShareOffer] = useState<Offer | null>(null);
   const { unlocked: businessUnlocked, lockMessage } = useBusinessUnlockStatus();
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; offerId: string | null }>({ visible: false, offerId: null });
 
@@ -501,15 +503,12 @@ export default function BusinessProfileScreen() {
     router.push({ pathname: '/view-offer', params: { offerId: offer.id, businessId: id ?? '' } } as never);
   }, [router, id]);
 
-  const handleShareOffer = useCallback(async (offer: Offer) => {
-    try {
-      await Share.share({
-        message: `Check out "${offer.title}" from ${business.name}! ${formatDiscount(offer)} — valid until ${formatDate(offer.expires_at ?? '')}`,
-      });
-    } catch (e) {
-      console.log('[BusinessProfile] Share error:', e);
-    }
-  }, [business.name]);
+  // Opens the trackable SharePostSheet (real /s/<code> links, referral attribution) instead of a
+  // bare native share — matches the feed cards' Share button (see OfferFeedCard.tsx), which this
+  // screen's Offers tab previously bypassed entirely.
+  const handleShareOffer = useCallback((offer: Offer) => {
+    setShareOffer(offer);
+  }, []);
 
   if (profileLoading && !business.name) {
     return (
@@ -1265,6 +1264,17 @@ export default function BusinessProfileScreen() {
       >
         {snackMsg}
       </Snackbar>
+      <SharePostSheet
+        visible={!!shareOffer}
+        onClose={() => setShareOffer(null)}
+        onToast={(msg) => { setSnackMsg(msg); setSnackVisible(true); }}
+        postId={shareOffer?.id ?? ''}
+        postType="offer"
+        businessId={id ?? business.id}
+        authorName={business.name}
+        authorAvatarUrl={business.logo}
+        contentPreview={shareOffer ? `${shareOffer.title}${shareOffer.description ? ` — ${shareOffer.description}` : ''}` : ''}
+      />
     </View>
   );
 }

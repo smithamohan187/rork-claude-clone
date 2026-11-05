@@ -74,10 +74,6 @@ function RootLayoutNav() {
         options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <Stack.Screen
-        name="create-ad"
-        options={{ headerShown: false, presentation: 'modal' }}
-      />
-      <Stack.Screen
         name="create-post"
         options={{ headerShown: false, presentation: 'modal' }}
       />

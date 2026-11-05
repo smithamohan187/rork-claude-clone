@@ -1,4 +1,5 @@
 const { Storage } = require('@google-cloud/storage');
+const { AppError } = require('../middleware/errorHandler');
 
 const storage = new Storage();
 const bucketName =
@@ -6,6 +7,9 @@ const bucketName =
 const bucket = storage.bucket(bucketName);
 
 async function uploadFileToGCS(file, folder, options = {}) {
+	if (!file.buffer || file.buffer.length === 0) {
+		throw new AppError('Uploaded file is empty or corrupted.', 400);
+	}
 	const filename = `${folder}/${Date.now()}-${file.originalname}`;
 	const blob = bucket.file(filename);
 	const blobStream = blob.createWriteStream({
