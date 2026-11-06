@@ -185,7 +185,10 @@ async function scanCoupon(userId, code) {
   }
 }
 
-async function checkAndExpireCoupon(couponId) {
+async function checkAndExpireCoupon(userId, couponId) {
+  const profileId = await subscriptionModel.getActiveProfileId(userId);
+  if (!profileId) throw Object.assign(new Error('No active profile found'), { status: 400 });
+
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -196,6 +199,10 @@ async function checkAndExpireCoupon(couponId) {
     );
     const coupon = rows[0];
     if (!coupon) throw Object.assign(new Error('Coupon not found'), { status: 404 });
+    if (coupon.profile_id !== profileId) {
+      await client.query('ROLLBACK');
+      throw Object.assign(new Error('Coupon not found'), { status: 404 });
+    }
 
     // Idempotent: if already expired or used, return immediately — no additional transaction
     if (coupon.status !== 'active' || new Date() <= new Date(coupon.expires_at)) {
@@ -221,9 +228,14 @@ async function checkAndExpireCoupon(couponId) {
   }
 }
 
-async function confirmCouponUsed(couponId) {
+async function confirmCouponUsed(userId, couponId) {
+  const businessId = await couponsModel.getBusinessIdByUserId(userId);
+  if (!businessId) throw Object.assign(new Error('No business found for this user'), { status: 400 });
+
   const coupon = await couponsModel.getCouponById(couponId);
-  if (!coupon) throw Object.assign(new Error('Coupon not found'), { status: 404 });
+  if (!coupon || coupon.business_id !== businessId) {
+    throw Object.assign(new Error('Coupon not found'), { status: 404 });
+  }
   if (coupon.status !== 'active') {
     throw Object.assign(new Error(`Coupon is already ${coupon.status}`), { status: 409 });
   }

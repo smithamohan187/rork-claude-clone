@@ -34,7 +34,7 @@ async function scanHandler(req, res, next) {
 
 async function expireCheckHandler(req, res, next) {
   try {
-    const result = await couponsService.checkAndExpireCoupon(req.params.id);
+    const result = await couponsService.checkAndExpireCoupon(req.user.userId, req.params.id);
     res.json(ok(result));
   } catch (err) {
     next(err);
@@ -43,7 +43,7 @@ async function expireCheckHandler(req, res, next) {
 
 async function markUsedHandler(req, res, next) {
   try {
-    const result = await couponsService.confirmCouponUsed(req.params.id);
+    const result = await couponsService.confirmCouponUsed(req.user.userId, req.params.id);
     res.json(ok(result));
   } catch (err) {
     next(err);
