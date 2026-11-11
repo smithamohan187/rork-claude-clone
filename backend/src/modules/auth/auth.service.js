@@ -28,6 +28,8 @@ const {
   getAllActiveRefreshTokens,
   getUserByIdWithProfile,
   getSessionByUserId,
+  findPasswordHashById,
+  updatePasswordHash,
  } = require('./auth.model');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
@@ -325,4 +327,15 @@ async function getSession(userId) {
   return session;
 }
 
-module.exports = { registerUser, loginUser, logout, refreshAccessToken, getSession };
+async function changePassword(userId, { currentPassword, newPassword }) {
+  const user = await findPasswordHashById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!passwordMatch) throw new AppError('Current password is incorrect', 401);
+
+  const newPasswordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await updatePasswordHash(userId, newPasswordHash);
+}
+
+module.exports = { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword };

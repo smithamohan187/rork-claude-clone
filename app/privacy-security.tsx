@@ -7,12 +7,11 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Surface, Switch, Divider, Dialog, Portal, Button } from 'react-native-paper';
+import { Surface, Switch, Divider } from 'react-native-paper';
 import {
   ArrowLeft,
   ChevronRight,
   KeyRound,
-  ShieldCheck,
   Smartphone,
   Eye,
   Activity,
@@ -70,30 +69,10 @@ export default function PrivacySecurityScreen() {
     }
     return defaults;
   });
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean>(false);
-  const [show2FADialog, setShow2FADialog] = useState<boolean>(false);
-
   const togglePrivacy = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPrivacyPrefs(prev => ({ ...prev, [id]: !prev[id] }));
     console.log('[PrivacySecurity] Toggled:', id);
-  }, []);
-
-  const handle2FAToggle = useCallback(() => {
-    if (!twoFactorEnabled) {
-      setShow2FADialog(true);
-    } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setTwoFactorEnabled(false);
-      console.log('[PrivacySecurity] 2FA disabled');
-    }
-  }, [twoFactorEnabled]);
-
-  const confirm2FA = useCallback(() => {
-    setShow2FADialog(false);
-    setTwoFactorEnabled(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    console.log('[PrivacySecurity] 2FA enabled');
   }, []);
 
   return (
@@ -135,29 +114,6 @@ export default function PrivacySecurityScreen() {
               <Text style={styles.listDesc}>Update your account password</Text>
             </View>
             <ChevronRight size={18} color="#A0AABB" />
-          </TouchableOpacity>
-
-          <Divider style={styles.divider} />
-
-          <TouchableOpacity
-            style={styles.listRow}
-            onPress={handle2FAToggle}
-            activeOpacity={0.7}
-            testID="privacy-2fa-toggle"
-          >
-            <View style={[styles.iconWrap, { backgroundColor: '#0D9488' + '14' }]}>
-              <ShieldCheck size={18} color="#0D9488" />
-            </View>
-            <View style={styles.listTextWrap}>
-              <Text style={styles.listTitle}>Two-Factor Authentication</Text>
-              <Text style={styles.listDesc}>Extra security on every login</Text>
-            </View>
-            <Switch
-              value={twoFactorEnabled}
-              onValueChange={handle2FAToggle}
-              color={PURPLE}
-              testID="privacy-2fa-switch"
-            />
           </TouchableOpacity>
 
           <Divider style={styles.divider} />
@@ -250,38 +206,6 @@ export default function PrivacySecurityScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      <Portal>
-        <Dialog
-          visible={show2FADialog}
-          onDismiss={() => setShow2FADialog(false)}
-          style={styles.dialog}
-        >
-          <Dialog.Icon icon="shield-check" color={PURPLE} size={32} />
-          <Dialog.Title style={styles.dialogTitle}>Enable Two-Factor Authentication?</Dialog.Title>
-          <Dialog.Content>
-            <Text style={styles.dialogBody}>
-              A verification code will be sent to your phone on every login. This adds an extra layer of security to your account.
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions style={styles.dialogActions}>
-            <Button
-              onPress={() => setShow2FADialog(false)}
-              textColor="#6B7A8D"
-              testID="2fa-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              onPress={confirm2FA}
-              textColor={PURPLE}
-              testID="2fa-confirm"
-            >
-              Enable
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
     </View>
   );
 }
@@ -378,25 +302,5 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 20,
-  },
-  dialog: {
-    borderRadius: 20,
-    backgroundColor: '#fff',
-  },
-  dialogTitle: {
-    textAlign: 'center' as const,
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#1B2A4A',
-  },
-  dialogBody: {
-    fontSize: 14,
-    color: '#6B7A8D',
-    textAlign: 'center' as const,
-    lineHeight: 20,
-  },
-  dialogActions: {
-    justifyContent: 'center' as const,
-    paddingBottom: 8,
   },
 });

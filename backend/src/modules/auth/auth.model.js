@@ -350,9 +350,26 @@ async function switchActiveProfile(userId, profileId) {
   return profile;
 }
 
+async function findPasswordHashById(userId) {
+  const { rows } = await query(
+    'SELECT password_hash FROM users WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+  return rows[0] ?? null;
+}
+
+async function updatePasswordHash(userId, passwordHash) {
+  await query(
+    'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+    [passwordHash, userId]
+  );
+}
+
 module.exports = {
   findUserByEmail,
   findUserByPhone,
+  findPasswordHashById,
+  updatePasswordHash,
   createUser,
   createProfile,
   setActiveProfile,

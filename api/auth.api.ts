@@ -164,4 +164,9 @@ export const authApi = {
   }>> {
     return apiClient.post('/auth/switch-profile', { profile_id: profileId });
   },
+
+  // Change the logged-in user's password — POST /auth/change-password
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResult<{ message: string }>> {
+    return apiClient.post('/auth/change-password', { currentPassword, newPassword });
+  },
 };

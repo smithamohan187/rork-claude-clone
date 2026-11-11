@@ -1,4 +1,4 @@
-const { registerUser, loginUser, logout, refreshAccessToken, getSession } = require('./auth.service');
+const { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword } = require('./auth.service');
 const authModel = require('./auth.model');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
@@ -146,4 +146,10 @@ const switchProfileHandler = asyncHandler(async (req, res) => {
   }));
 });
 
-module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler, switchProfileHandler };
+const changePasswordHandler = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  await changePassword(req.user.userId, { currentPassword, newPassword });
+  return res.status(200).json(ok({ message: 'Password updated successfully' }));
+});
+
+module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler, switchProfileHandler, changePasswordHandler };

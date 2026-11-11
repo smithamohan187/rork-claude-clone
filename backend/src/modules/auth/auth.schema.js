@@ -47,4 +47,16 @@ const logoutSchema = Joi.object({
   refreshToken: Joi.string().required(),
 });
 
-module.exports = { registerSchema, loginSchema, logoutSchema };
+const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string()
+    .min(8)
+    .pattern(/^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/)
+    .required()
+    .messages({
+      'string.pattern.base':
+        'Password must contain at least one uppercase letter, one number, and one special character',
+    }),
+});
+
+module.exports = { registerSchema, loginSchema, logoutSchema, changePasswordSchema };

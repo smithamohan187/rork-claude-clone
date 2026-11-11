@@ -47,6 +47,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBusinessDashboard } from '@/hooks/useBusinessDashboard';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
 import { useRecentRedemptions } from '@/hooks/useRecentRedemptions';
+import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
+import { useUnreadNotificationCount } from '@/hooks/useNotifications';
 import type { RecentActivityItem, ActivityType } from '@/api/services/dashboardFeedService';
 import {
   dashboardStats,
@@ -78,8 +80,6 @@ const ACTION_ICON_MAP = {
   PenSquare,
   PlusCircle,
 } as const;
-
-const BUSINESS_UNREAD_MESSAGES = 2;
 
 const ACTIVITY_CONFIG: Record<ActivityType, { color: string; icon: typeof UserPlus }> = {
   subscriber: { color: '#22C55E', icon: UserPlus },
@@ -150,13 +150,15 @@ const StatCard = React.memo(function StatCard({ stat, onPress }: { stat: Dashboa
 const QuickActionButton = React.memo(function QuickActionButton({
   action,
   onPress,
+  unreadMessages,
 }: {
   action: QuickAction;
   onPress: () => void;
+  unreadMessages: number;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const IconComp = ACTION_ICON_MAP[action.icon];
-  const showUnreadDot = action.id === 'messages' && BUSINESS_UNREAD_MESSAGES > 0;
+  const showUnreadDot = action.id === 'messages' && unreadMessages > 0;
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.93, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
@@ -230,6 +232,8 @@ export default function BusinessDashboard() {
   const { summary, loading: statsLoading, refresh: refreshStats, businessId } = useBusinessDashboard();
   const activity = useRecentActivity();
   const redemptions = useRecentRedemptions();
+  const unreadMessages = useUnreadMessagesCount();
+  const unreadNotifications = useUnreadNotificationCount();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switcherVisible, setSwitcherVisible] = useState<boolean>(false);
   const [chipAvatarFailed, setChipAvatarFailed] = useState<boolean>(false);
@@ -383,7 +387,7 @@ export default function BusinessDashboard() {
                 testID="biz-notification-bell"
               >
                 <Bell size={22} color="#fff" />
-                <View style={styles.bellDot} />
+                {unreadNotifications > 0 ? <View style={styles.bellDot} /> : null}
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -429,6 +433,7 @@ export default function BusinessDashboard() {
               key={action.id}
               action={action}
               onPress={() => handleActionPress(action)}
+              unreadMessages={unreadMessages}
             />
           ))}
         </View>

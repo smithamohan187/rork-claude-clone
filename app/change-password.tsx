@@ -14,6 +14,7 @@ import { TextInput, Button, Surface, ProgressBar } from 'react-native-paper';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { authApi } from '@/api/auth.api';
 
 const PURPLE = '#1A5C35';
 const BG = '#F6F5FA';
@@ -44,19 +45,20 @@ export default function ChangePasswordScreen() {
   const [showNew, setShowNew] = useState<boolean>(false);
   const [showConfirm, setShowConfirm] = useState<boolean>(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const strength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
-  const canSubmit = currentPassword.length > 0 && newPassword.length > 0 && confirmPassword.length > 0;
+  const canSubmit = currentPassword.length > 0 && newPassword.length > 0 && confirmPassword.length > 0 && !isSubmitting;
 
-  const handleUpdate = useCallback(() => {
+  const handleUpdate = useCallback(async () => {
     const newErrors: Record<string, string> = {};
 
     if (!currentPassword.trim()) {
       newErrors.current = 'Current password is required';
     }
-    if (newPassword.length < 6) {
-      newErrors.new = 'Password must be at least 6 characters';
+    if (newPassword.length < 8 || !/(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/.test(newPassword)) {
+      newErrors.new = 'Password must be at least 8 characters with an uppercase letter, a number, and a symbol';
     }
     if (newPassword !== confirmPassword) {
       newErrors.confirm = 'Passwords do not match';
@@ -72,8 +74,17 @@ export default function ChangePasswordScreen() {
       return;
     }
 
+    setIsSubmitting(true);
+    const result = await authApi.changePassword(currentPassword, newPassword);
+    setIsSubmitting(false);
+
+    if (!result.success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setErrors({ current: result.error ?? 'Failed to update password' });
+      return;
+    }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    console.log('[ChangePassword] Password updated successfully');
     Alert.alert('Password Updated', 'Your password has been changed successfully.', [
       { text: 'OK', onPress: () => router.back() },
     ]);
@@ -225,9 +236,10 @@ export default function ChangePasswordScreen() {
               contentStyle={styles.updateButtonContent}
               buttonColor={PURPLE}
               disabled={!canSubmit}
+              loading={isSubmitting}
               testID="change-password-submit"
             >
-              Update Password
+              {isSubmitting ? 'Updating...' : 'Update Password'}
             </Button>
           </View>
         </ScrollView>

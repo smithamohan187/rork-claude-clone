@@ -516,23 +516,6 @@ export default function UserProfileScreen() {
           )}
 
           <List.Item
-            title="Notification Preferences"
-            description="Manage alerts & push notifications"
-            left={() => (
-              <View style={[styles.settingsIcon, { backgroundColor: '#F59E0B' + '12' }]}>
-                <Bell size={18} color="#F59E0B" />
-              </View>
-            )}
-            right={() => <ChevronRight size={18} color="#A0AABB" style={styles.chevron} />}
-            onPress={() => router.push('/notification-preferences' as any)}
-            style={styles.listItem}
-            titleStyle={styles.listItemTitle}
-            descriptionStyle={styles.listItemDesc}
-            testID="settings-notifications"
-          />
-          <Divider style={styles.divider} />
-
-          <List.Item
             title="Privacy & Security"
             description="Manage your data & account safety"
             left={() => (

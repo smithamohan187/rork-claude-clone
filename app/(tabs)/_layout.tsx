@@ -157,15 +157,12 @@ export default function TabLayout() {
     ),
   }), [isBusiness]);
 
-  const savedCount = 3;
-  const showSavedDot = !isBusiness && savedCount > 0;
-
   const profileOptions = useMemo(() => ({
     title: isBusiness ? 'Settings' : 'Profile',
     tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
-      <TabIcon focused={focused} color={color} Icon={isBusiness ? Settings : User} badgeDot={showSavedDot} />
+      <TabIcon focused={focused} color={color} Icon={isBusiness ? Settings : User} />
     ),
-  }), [isBusiness, showSavedDot]);
+  }), [isBusiness]);
 
   // While session restore is in flight, or once we know the user is logged out and the redirect
   // above is about to fire, show nothing rather than flashing the tabs shell with no real data.
