@@ -17,7 +17,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome6 } from '@expo/vector-icons';
 import {
   AlertTriangle,
   Check,
@@ -706,30 +706,33 @@ function renderSocialIcon(id: SocialChannel['id']): React.ReactNode {
     case 'facebook':
       return (
         <View style={[styles.iconBg, { backgroundColor: '#1877F2' }]}>
-          <FontAwesome name="facebook" size={24} color="#fff" />
+          <FontAwesome6 name="facebook" iconStyle="brand" size={24} color="#fff" />
         </View>
       );
     case 'twitter':
+      // X's current logo, not the legacy Twitter bird — FontAwesome6's "x-twitter" brand glyph.
       return (
         <View style={[styles.iconBg, { backgroundColor: '#000' }]}>
-          <FontAwesome name="twitter" size={22} color="#fff" />
+          <FontAwesome6 name="x-twitter" iconStyle="brand" size={20} color="#fff" />
         </View>
       );
     case 'instagram':
+      // Instagram's real brand gradient (orange -> pink -> purple/blue) — previously had the
+      // app's own green repeated at the end instead of Instagram's actual colors.
       return (
         <LinearGradient
-          colors={['#F58529', '#DD2A7B', '#00B246', '#00B246']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['#F58529', '#DD2A7B', '#8134AF', '#515BD4']}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 1, y: 0 }}
           style={styles.iconBg}
         >
-          <FontAwesome name="instagram" size={22} color="#fff" />
+          <FontAwesome6 name="instagram" iconStyle="brand" size={22} color="#fff" />
         </LinearGradient>
       );
     case 'whatsapp':
       return (
         <View style={[styles.iconBg, { backgroundColor: '#25D366' }]}>
-          <FontAwesome name="whatsapp" size={24} color="#fff" />
+          <FontAwesome6 name="whatsapp" iconStyle="brand" size={24} color="#fff" />
         </View>
       );
     default:

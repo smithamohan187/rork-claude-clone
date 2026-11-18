@@ -6,6 +6,7 @@ import { getPendingShareReferral, clearPendingShareReferral } from '@/utils/shar
 import { resolvePendingInvite } from '@/api/services/customerInviteService';
 import { resolvePendingBusinessReferral } from '@/api/services/businessReferralService';
 import { scanSubscribeToBusiness } from '@/api/services/subscriptionService';
+import { getDeviceLabel } from '@/utils/deviceInfo';
 
 function isValidEmail(val: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
@@ -69,6 +70,7 @@ export function useSignIn() {
           ? identifier.trim().toLowerCase()
           : identifier.replace(/\D/g, ''),
         password,
+        device_info: getDeviceLabel(),
       };
 
       const data = await signIn(payload);

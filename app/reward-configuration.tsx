@@ -156,12 +156,19 @@ export default function RewardConfigurationScreen() {
 
   const handleSaveConfig = useCallback(async () => {
     if (!businessId) return;
+    const welcome = parseInt(welcomePoints || '0', 10);
+    const referral = parseInt(referralPoints || '0', 10);
+    const sharing = parseInt(sharingPoints || '0', 10);
+    if (welcome <= 0 && referral <= 0 && sharing <= 0) {
+      Alert.alert('No points set', 'Enter at least one points value above before saving.');
+      return;
+    }
     setSaving(true);
     try {
       await upsertRewardConfig(businessId, {
-        welcome_bonus_points:  parseInt(welcomePoints  || '0', 10),
-        referral_bonus_points: parseInt(referralPoints || '0', 10),
-        share_points:          parseInt(sharingPoints  || '0', 10),
+        welcome_bonus_points:  welcome,
+        referral_bonus_points: referral,
+        share_points:          sharing,
       });
       // Points settings alone don't satisfy the dashboard checklist's "Add rewards & prizes" step —
       // it also needs at least one prize in the catalog below. Make that explicit here rather than

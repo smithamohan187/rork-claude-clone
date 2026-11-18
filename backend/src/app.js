@@ -42,6 +42,7 @@ const { getScanLandingPageHandler } = require('./modules/businesses/business.con
 const billingRoutes = require('./modules/billing/billing.routes');
 const { stripeWebhookHandler } = require('./modules/billing/billing.controller');
 const businessReferralRoutes = require('./modules/businessReferrals/businessReferral.routes');
+const { ANDROID_ASSET_LINKS } = require('./config/appLinks');
 
 const app = express();
 
@@ -64,6 +65,11 @@ const api = express.Router();
 
 app.get('/health', (req, res) => res.json(ok({ status: 'ok' })));
 app.get('/test', (req, res) => res.json({ works: true }));
+// Android App Links verification — Android fetches this at the domain root over HTTPS to confirm
+// this app owns the domain used in shared /s/:code links (see config/appLinks.js). Must be served
+// as application/json with no auth/redirects. No iOS equivalent yet — add
+// /.well-known/apple-app-site-association here once Apple Team ID/bundle details are available.
+app.get('/.well-known/assetlinks.json', (req, res) => res.json(ANDROID_ASSET_LINKS));
 app.use('/auth',          authRoutes);
 app.use('/categories',    categoriesRoutes);
 app.use('/profile',       profileRoutes);

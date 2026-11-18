@@ -29,7 +29,6 @@ export const dashboardStats: DashboardStat[] = [
     icon: 'Users',
     color: '#1A5C35',
     bgColor: '#EDE9F6',
-    trend: '+12%',
   },
   {
     id: 'offers',
@@ -54,12 +53,11 @@ export const dashboardStats: DashboardStat[] = [
     icon: 'Ticket',
     color: '#EF4444',
     bgColor: '#FEF2F2',
-    trend: '+5%',
   },
 ];
 
 export const quickActions: QuickAction[] = [
-  { id: 'add-content', label: 'Add Post / Event / Offer', icon: 'PlusCircle', route: '/(tabs)/content' },
+  { id: 'add-content', label: 'Add Content', icon: 'PlusCircle', route: '/(tabs)/content' },
   { id: 'view-members', label: 'Members', icon: 'UsersRound', route: '/business-members' },
   { id: 'messages', label: 'Messages', icon: 'MessageSquare', route: '/(tabs)/messages' },
 ];

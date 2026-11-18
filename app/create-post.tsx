@@ -146,6 +146,7 @@ interface FormErrors {
   endDate?: string;
   eventTitle?: string;
   eventDate?: string;
+  eventEndDate?: string;
 }
 
 export default function CreatePostScreen() {
@@ -366,6 +367,9 @@ export default function CreatePostScreen() {
   const [eventDate, setEventDate] = useState<Date | null>(null);
   const [eventDateOpen, setEventDateOpen] = useState<boolean>(false);
   const [eventTimeOpen, setEventTimeOpen] = useState<boolean>(false);
+  const [eventEndDate, setEventEndDate] = useState<Date | null>(null);
+  const [eventEndDateOpen, setEventEndDateOpen] = useState<boolean>(false);
+  const [eventEndTimeOpen, setEventEndTimeOpen] = useState<boolean>(false);
   const [eventImage, setEventImage] = useState<string>('');
   const [eventCategory, setEventCategory] = useState<EventCategory>('community');
   const [eventType, setEventType] = useState<EventType>('In Person');
@@ -389,7 +393,7 @@ export default function CreatePostScreen() {
       setOfferOriginalPrice(''); setOfferTerms(''); setOfferTags('');
       setOfferIsHot(false); setOfferPromoCode('');
       setEventTitle(''); setEventDescription(''); setEventLocation('');
-      setEventDate(null); setEventImage('');
+      setEventDate(null); setEventEndDate(null); setEventImage('');
       setEventCategory('community'); setEventType('In Person'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     } else if (value === 'event') {
@@ -400,7 +404,7 @@ export default function CreatePostScreen() {
       setOfferIsHot(false); setOfferPromoCode('');
     } else {
       setEventTitle(''); setEventDescription(''); setEventLocation('');
-      setEventDate(null); setEventImage('');
+      setEventDate(null); setEventEndDate(null); setEventImage('');
       setEventCategory('community'); setEventType('In Person'); setEventIsFree(true); setEventIsHot(false);
       setEventPrice(''); setEventTags(''); setShowCategoryPicker(false);
     }
@@ -436,9 +440,11 @@ export default function CreatePostScreen() {
     const newErrors: FormErrors = {};
     if (!eventTitle.trim()) newErrors.eventTitle = 'Event title is required';
     if (!eventDate) newErrors.eventDate = 'Event date is required';
+    if (eventDate && eventEndDate && eventEndDate <= eventDate)
+      newErrors.eventEndDate = 'End date must be after start date';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [eventTitle, eventDate]);
+  }, [eventTitle, eventDate, eventEndDate]);
 
   const handleSubmit = useCallback(async () => {
     if (activeTab === 'post') {
@@ -535,7 +541,7 @@ export default function CreatePostScreen() {
         description: eventDescription.trim() || null,
         location: eventLocation.trim() || null,
         starts_at: eventDate!.toISOString(),
-        ends_at: null,
+        ends_at: eventEndDate ? eventEndDate.toISOString() : null,
         event_type: eventType,
         category: eventCategory,
         is_free: eventIsFree,
@@ -564,7 +570,7 @@ export default function CreatePostScreen() {
     validateOfferForm, offerTitle, offerDescription, offerType, discountPercent,
     offerStartDate, offerEndDate, offerIsActive, offerImage,
     offerOriginalPrice, offerTerms, offerTags, offerIsHot, offerPromoCode,
-    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventImage, addEvent, editEvent,
+    validateEventForm, eventTitle, eventDescription, eventLocation, eventDate, eventEndDate, eventImage, addEvent, editEvent,
     eventCategory, eventType, eventIsFree, eventPrice, eventTags, eventIsHot,
   ]);
 
@@ -1565,6 +1571,42 @@ export default function CreatePostScreen() {
           </View>
         </View>
         {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
+
+        <View style={[styles.dateRow, { marginTop: 10 }]}>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
+              onPress={() => setEventEndDateOpen(true)}
+              testID="event-end-date-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+                {eventEndDate ? format(eventEndDate, 'EEE, MMM d') : 'End Date (optional)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.dateField}>
+            <TouchableOpacity
+              style={[styles.dateBtn, !!errors.eventEndDate && styles.dateBtnError]}
+              onPress={() => setEventEndTimeOpen(true)}
+              testID="event-end-time-btn"
+              activeOpacity={0.7}
+            >
+              <Calendar size={15} color={Colors.textSecondary} />
+              <Text style={[styles.dateBtnText, !eventEndDate && styles.dateBtnPlaceholder]}>
+                {eventEndDate ? format(eventEndDate, 'h:mm a') : 'End Time'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {errors.eventEndDate && <Text style={styles.errorText}>{errors.eventEndDate}</Text>}
+        {eventEndDate && (
+          <TouchableOpacity onPress={() => setEventEndDate(null)} style={styles.clearDateBtn} testID="event-clear-end-date">
+            <X size={14} color={Colors.textSecondary} />
+            <Text style={styles.clearDateText}>Clear end date</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.formSection}>
@@ -1717,6 +1759,40 @@ export default function CreatePostScreen() {
           setEventDate(merged);
           setErrors(p => ({ ...p, eventDate: undefined }));
           setEventTimeOpen(false);
+        }}
+      />
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={eventEndDateOpen}
+        onDismiss={() => setEventEndDateOpen(false)}
+        date={eventEndDate ?? eventDate ?? undefined}
+        onChange={({ date }) => {
+          if (date) {
+            const merged = eventEndDate
+              ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), eventEndDate.getHours(), eventEndDate.getMinutes())
+              : date;
+            setEventEndDate(merged);
+            setErrors(p => ({ ...p, eventEndDate: undefined }));
+          }
+          setEventEndDateOpen(false);
+        }}
+        onConfirm={() => setEventEndDateOpen(false)}
+      />
+
+      <TimePickerModal
+        locale="en"
+        visible={eventEndTimeOpen}
+        onDismiss={() => setEventEndTimeOpen(false)}
+        hours={eventEndDate ? eventEndDate.getHours() : new Date().getHours()}
+        minutes={eventEndDate ? eventEndDate.getMinutes() : new Date().getMinutes()}
+        onConfirm={({ hours, minutes }) => {
+          const base = eventEndDate ?? eventDate ?? new Date();
+          const merged = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+          setEventEndDate(merged);
+          setErrors(p => ({ ...p, eventEndDate: undefined }));
+          setEventEndTimeOpen(false);
         }}
       />
 
@@ -2552,6 +2628,15 @@ const styles = StyleSheet.create({
   dateBtnError: { borderColor: Colors.error },
   dateBtnText: { fontSize: 14, color: Colors.text, flex: 1 },
   dateBtnPlaceholder: { color: Colors.textTertiary },
+  clearDateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingVertical: 2,
+  },
+  clearDateText: { fontSize: 12, color: Colors.textSecondary },
   activeToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

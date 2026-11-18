@@ -16,6 +16,7 @@ export async function signUp(payload: SignupPayload): Promise<SignUpResponse> {
 export interface SignInPayload {
   identifier: string;
   password: string;
+  device_info?: string;
 }
 export async function signIn(payload: SignInPayload): Promise<AuthResponse> {
   const result = await apiClient.post<AuthResponse>('/auth/login', payload);

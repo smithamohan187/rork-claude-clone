@@ -479,8 +479,12 @@ export default function ManageContentScreen() {
 
   const renderSubtitle = (item: ContentItem): string => {
     if (item.type === 'offer') {
-      const expiresAt = (item as unknown as Offer).expires_at;
-      return expiresAt ? `Valid until ${formatLongDate(expiresAt)}` : 'No expiry';
+      const offer = item as unknown as Offer;
+      const { starts_at: startsAt, expires_at: expiresAt } = offer;
+      if (startsAt && expiresAt) return `Valid ${formatLongDate(startsAt)} – ${formatLongDate(expiresAt)}`;
+      if (expiresAt) return `Valid until ${formatLongDate(expiresAt)}`;
+      if (startsAt) return `Starts ${formatLongDate(startsAt)}`;
+      return 'No expiry';
     }
     if (item.type === 'event') {
       const event = item as unknown as Event;

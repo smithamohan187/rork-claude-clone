@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, AlertTriangle, CreditCard, X } from 'lucide-react-native';
+import { ArrowLeft, AlertTriangle, CreditCard, Info, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useBillingSettings } from '@/hooks/useBillingSettings';
 import { useSnackbar } from '@/contexts/SnackbarContext';
@@ -102,16 +102,50 @@ export default function BillingSettingsScreen() {
                 )}
               </TouchableOpacity>
             </>
-          ) : (
+          ) : subscription ? (
             <>
               <View style={styles.warningBanner}>
                 <AlertTriangle size={20} color={Colors.error} />
                 <Text style={styles.warningText}>
-                  Your subscription is cancelled — your business isn't listed in the app and you can't view your subscribers. Renew to go live again.
+                  Your subscription is {subscription.status} — your business isn't listed in the app and you can't view your subscribers. Renew to go live again.
                 </Text>
               </View>
 
               <Text style={styles.sectionTitle}>Choose a plan to renew</Text>
+              <View style={styles.planList}>
+                {plans.map((plan) => (
+                  <TouchableOpacity
+                    key={plan.id}
+                    style={styles.planCard}
+                    onPress={() => handleRenew(plan)}
+                    disabled={updating}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.planCardHeader}>
+                      <Text style={styles.planCardName}>{plan.name}</Text>
+                      <Text style={styles.planCardPrice}>£{plan.price_monthly}/mo</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {updating && (
+                <View style={styles.updatingRow}>
+                  <ActivityIndicator size="small" color={Colors.navyDark} />
+                  <Text style={styles.updatingText}>Starting checkout...</Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.infoBanner}>
+                <Info size={20} color={Colors.navyDark} />
+                <Text style={styles.infoBannerText}>
+                  Choose a plan to get your business listed in the app and start building your subscriber base.
+                </Text>
+              </View>
+
+              <Text style={styles.sectionTitle}>Choose a plan to get started</Text>
               <View style={styles.planList}>
                 {plans.map((plan) => (
                   <TouchableOpacity
@@ -294,6 +328,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: Colors.error,
+    lineHeight: 18,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: Colors.navyDark + '10',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.navyDark,
     lineHeight: 18,
   },
   sectionTitle: {

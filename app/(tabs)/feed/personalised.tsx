@@ -505,6 +505,7 @@ const header = useMemo(() => {
         onClose={() => setViewerVisible(false)}
         onToggleBookmark={toggleBookmark}
         onToggleInterested={toggleInterested}
+        onToggleLike={toggleFeedLike}
         onShowToast={showToast}
         onCommentCountChange={updateCommentCount}
         currentUser={CURRENT_USER}

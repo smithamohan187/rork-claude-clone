@@ -189,6 +189,74 @@ async function findActiveRefreshTokensByUser(userId) {
   return rows;
 }
 
+async function getProfileForExport(profileId) {
+  const { rows } = await query(
+    `SELECT display_name, bio, city, state, country, avatar_url, created_at
+     FROM profiles WHERE id = $1`,
+    [profileId]
+  );
+  return rows[0] ?? null;
+}
+
+async function getPointsForExport(profileId) {
+  const { rows } = await query(
+    `SELECT b.name AS business_name, up.total_earned, up.total_redeemed, up.current_balance
+     FROM user_points up
+     JOIN businesses b ON b.id = up.business_id
+     WHERE up.profile_id = $1
+     ORDER BY b.name`,
+    [profileId]
+  );
+  return rows;
+}
+
+async function getCouponsForExport(profileId) {
+  const { rows } = await query(
+    `SELECT b.name AS business_name, c.code, c.status, c.created_at, c.used_at, c.expires_at
+     FROM coupons c
+     JOIN businesses b ON b.id = c.business_id
+     WHERE c.profile_id = $1
+     ORDER BY c.created_at DESC`,
+    [profileId]
+  );
+  return rows;
+}
+
+async function getSubscriptionsForExport(profileId) {
+  const { rows } = await query(
+    `SELECT b.name AS business_name, s.subscribed_at, s.unsubscribed_at, s.is_active
+     FROM subscriptions s
+     JOIN businesses b ON b.id = s.business_id
+     WHERE s.profile_id = $1
+     ORDER BY s.subscribed_at DESC`,
+    [profileId]
+  );
+  return rows;
+}
+
+async function getReviewsForExport(profileId) {
+  const { rows } = await query(
+    `SELECT b.name AS business_name, r.rating, r.review_text, r.created_at
+     FROM business_reviews r
+     JOIN businesses b ON b.id = r.business_id
+     WHERE r.profile_id = $1
+     ORDER BY r.created_at DESC`,
+    [profileId]
+  );
+  return rows;
+}
+
+async function listSessionsByUser(userId) {
+  const { rows } = await query(
+    `SELECT id, token_hash, device_info, ip_address, created_at, expires_at
+     FROM refresh_tokens
+     WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return rows;
+}
+
 async function revokeRefreshTokenById(id, userId) {
   await query(
     'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2',
@@ -370,6 +438,12 @@ module.exports = {
   findUserByPhone,
   findPasswordHashById,
   updatePasswordHash,
+  listSessionsByUser,
+  getProfileForExport,
+  getPointsForExport,
+  getCouponsForExport,
+  getSubscriptionsForExport,
+  getReviewsForExport,
   createUser,
   createProfile,
   setActiveProfile,

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import {
   fetchBusinessOffers,
   toggleOfferStatus,
@@ -30,10 +31,15 @@ export function useBusinessOffers(businessId: string, filter: OfferFilter) {
 
   // Wait for AuthContext's session-restore to finish — firing before it settles hits the API
   // with no access token yet, 401s, and silently leaves the list empty on fresh page loads.
-  useEffect(() => {
-    if (authLoading || !isAuthenticated) return;
-    refresh();
-  }, [refresh, authLoading, isAuthenticated]);
+  // useFocusEffect (not useEffect) because expo-router keeps the business-profile screen mounted
+  // across navigation — a status change made elsewhere (e.g. manage-content.tsx) would otherwise
+  // keep showing stale status here until a full unmount/remount.
+  useFocusEffect(
+    useCallback(() => {
+      if (authLoading || !isAuthenticated) return;
+      refresh();
+    }, [refresh, authLoading, isAuthenticated]),
+  );
 
   const toggleDisable = useCallback(
     async (offerId: string, currentStatus: 'active' | 'disabled' | 'expired') => {

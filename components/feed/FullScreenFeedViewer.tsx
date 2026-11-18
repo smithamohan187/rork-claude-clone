@@ -39,7 +39,6 @@ import {
 
 import type { FeedItem, PostFeedItem } from '@/hooks/usePersonalisedFeed';
 import { useComments, mapCommentToItem, type CommentItem } from '@/hooks/useComments';
-import { useLike } from '@/hooks/useLike';
 import { CommentSection } from '@/components/feed/CommentSection';
 import { SharePostSheet } from '@/components/feed/SharePostSheet';
 import { ReferOfferSheet } from '@/components/feed/ReferOfferSheet';
@@ -60,6 +59,7 @@ interface Props {
   onClose: () => void;
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
+  onToggleLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
   onShowToast: (msg: string) => void;
   onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
@@ -83,6 +83,7 @@ export function FullScreenFeedViewer({
   onClose,
   onToggleBookmark,
   onToggleInterested,
+  onToggleLike,
   onShowToast,
   onCommentCountChange,
   currentUser,
@@ -159,12 +160,13 @@ export function FullScreenFeedViewer({
         onClose={onClose}
         onToggleBookmark={onToggleBookmark}
         onToggleInterested={onToggleInterested}
+        onToggleLike={onToggleLike}
         onShowToast={onShowToast}
         onCommentCountChange={onCommentCountChange}
         currentUser={currentUser}
       />
     ),
-    [activeIndex, SCREEN_W, SCREEN_H, insets.top, insets.bottom, onClose, onToggleBookmark, onToggleInterested, onShowToast, onCommentCountChange, currentUser],
+    [activeIndex, SCREEN_W, SCREEN_H, insets.top, insets.bottom, onClose, onToggleBookmark, onToggleInterested, onToggleLike, onShowToast, onCommentCountChange, currentUser],
   );
 
   return (
@@ -247,6 +249,7 @@ interface ViewerPageProps {
   onClose: () => void;
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
+  onToggleLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
   onShowToast: (msg: string) => void;
   onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
@@ -261,6 +264,7 @@ const ViewerPage = React.memo(function ViewerPage({
   insetBottom,
   onToggleBookmark,
   onToggleInterested,
+  onToggleLike,
   onShowToast,
   onCommentCountChange,
   currentUser,
@@ -274,6 +278,7 @@ const ViewerPage = React.memo(function ViewerPage({
         screenH={screenH}
         insetTop={insetTop}
         insetBottom={insetBottom}
+        onToggleLike={onToggleLike}
         onShowToast={onShowToast}
         onCommentCountChange={onCommentCountChange}
         currentUser={currentUser}
@@ -290,6 +295,7 @@ const ViewerPage = React.memo(function ViewerPage({
       insetBottom={insetBottom}
       onToggleBookmark={onToggleBookmark}
       onToggleInterested={onToggleInterested}
+      onToggleLike={onToggleLike}
       onShowToast={onShowToast}
       onCommentCountChange={onCommentCountChange}
       currentUser={currentUser}
@@ -304,6 +310,7 @@ interface PostPageProps {
   screenH: number;
   insetTop: number;
   insetBottom: number;
+  onToggleLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
   onShowToast: (msg: string) => void;
   onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
@@ -315,17 +322,21 @@ function PostPage({
   screenH,
   insetTop,
   insetBottom,
+  onToggleLike,
   onShowToast,
   onCommentCountChange,
   currentUser,
 }: PostPageProps) {
-  const { likeCount, hasLiked: liked, toggle: toggleLike } = useLike({
-    contentType: 'post',
-    contentId: post.id,
-    initialLikeCount: post.like_count,
-    initialHasLiked: post.liked_by_me,
-    isOwner: post.is_owner,
-  });
+  // Reads straight from `post` (kept live by the parent screen's toggleFeedLike) rather than
+  // owning separate local like state — this viewer is a different component instance from the
+  // small feed card, so a disconnected local toggle would never be reflected on the card once
+  // this viewer closes, only after the next full feed refetch.
+  const likeCount = post.like_count;
+  const liked = post.liked_by_me;
+  const toggleLike = useCallback(() => {
+    if (post.is_owner) return;
+    onToggleLike('post', post.id);
+  }, [post.is_owner, post.id, onToggleLike]);
   const { comments: rawComments, commentCount, loading: commentsLoading, submitComment: postComment, removeComment, toggleCommentLike } = useComments({
     contentType: 'post',
     contentId: post.id,
@@ -569,6 +580,7 @@ interface FeedPageProps {
   insetBottom: number;
   onToggleBookmark: (offerId: string) => boolean;
   onToggleInterested: (eventId: string) => boolean;
+  onToggleLike: (contentType: 'offer' | 'event' | 'post', contentId: string) => void;
   onShowToast: (msg: string) => void;
   onCommentCountChange?: (contentType: 'offer' | 'event' | 'post', contentId: string, count: number) => void;
   currentUser: { name: string; initials: string; color: string };
@@ -582,6 +594,7 @@ function FeedPage({
   insetBottom,
   onToggleBookmark,
   onToggleInterested,
+  onToggleLike,
   onShowToast,
   onCommentCountChange,
   currentUser,
@@ -589,13 +602,14 @@ function FeedPage({
   const isOffer = item.feedType === 'offer';
   const description = isOffer ? item.description : item.venue;
 
-  const { likeCount: reactionCount, hasLiked, toggle: toggleLike } = useLike({
-    contentType: item.feedType,
-    contentId: item.id,
-    initialLikeCount: item.like_count,
-    initialHasLiked: item.liked_by_me,
-    isOwner: item.is_owner,
-  });
+  // Reads straight from `item` (kept live by the parent screen's toggleFeedLike) rather than
+  // owning separate local like state — see the matching comment in PostPage above.
+  const reactionCount = item.like_count;
+  const hasLiked = item.liked_by_me;
+  const toggleLike = useCallback(() => {
+    if (item.is_owner) return;
+    onToggleLike(item.feedType, item.id);
+  }, [item.is_owner, item.feedType, item.id, onToggleLike]);
   const { comments: rawComments, commentCount, loading: commentsLoading, submitComment: postComment, removeComment, toggleCommentLike } = useComments({
     contentType: item.feedType,
     contentId: item.id,
@@ -1183,6 +1197,7 @@ function CommentSheet({
       <PaperModal
         visible={visible}
         onDismiss={onClose}
+        style={styles.sheetWrap}
         contentContainerStyle={styles.sheetWrap}
       >
         <View style={styles.sheetCard}>
@@ -1227,6 +1242,7 @@ function MoreSheet({ visible, onClose, onToast }: MoreSheetProps) {
       <PaperModal
         visible={visible}
         onDismiss={onClose}
+        style={styles.sheetWrap}
         contentContainerStyle={styles.sheetWrap}
       >
         <View style={styles.sheetCard}>

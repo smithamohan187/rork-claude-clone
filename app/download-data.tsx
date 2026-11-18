@@ -13,12 +13,13 @@ import {
   ArrowLeft,
   Download,
   FileText,
-  Mail,
-  Clock,
+  Smartphone,
   CheckCircle2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { authApi } from '@/api/auth.api';
+import { exportMyDataJson } from '@/utils/dataExport';
 
 const PURPLE = '#1A5C35';
 const BG = '#F6F5FA';
@@ -26,23 +27,26 @@ const BG = '#F6F5FA';
 export default function DownloadDataScreen() {
   const router = useRouter();
   const [requested, setRequested] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  const handleRequestExport = useCallback(() => {
-    Alert.alert(
-      'Request Data Export',
-      'We will prepare a copy of your personal data and send it to your registered email address. This may take up to 48 hours.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request Export',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setRequested(true);
-            console.log('[DownloadData] Data export requested');
-          },
-        },
-      ]
-    );
+  const handleRequestExport = useCallback(async () => {
+    setIsExporting(true);
+    const result = await authApi.exportData();
+    if (!result.success || !result.data) {
+      setIsExporting(false);
+      Alert.alert('Error', result.error ?? 'Failed to export your data');
+      return;
+    }
+
+    try {
+      await exportMyDataJson(result.data);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRequested(true);
+    } catch {
+      Alert.alert('Error', 'Failed to save your data file');
+    } finally {
+      setIsExporting(false);
+    }
   }, []);
 
   return (
@@ -105,15 +109,9 @@ export default function DownloadDataScreen() {
 
         <Surface style={styles.noteCard} elevation={1}>
           <View style={styles.noteRow}>
-            <Mail size={18} color="#6B7A8D" />
+            <Smartphone size={18} color="#6B7A8D" />
             <Text style={styles.noteText}>
-              You will receive an email with your data within 48 hours.
-            </Text>
-          </View>
-          <View style={styles.noteRow}>
-            <Clock size={18} color="#6B7A8D" />
-            <Text style={styles.noteText}>
-              The download link in the email will expire after 7 days.
+              Your data file is prepared and saved directly to this device — no email needed.
             </Text>
           </View>
         </Surface>
@@ -121,9 +119,9 @@ export default function DownloadDataScreen() {
         {requested ? (
           <Surface style={styles.successCard} elevation={1}>
             <CheckCircle2 size={28} color="#22C55E" />
-            <Text style={styles.successTitle}>Export Requested</Text>
+            <Text style={styles.successTitle}>Export Ready</Text>
             <Text style={styles.successDesc}>
-              We're preparing your data. Check your email within 48 hours for the download link.
+              Your data file has been saved to this device.
             </Text>
           </Surface>
         ) : (
@@ -136,9 +134,11 @@ export default function DownloadDataScreen() {
               contentStyle={styles.exportButtonContent}
               buttonColor={PURPLE}
               icon={() => <Download size={18} color="#fff" />}
+              loading={isExporting}
+              disabled={isExporting}
               testID="request-data-export"
             >
-              Request Data Export
+              {isExporting ? 'Preparing...' : 'Download My Data'}
             </Button>
           </View>
         )}

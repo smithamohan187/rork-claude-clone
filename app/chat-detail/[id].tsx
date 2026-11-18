@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -121,25 +120,6 @@ export default function ChatDetailScreen() {
   const { showSnackbar } = useSnackbar();
   const [inputText, setInputText] = useState<string>('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
-
-  // Android's window resize (adjustResize) isn't reliable in Expo Go, and
-  // KeyboardAvoidingView's own height/padding animation was still leaving the
-  // input bar hidden behind the keyboard — so on Android we track the keyboard
-  // height directly and push the input bar above it ourselves.
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setAndroidKeyboardHeight(e.endCoordinates?.height ?? 0);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setAndroidKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   const scrollToEnd = useCallback((animated = true) => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated }));
@@ -308,7 +288,6 @@ export default function ChatDetailScreen() {
         <View style={[
           styles.inputBar,
           { paddingBottom: 24 + insets.bottom },
-          Platform.OS === 'android' && { marginBottom: androidKeyboardHeight },
         ]}>
           <TextInput
             testID="message-input"

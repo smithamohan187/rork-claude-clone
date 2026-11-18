@@ -376,7 +376,7 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
       <PaperProvider theme={paperTheme}>
-      <GestureHandlerRootView>
+      <GestureHandlerRootView style={{ flex: 1 }}>
         <AdminProvider>
           <AuthProvider>
             <CustomerTypeProvider>

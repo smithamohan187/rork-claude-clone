@@ -232,6 +232,15 @@ export default function BusinessProfileScreen() {
     loadRewardConfig();
   }, [loadRewardConfig, authLoading, isAuthenticated]));
 
+  // Re-fetch the business itself on every focus — without this, returning here via
+  // router.back() from Edit Business (app/edit-business.tsx) keeps showing the pre-edit
+  // data, since expo-router keeps this screen mounted rather than remounting it, and the
+  // mount-only useEffect inside useBusinessProfile never re-fires on its own.
+  useFocusEffect(useCallback(() => {
+    if (authLoading || !isAuthenticated) return;
+    refreshBusinessProfile();
+  }, [refreshBusinessProfile, authLoading, isAuthenticated]));
+
   const [offerFilter, setOfferFilter] = useState<OfferFilter>('active');
   // Stored cover/logo URLs can 404 (pre-GCS-migration legacy paths — see
   // .claude/modules/image-handling.md) — track load failures so the header degrades to a
@@ -641,7 +650,7 @@ export default function BusinessProfileScreen() {
           </SafeAreaView>
         </View>
 
-        <View style={styles.profileHeader}>
+        <View style={[styles.profileHeader, isEditing && styles.profileHeaderEditing]}>
           <View style={styles.logoWrap}>
             {business.logo && !logoFailed ? (
               <Image
@@ -3051,6 +3060,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 14,
+  },
+  // Editing swaps headerInfo's content for a multi-field form (name, category, description),
+  // which is much taller than the compact name+badge shown in view mode. The view-mode layout
+  // above deliberately pins the logo/name to the bottom of the row (flex-end) with a negative
+  // top margin so the circular logo straddles the cover photo — correct for short content, but
+  // it drags the top of a tall edit form up into the cover image itself. Edit mode instead
+  // starts cleanly below the cover with the logo at the top of the row, not straddling it.
+  profileHeaderEditing: {
+    marginTop: 12,
+    alignItems: 'flex-start',
   },
   logoWrap: {
     width: LOGO_SIZE,

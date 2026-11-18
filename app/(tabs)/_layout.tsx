@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { THEME } from '@/theme/tokens';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUnreadMessagesCount } from '@/hooks/useUnreadMessagesCount';
+import { fetchDashboardSummary } from '@/api/services/businessDashboardService';
 
 const TAB_BAR_BASE_STYLE = {
   backgroundColor: THEME.colors.surface,
@@ -87,6 +88,48 @@ export default function TabLayout() {
     }
   }, [authLoading, isAuthenticated, router]);
 
+  // Hard gate: a business account with an incomplete profile or no active/trial plan is bounced
+  // straight to the create-business-profile flow (which already knows to resume at the Plan step
+  // when billing is unresolved — see useCreateBusiness.ts) instead of ever seeing the dashboard.
+  //
+  // Landing here fires immediately after Stripe checkout succeeds (see checkout-success.tsx /
+  // useCreateBusiness.ts's finishAndNavigate), and business_subscriptions can take a moment to
+  // reflect the just-completed payment (webhook lag, or a hair of replication lag on the read).
+  // A single unlucky read here used to bounce a paying customer straight back to the plan-selection
+  // step, looking like the payment never happened. Retry with the same short backoff
+  // checkout-success.tsx already uses before concluding the plan is genuinely unresolved.
+  const GATE_MAX_ATTEMPTS = 4;
+  const GATE_RETRY_DELAY_MS = 1200;
+  const [businessGateChecking, setBusinessGateChecking] = useState(true);
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || accountType !== 'business') return;
+    let active = true;
+    setBusinessGateChecking(true);
+
+    const runCheck = async () => {
+      for (let attempt = 0; attempt < GATE_MAX_ATTEMPTS; attempt++) {
+        if (!active) return;
+        try {
+          const summary = await fetchDashboardSummary();
+          const planActive = summary.subscription_status === 'active' || summary.subscription_status === 'trial';
+          if (summary.onboarding_complete && planActive) {
+            if (active) setBusinessGateChecking(false);
+            return;
+          }
+        } catch {
+          // Transient failure — fall through to retry same as an unresolved plan.
+        }
+        if (attempt < GATE_MAX_ATTEMPTS - 1) {
+          await new Promise(resolve => setTimeout(resolve, GATE_RETRY_DELAY_MS));
+        }
+      }
+      if (active) router.replace('/create-business-profile' as never);
+    };
+
+    runCheck();
+    return () => { active = false; };
+  }, [authLoading, isAuthenticated, accountType, router]);
+
   const screenOptions = useMemo(() => ({
     headerShown: false,
     tabBarActiveTintColor: THEME.colors.primary,
@@ -166,7 +209,8 @@ export default function TabLayout() {
 
   // While session restore is in flight, or once we know the user is logged out and the redirect
   // above is about to fire, show nothing rather than flashing the tabs shell with no real data.
-  if (authLoading || !isAuthenticated) {
+  // Same for an incomplete business account mid-redirect to create-business-profile.
+  if (authLoading || !isAuthenticated || (isBusiness && businessGateChecking)) {
     return <View style={{ flex: 1 }} />;
   }
 

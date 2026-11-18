@@ -13,11 +13,8 @@ import {
   ChevronRight,
   KeyRound,
   Smartphone,
-  Eye,
   Activity,
-  Sparkles,
   Download,
-  Trash2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -35,27 +32,11 @@ interface ToggleItem {
 
 const PRIVACY_TOGGLES: ToggleItem[] = [
   {
-    id: 'profile_visibility',
-    title: 'Profile Visibility',
-    description: 'Make my profile visible to businesses',
-    icon: Eye,
-    iconColor: '#3B82F6',
-    defaultValue: true,
-  },
-  {
     id: 'activity_status',
     title: 'Activity Status',
     description: 'Show when I was last active',
     icon: Activity,
     iconColor: '#22C55E',
-    defaultValue: true,
-  },
-  {
-    id: 'personalised_recs',
-    title: 'Personalised Recommendations',
-    description: 'Allow TouchPoint to use my activity for recommendations',
-    icon: Sparkles,
-    iconColor: '#F59E0B',
     defaultValue: true,
   },
 ];
@@ -181,24 +162,6 @@ export default function PrivacySecurityScreen() {
             <View style={styles.listTextWrap}>
               <Text style={styles.listTitle}>Download My Data</Text>
               <Text style={styles.listDesc}>Request a copy of your personal data</Text>
-            </View>
-            <ChevronRight size={18} color="#A0AABB" />
-          </TouchableOpacity>
-
-          <Divider style={styles.divider} />
-
-          <TouchableOpacity
-            style={styles.listRow}
-            onPress={() => router.push('/delete-account' as any)}
-            activeOpacity={0.7}
-            testID="privacy-delete-account"
-          >
-            <View style={[styles.iconWrap, { backgroundColor: '#ED4956' + '14' }]}>
-              <Trash2 size={18} color="#ED4956" />
-            </View>
-            <View style={styles.listTextWrap}>
-              <Text style={[styles.listTitle, { color: '#ED4956' }]}>Delete Account</Text>
-              <Text style={styles.listDesc}>Permanently remove your account</Text>
             </View>
             <ChevronRight size={18} color="#A0AABB" />
           </TouchableOpacity>

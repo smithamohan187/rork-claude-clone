@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome6 } from '@expo/vector-icons';
 import { Mail, Link2 } from 'lucide-react-native';
 
 interface Props {
@@ -87,7 +87,7 @@ export const BrandedShareGrid = React.memo(function BrandedShareGrid({
         testID={`${testIDPrefix ?? 'share'}-whatsapp`}
       >
         <View style={[styles.iconCircle, { backgroundColor: '#25D366' }]}>
-          <FontAwesome name="whatsapp" size={26} color="#fff" />
+          <FontAwesome6 name="whatsapp" iconStyle="brand" size={26} color="#fff" />
         </View>
         <Text style={styles.label} numberOfLines={1}>WhatsApp</Text>
       </Pressable>
@@ -98,13 +98,15 @@ export const BrandedShareGrid = React.memo(function BrandedShareGrid({
         hitSlop={4}
         testID={`${testIDPrefix ?? 'share'}-instagram`}
       >
+        {/* Instagram's real brand gradient (orange -> pink -> purple/blue) — previously had the
+            app's own green repeated at the end instead of Instagram's actual colors. */}
         <LinearGradient
-          colors={['#F58529', '#DD2A7B', '#00B246', '#00B246']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['#F58529', '#DD2A7B', '#8134AF', '#515BD4']}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 1, y: 0 }}
           style={styles.iconCircle}
         >
-          <FontAwesome name="instagram" size={24} color="#fff" />
+          <FontAwesome6 name="instagram" iconStyle="brand" size={24} color="#fff" />
         </LinearGradient>
         <Text style={styles.label} numberOfLines={1}>Instagram</Text>
       </Pressable>
@@ -116,7 +118,7 @@ export const BrandedShareGrid = React.memo(function BrandedShareGrid({
         testID={`${testIDPrefix ?? 'share'}-facebook`}
       >
         <View style={[styles.iconCircle, { backgroundColor: '#1877F2' }]}>
-          <FontAwesome name="facebook" size={22} color="#fff" />
+          <FontAwesome6 name="facebook" iconStyle="brand" size={22} color="#fff" />
         </View>
         <Text style={styles.label} numberOfLines={1}>Facebook</Text>
       </Pressable>

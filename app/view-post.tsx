@@ -6,7 +6,6 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +15,6 @@ import {
   Bookmark,
   Calendar,
   MessageCircle,
-  Share2,
 } from 'lucide-react-native';
 import LikeButton from '@/components/feed/LikeButton';
 import CommentSheet from '@/components/feed/CommentSheet';
@@ -71,7 +69,6 @@ export default function ViewPostScreen() {
   const [error, setError] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarText, setSnackbarText] = useState('');
-  const [sharing, setSharing] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
@@ -108,21 +105,6 @@ export default function ViewPostScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const handleShare = useCallback(async () => {
-    if (sharing || !post || !business) return;
-    setSharing(true);
-    try {
-      const message = `Check out this post from ${business.business_name}: ${post.title}`;
-      await Share.share({ message });
-      setSnackbarText('Post shared');
-      setSnackbarVisible(true);
-    } catch (e) {
-      if (__DEV__) console.log('[ViewPost] share error', e);
-    } finally {
-      setSharing(false);
-    }
-  }, [sharing, post, business]);
 
   const isActive = useMemo(() => post?.is_active ?? false, [post]);
 
@@ -304,25 +286,6 @@ export default function ViewPostScreen() {
         </View>
       </ScrollView>
 
-      {/* BOTTOM BAR */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomBarWrap}>
-        <View style={styles.bottomBar}>
-          <Button
-            mode="outlined"
-            textColor={PURPLE}
-            onPress={handleShare}
-            loading={sharing}
-            disabled={sharing}
-            style={styles.shareBtn}
-            contentStyle={styles.btnContent}
-            icon={() => <Share2 size={18} color={PURPLE} />}
-            testID="share-post-btn"
-          >
-            Share Post
-          </Button>
-        </View>
-      </SafeAreaView>
-
       <Snackbar
         visible={snackbarVisible}
         onDismiss={() => setSnackbarVisible(false)}
@@ -337,7 +300,7 @@ export default function ViewPostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { paddingBottom: 120 },
+  scrollContent: { paddingBottom: 32 },
   heroWrap: { width: '100%', height: 240, backgroundColor: '#E5E7EB' },
   heroImage: { width: '100%', height: '100%' },
   heroGradient: {
@@ -435,22 +398,7 @@ const styles = StyleSheet.create({
   saveBtnTextActive: {
     color: '#DC2626',
   },
-  bottomBarWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  bottomBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  shareBtn: { borderColor: PURPLE, borderRadius: 10, borderWidth: 1.5 },
-  btnContent: { height: 46 },
-  snackbar: { marginBottom: 100 },
+  snackbar: { marginBottom: 32 },
   skeletonHero: { width: '100%', height: 240, backgroundColor: '#EEF2F7' },
   skeletonBlock: {
     height: 16,

@@ -169,4 +169,31 @@ export const authApi = {
   async changePassword(currentPassword: string, newPassword: string): Promise<ApiResult<{ message: string }>> {
     return apiClient.post('/auth/change-password', { currentPassword, newPassword });
   },
+
+  // List this user's active login sessions (one per device) — GET /auth/sessions
+  async listSessions(): Promise<ApiResult<{ sessions: AuthSession[] }>> {
+    const currentRefreshToken = await getRefreshToken();
+    return apiClient.get<{ sessions: AuthSession[] }>('/auth/sessions', {
+      query: currentRefreshToken ? { currentRefreshToken } : undefined,
+    });
+  },
+
+  // Revoke a single session (sign it out) — DELETE /auth/sessions/:id
+  async revokeSession(sessionId: string): Promise<ApiResult<{ message: string }>> {
+    return apiClient.delete(`/auth/sessions/${sessionId}`);
+  },
+
+  // Fetch a full export of the caller's own data — GET /auth/export-data
+  async exportData(): Promise<ApiResult<Record<string, unknown>>> {
+    return apiClient.get<Record<string, unknown>>('/auth/export-data');
+  },
+};
+
+export type AuthSession = {
+  id:         string;
+  deviceInfo: string | null;
+  ipAddress:  string | null;
+  createdAt:  string;
+  expiresAt:  string;
+  isCurrent:  boolean;
 };

@@ -25,7 +25,7 @@ import {
 } from 'react-native-paper';
 import { Image } from 'expo-image';
 import { ArrowLeft, ImagePlus, Calendar, MapPin, ChevronDown, Check } from 'lucide-react-native';
-import { DatePickerModal, registerTranslation, en } from 'react-native-paper-dates';
+import { DatePickerModal, TimePickerModal, registerTranslation, en } from 'react-native-paper-dates';
 import { format } from 'date-fns';
 import { useEvent, useEvents } from '@/hooks/useEvents';
 import { uploadEventImage, removeEventImage, type Event, type EventCategory, type EventType, type UpdateEventPayload } from '@/api/services/eventsService';
@@ -133,6 +133,7 @@ export default function EditEventScreen() {
   const [discardVisible, setDiscardVisible] = useState(false);
   const [saving, setSaving]         = useState(false);
   const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
+  const [timeField, setTimeField] = useState<'start' | 'end' | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState<boolean>(false);
 
   useEffect(() => {
@@ -305,36 +306,73 @@ export default function EditEventScreen() {
             testID="event-location-input"
           />
 
-          <TouchableOpacity
-            style={[styles.dateBtn, !!errors.starts_at && styles.dateBtnError]}
-            onPress={() => setPickerField('start')}
-            activeOpacity={0.7}
-            testID="event-start-date-btn"
-          >
-            <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
-            <View>
-              <Text style={styles.dateBtnLabel}>Event Date & Time *</Text>
-              <Text style={[styles.dateBtnValue, !draft.starts_at && styles.dateBtnPlaceholder]}>
-                {draft.starts_at ? format(new Date(draft.starts_at), 'd MMM yyyy, HH:mm') : 'Select date & time'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.dateRow}>
+            <TouchableOpacity
+              style={[styles.dateBtn, styles.dateFieldFlex, !!errors.starts_at && styles.dateBtnError]}
+              onPress={() => setPickerField('start')}
+              activeOpacity={0.7}
+              testID="event-start-date-btn"
+            >
+              <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.dateBtnLabel}>Event Date *</Text>
+                <Text style={[styles.dateBtnValue, !draft.starts_at && styles.dateBtnPlaceholder]}>
+                  {draft.starts_at ? format(new Date(draft.starts_at), 'd MMM yyyy') : 'Select date'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dateBtn, styles.dateFieldFlex, !!errors.starts_at && styles.dateBtnError]}
+              onPress={() => setTimeField('start')}
+              activeOpacity={0.7}
+              testID="event-start-time-btn"
+            >
+              <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.dateBtnLabel}>Time *</Text>
+                <Text style={[styles.dateBtnValue, !draft.starts_at && styles.dateBtnPlaceholder]}>
+                  {draft.starts_at ? format(new Date(draft.starts_at), 'h:mm a') : 'Select time'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
           <HelperText type="error" visible={!!errors.starts_at}>{errors.starts_at}</HelperText>
 
-          <TouchableOpacity
-            style={styles.dateBtn}
-            onPress={() => setPickerField('end')}
-            activeOpacity={0.7}
-            testID="event-end-date-btn"
-          >
-            <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
-            <View>
-              <Text style={styles.dateBtnLabel}>End Date & Time (Optional)</Text>
-              <Text style={[styles.dateBtnValue, !draft.ends_at && styles.dateBtnPlaceholder]}>
-                {draft.ends_at ? format(new Date(draft.ends_at), 'd MMM yyyy, HH:mm') : 'Select date & time'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.dateRow}>
+            <TouchableOpacity
+              style={[styles.dateBtn, styles.dateFieldFlex]}
+              onPress={() => setPickerField('end')}
+              activeOpacity={0.7}
+              testID="event-end-date-btn"
+            >
+              <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.dateBtnLabel}>End Date (Optional)</Text>
+                <Text style={[styles.dateBtnValue, !draft.ends_at && styles.dateBtnPlaceholder]}>
+                  {draft.ends_at ? format(new Date(draft.ends_at), 'd MMM yyyy') : 'Select date'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dateBtn, styles.dateFieldFlex]}
+              onPress={() => setTimeField('end')}
+              activeOpacity={0.7}
+              testID="event-end-time-btn"
+            >
+              <Calendar size={16} color={TEXT_MUTED} style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.dateBtnLabel}>Time</Text>
+                <Text style={[styles.dateBtnValue, !draft.ends_at && styles.dateBtnPlaceholder]}>
+                  {draft.ends_at ? format(new Date(draft.ends_at), 'h:mm a') : 'Select time'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+          {draft.ends_at && (
+            <TouchableOpacity onPress={() => set('ends_at', null)} style={styles.clearDateBtn} testID="event-clear-end-date">
+              <Text style={styles.clearDateText}>Clear end date</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.sectionLabel}>Category</Text>
           <TouchableOpacity
@@ -437,11 +475,39 @@ export default function EditEventScreen() {
           }
           onConfirm={({ date }) => {
             if (!date) { setPickerField(null); return; }
-            if (pickerField === 'start') set('starts_at', date.toISOString());
-            else set('ends_at', date.toISOString());
+            const key = pickerField === 'start' ? 'starts_at' : 'ends_at';
+            const existing = pickerField === 'start' ? draft.starts_at : draft.ends_at;
+            const merged = existing
+              ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), new Date(existing).getHours(), new Date(existing).getMinutes())
+              : date;
+            set(key, merged.toISOString());
             setPickerField(null);
           }}
           saveLabel="Confirm"
+        />
+
+        <TimePickerModal
+          locale="en"
+          visible={timeField !== null}
+          onDismiss={() => setTimeField(null)}
+          hours={
+            timeField === 'start'
+              ? (draft.starts_at ? new Date(draft.starts_at).getHours() : new Date().getHours())
+              : (draft.ends_at ? new Date(draft.ends_at).getHours() : new Date().getHours())
+          }
+          minutes={
+            timeField === 'start'
+              ? (draft.starts_at ? new Date(draft.starts_at).getMinutes() : new Date().getMinutes())
+              : (draft.ends_at ? new Date(draft.ends_at).getMinutes() : new Date().getMinutes())
+          }
+          onConfirm={({ hours, minutes }) => {
+            const key = timeField === 'start' ? 'starts_at' : 'ends_at';
+            const existing = timeField === 'start' ? draft.starts_at : draft.ends_at;
+            const base = existing ? new Date(existing) : new Date();
+            const merged = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hours, minutes);
+            set(key, merged.toISOString());
+            setTimeField(null);
+          }}
         />
       </KeyboardAvoidingView>
 
@@ -581,6 +647,10 @@ const styles = StyleSheet.create({
   dateBtnLabel: { fontSize: 12, color: TEXT_MUTED, marginBottom: 2 },
   dateBtnValue: { fontSize: 15, color: TEXT_DARK },
   dateBtnPlaceholder: { color: '#C4C4CC' },
+  dateRow: { flexDirection: 'row' as const, gap: 10 },
+  dateFieldFlex: { flex: 1, marginTop: 8, marginBottom: 4 },
+  clearDateBtn: { alignSelf: 'flex-start' as const, paddingVertical: 4, marginBottom: 4 },
+  clearDateText: { fontSize: 12, color: TEXT_MUTED },
   sectionLabel: { fontSize: 12, fontWeight: '700' as const, color: TEXT_MUTED, marginTop: 12, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   categoryBtn: {
     flexDirection: 'row' as const,

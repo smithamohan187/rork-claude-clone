@@ -1,4 +1,4 @@
-const { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword } = require('./auth.service');
+const { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword, listSessions, revokeSession, exportMyData } = require('./auth.service');
 const authModel = require('./auth.model');
 const { registerSchema, loginSchema } = require('./auth.schema');
 const { AppError } = require('../../middleware/errorHandler');
@@ -152,4 +152,20 @@ const changePasswordHandler = asyncHandler(async (req, res) => {
   return res.status(200).json(ok({ message: 'Password updated successfully' }));
 });
 
-module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler, switchProfileHandler, changePasswordHandler };
+const listSessionsHandler = asyncHandler(async (req, res) => {
+  const { currentRefreshToken } = req.query;
+  const sessions = await listSessions(req.user.userId, currentRefreshToken);
+  return res.status(200).json(ok({ sessions }));
+});
+
+const revokeSessionHandler = asyncHandler(async (req, res) => {
+  await revokeSession(req.user.userId, req.params.id);
+  return res.status(200).json(ok({ message: 'Session revoked' }));
+});
+
+const exportDataHandler = asyncHandler(async (req, res) => {
+  const data = await exportMyData(req.user.userId);
+  return res.status(200).json(ok(data));
+});
+
+module.exports = { signupHandler, loginHandler, logoutHandler, refreshHandler, sessionHandler, switchProfileHandler, changePasswordHandler, listSessionsHandler, revokeSessionHandler, exportDataHandler };

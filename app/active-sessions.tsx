@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Surface, Button, Divider } from 'react-native-paper';
@@ -13,13 +14,13 @@ import {
   ArrowLeft,
   Smartphone,
   Monitor,
-  Tablet,
   MapPin,
   Clock,
   ShieldCheck,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { authApi, type AuthSession } from '@/api/auth.api';
 
 const PURPLE = '#1A5C35';
 const BG = '#F6F5FA';
@@ -27,71 +28,74 @@ const BG = '#F6F5FA';
 interface Session {
   id: string;
   deviceName: string;
-  deviceType: 'phone' | 'desktop' | 'tablet';
-  location: string;
+  isDesktop: boolean;
+  ipAddress: string | null;
   lastActive: string;
   isCurrent: boolean;
 }
 
-const MOCK_SESSIONS: Session[] = [
-  {
-    id: '1',
-    deviceName: 'iPhone 15 Pro',
-    deviceType: 'phone',
-    location: 'London, UK',
-    lastActive: 'Active now',
-    isCurrent: true,
-  },
-  {
-    id: '2',
-    deviceName: 'MacBook Pro',
-    deviceType: 'desktop',
-    location: 'London, UK',
-    lastActive: '2 hours ago',
-    isCurrent: false,
-  },
-  {
-    id: '3',
-    deviceName: 'iPad Air',
-    deviceType: 'tablet',
-    location: 'Manchester, UK',
-    lastActive: '3 days ago',
-    isCurrent: false,
-  },
-  {
-    id: '4',
-    deviceName: 'Samsung Galaxy S24',
-    deviceType: 'phone',
-    location: 'Birmingham, UK',
-    lastActive: '1 week ago',
-    isCurrent: false,
-  },
-];
+function timeAgo(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Active now';
+  if (mins < 60) return `${mins} min${mins > 1 ? 's' : ''} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
 
-function DeviceIcon({ type, isCurrent }: { type: Session['deviceType']; isCurrent: boolean }) {
+function toSession(s: AuthSession): Session {
+  return {
+    id: s.id,
+    deviceName: s.deviceInfo ?? 'Unknown device',
+    isDesktop: (s.deviceInfo ?? '').toLowerCase().includes('web'),
+    ipAddress: s.ipAddress,
+    lastActive: s.isCurrent ? 'Active now' : timeAgo(s.createdAt),
+    isCurrent: s.isCurrent,
+  };
+}
+
+function DeviceIcon({ isDesktop, isCurrent }: { isDesktop: boolean; isCurrent: boolean }) {
   const color = isCurrent ? PURPLE : '#6B7A8D';
-  if (type === 'desktop') return <Monitor size={20} color={color} />;
-  if (type === 'tablet') return <Tablet size={20} color={color} />;
+  if (isDesktop) return <Monitor size={20} color={color} />;
   return <Smartphone size={20} color={color} />;
 }
 
 export default function ActiveSessionsScreen() {
   const router = useRouter();
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let active = true;
+    authApi.listSessions().then((result) => {
+      if (!active) return;
+      if (result.success && result.data) {
+        setSessions(result.data.sessions.map(toSession));
+      }
+      setIsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   const handleSignOut = useCallback((session: Session) => {
     Alert.alert(
       'Sign Out Device',
-      `Sign out from "${session.deviceName}" in ${session.location}?`,
+      `Sign out from "${session.deviceName}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            const result = await authApi.revokeSession(session.id);
+            if (!result.success) {
+              Alert.alert('Error', result.error ?? 'Failed to sign out device');
+              return;
+            }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setSessions(prev => prev.filter(s => s.id !== session.id));
-            console.log('[ActiveSessions] Signed out device:', session.deviceName);
           },
         },
       ]
@@ -124,13 +128,19 @@ export default function ActiveSessionsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {currentSession && (
+        {isLoading && (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="small" color={PURPLE} />
+          </View>
+        )}
+
+        {!isLoading && currentSession && (
           <>
             <Text style={styles.sectionTitle}>Current Session</Text>
             <Surface style={styles.sessionCard} elevation={1}>
               <View style={styles.sessionRow}>
                 <View style={[styles.deviceIconWrap, { backgroundColor: PURPLE + '14' }]}>
-                  <DeviceIcon type={currentSession.deviceType} isCurrent={true} />
+                  <DeviceIcon isDesktop={currentSession.isDesktop} isCurrent={true} />
                 </View>
                 <View style={styles.sessionInfo}>
                   <View style={styles.sessionNameRow}>
@@ -140,10 +150,12 @@ export default function ActiveSessionsScreen() {
                       <Text style={styles.currentBadgeText}>This device</Text>
                     </View>
                   </View>
-                  <View style={styles.sessionMeta}>
-                    <MapPin size={12} color="#6B7A8D" />
-                    <Text style={styles.sessionMetaText}>{currentSession.location}</Text>
-                  </View>
+                  {currentSession.ipAddress && (
+                    <View style={styles.sessionMeta}>
+                      <MapPin size={12} color="#6B7A8D" />
+                      <Text style={styles.sessionMetaText}>{currentSession.ipAddress}</Text>
+                    </View>
+                  )}
                   <View style={styles.sessionMeta}>
                     <Clock size={12} color="#22C55E" />
                     <Text style={[styles.sessionMetaText, { color: '#22C55E' }]}>
@@ -156,7 +168,7 @@ export default function ActiveSessionsScreen() {
           </>
         )}
 
-        {otherSessions.length > 0 && (
+        {!isLoading && otherSessions.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Other Devices</Text>
             <Surface style={styles.sessionCard} elevation={1}>
@@ -165,14 +177,16 @@ export default function ActiveSessionsScreen() {
                   {idx > 0 && <Divider style={styles.divider} />}
                   <View style={styles.sessionRow}>
                     <View style={[styles.deviceIconWrap, { backgroundColor: '#6B7A8D' + '14' }]}>
-                      <DeviceIcon type={session.deviceType} isCurrent={false} />
+                      <DeviceIcon isDesktop={session.isDesktop} isCurrent={false} />
                     </View>
                     <View style={styles.sessionInfo}>
                       <Text style={styles.sessionName}>{session.deviceName}</Text>
-                      <View style={styles.sessionMeta}>
-                        <MapPin size={12} color="#6B7A8D" />
-                        <Text style={styles.sessionMetaText}>{session.location}</Text>
-                      </View>
+                      {session.ipAddress && (
+                        <View style={styles.sessionMeta}>
+                          <MapPin size={12} color="#6B7A8D" />
+                          <Text style={styles.sessionMetaText}>{session.ipAddress}</Text>
+                        </View>
+                      )}
                       <View style={styles.sessionMeta}>
                         <Clock size={12} color="#6B7A8D" />
                         <Text style={styles.sessionMetaText}>{session.lastActive}</Text>
@@ -196,7 +210,7 @@ export default function ActiveSessionsScreen() {
           </>
         )}
 
-        {otherSessions.length === 0 && (
+        {!isLoading && otherSessions.length === 0 && (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
               <ShieldCheck size={32} color={PURPLE} />

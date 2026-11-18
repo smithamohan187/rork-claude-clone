@@ -32,7 +32,6 @@ import {
   Eye,
   ChevronDown,
   PlusCircle,
-  ClipboardEdit,
   Heart,
   MessageCircle,
 } from 'lucide-react-native';
@@ -290,11 +289,6 @@ export default function BusinessDashboard() {
     router.push(action.route as never);
   }, [router]);
 
-  const handleManageContent = useCallback(() => {
-    console.log('[BusinessDashboard] Manage content banner pressed');
-    router.push('/(tabs)/content' as never);
-  }, [router]);
-
   const handleNotifications = useCallback(() => {
     console.log('[BusinessDashboard] Notifications pressed');
     router.push('/(tabs)/feed/notifications' as never);
@@ -407,22 +401,6 @@ export default function BusinessDashboard() {
             );
           })}
         </View>
-
-        <Pressable
-          onPress={handleManageContent}
-          style={styles.manageBanner}
-          testID="manage-content-banner"
-        >
-          <View style={styles.manageAccent} />
-          <View style={styles.manageIconWrap}>
-            <ClipboardEdit size={20} color={PURPLE} />
-          </View>
-          <View style={styles.manageTextBlock}>
-            <Text style={styles.manageTitle}>Manage Your Content</Text>
-            <Text style={styles.manageSubtitle}>Edit your offers, events & posts</Text>
-          </View>
-          <ChevronRight size={18} color={PURPLE} />
-        </Pressable>
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -723,7 +701,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 20,
-    marginTop: -16,
     gap: 12,
   },
   statCardWrap: {
@@ -846,57 +823,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-  },
-  manageBanner: {
-    marginHorizontal: 20,
-    marginTop: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: PURPLE_LIGHT,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    gap: 12,
-    overflow: 'hidden',
-    shadowColor: '#1A5C35',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  manageAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 8,
-    bottom: 8,
-    width: 4,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
-    backgroundColor: PURPLE,
-  },
-  manageIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 6,
-  },
-  manageTextBlock: {
-    flex: 1,
-  },
-  manageTitle: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: PURPLE_DARK,
-    letterSpacing: -0.2,
-  },
-  manageSubtitle: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: '#1A5C35',
-    marginTop: 2,
   },
   activityCard: {
     backgroundColor: '#FFFFFF',

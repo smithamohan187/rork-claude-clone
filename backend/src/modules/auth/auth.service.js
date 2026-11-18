@@ -30,6 +30,12 @@ const {
   getSessionByUserId,
   findPasswordHashById,
   updatePasswordHash,
+  listSessionsByUser,
+  getProfileForExport,
+  getPointsForExport,
+  getCouponsForExport,
+  getSubscriptionsForExport,
+  getReviewsForExport,
  } = require('./auth.model');
 
 const SALT_ROUNDS = parseInt(process.env.SALT_ROUNDS, 10) || 10;
@@ -338,4 +344,47 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   await updatePasswordHash(userId, newPasswordHash);
 }
 
-module.exports = { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword };
+async function listSessions(userId, currentRefreshToken) {
+  const rows = await listSessionsByUser(userId);
+  const currentHash = currentRefreshToken
+    ? crypto.createHash('sha256').update(currentRefreshToken).digest('hex')
+    : null;
+
+  return rows.map((row) => ({
+    id: row.id,
+    deviceInfo: row.device_info,
+    ipAddress: row.ip_address,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    isCurrent: currentHash !== null && row.token_hash === currentHash,
+  }));
+}
+
+async function revokeSession(userId, sessionId) {
+  await revokeRefreshTokenById(sessionId, userId);
+}
+
+async function exportMyData(userId) {
+  const user = await getUserByIdWithProfile(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  const [profile, points, coupons, subscriptions, reviews] = await Promise.all([
+    getProfileForExport(user.active_profile_id),
+    getPointsForExport(user.active_profile_id),
+    getCouponsForExport(user.active_profile_id),
+    getSubscriptionsForExport(user.active_profile_id),
+    getReviewsForExport(user.active_profile_id),
+  ]);
+
+  return {
+    exportedAt: new Date().toISOString(),
+    account: { email: user.email, phone: user.phone },
+    profile,
+    points,
+    coupons,
+    subscriptions,
+    reviews,
+  };
+}
+
+module.exports = { registerUser, loginUser, logout, refreshAccessToken, getSession, changePassword, listSessions, revokeSession, exportMyData };
