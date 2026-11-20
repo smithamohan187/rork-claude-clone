@@ -679,7 +679,7 @@ function RoleSelectScreen({ onSelectRole }: { onSelectRole: (role: Role) => void
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { authLoading, isAuthenticated } = useAuth();
+  const { authLoading, isAuthenticated, holdAuthRedirectRef } = useAuth();
   const flatListRef = useRef<FlatList<SlideMeta>>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [role, setRole] = useState<Role | null>(null);
@@ -689,11 +689,15 @@ export default function OnboardingScreen() {
   // re-mounted at any time (cold boot, a web deep-link redirect landing on "/", back-navigation),
   // and without this gate an already-authenticated business owner mid-Stripe-trial-setup gets
   // bounced into onboarding instead of their dashboard.
+  // `holdAuthRedirectRef` mirrors the same hold used in app/(auth)/_layout.tsx — this screen can
+  // stay mounted underneath a pushed /(auth)/sign-up route (e.g. a share-link deep link into a
+  // fresh cold start), so without checking the hold here too, this guard was winning the race
+  // against sign-up's own content-aware post-registration redirect and bouncing to feed first.
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !holdAuthRedirectRef.current) {
       router.replace('/(tabs)/feed' as never);
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, holdAuthRedirectRef]);
 
   const activeSlides = role === 'business' ? BUSINESS_SLIDES : CUSTOMER_SLIDES;
 
