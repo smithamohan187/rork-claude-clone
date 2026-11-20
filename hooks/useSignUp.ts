@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '@/contexts/AuthContext';
 import { signUp, SignupPayload } from '@/api/services/authService';
@@ -219,6 +220,9 @@ export function useSignUp() {
           if (__DEV__) console.error('[useSignUp] resolvePendingBusinessReferral error:', resolveErr);
         }
       }
+
+      // TEMP DEBUG — remove once the share-redirect bug is found.
+      Alert.alert('DEBUG handleRegister', JSON.stringify({ pending, resolvedWelcomePoints }));
 
       if (pending) {
         setPostSignupRedirect({

@@ -1,6 +1,6 @@
 // Auth group — sign-in and sign-up stack
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -19,6 +19,8 @@ export default function AuthLayout() {
   // NOT be a dependency change that re-runs this effect, or it would fire router.replace('/feed')
   // a second time and race sign-up's own content-aware redirect.
   useEffect(() => {
+    // TEMP DEBUG — remove once the share-redirect bug is found.
+    Alert.alert('DEBUG auth-layout effect', JSON.stringify({ authLoading, isAuthenticated, hold: holdAuthRedirectRef.current }));
     if (!authLoading && isAuthenticated && !holdAuthRedirectRef.current) {
       router.replace('/(tabs)/feed' as never);
     }
