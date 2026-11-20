@@ -46,12 +46,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "touchpoints.app",
+              "host": "touchpoint-app.com",
               "pathPrefix": "/s/"
             },
             {
               "scheme": "https",
-              "host": "touchpoints.app",
+              "host": "touchpoint-app.com",
               "pathPrefix": "/b/"
             }
           ],
