@@ -16,6 +16,7 @@ const REFER_CONTENT_LOOKUP = {
   post:  { getById: (id) => postsModel.getPostById(id, null), noun: 'post' },
 };
 const { SHARE_BASE_URL } = require('../../config/shareUrl');
+const { PLAY_STORE_URL, APP_STORE_URL } = require('../../config/appDownloadLinks');
 
 // Maps a content type to its in-app detail route + the id param name that route expects.
 const ROUTE_BY_CONTENT = {
@@ -173,26 +174,163 @@ const DEFAULT_OG = {
   image_url: '',
 };
 
+// Builds the rork-app://... deep-link equivalent of a https://<domain>/s/<code> (or /b/<id>) web
+// url, so the "Open in TouchPoints" button can try the app directly even on a device where
+// Android App Links / iOS Universal Links verification hasn't succeeded (same custom scheme
+// declared as app.json's "scheme").
+function buildAppSchemeUrl(webUrl) {
+  try {
+    const parsed = new URL(webUrl);
+    return `rork-app://${parsed.pathname.replace(/^\//, '')}${parsed.search}`;
+  } catch {
+    return 'rork-app://';
+  }
+}
+
 function buildPreviewHtml({ title, description, image_url, url }) {
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(truncate(description, 200));
   const safeUrl = escapeHtml(url);
   const imageTag = image_url ? `<meta property="og:image" content="${escapeHtml(image_url)}">\n` : '';
+  const appSchemeUrl = escapeHtml(buildAppSchemeUrl(url));
+
+  // Store buttons are always rendered (so the page never looks unfinished/broken), but stay
+  // visually disabled until backend/src/config/appDownloadLinks.js has a real URL — see that
+  // file's header comment for how to go live once published.
+  const playStoreButton = PLAY_STORE_URL
+    ? `<a class="btn btn-store" href="${escapeHtml(PLAY_STORE_URL)}">
+         <span class="btn-store-kicker">GET IT ON</span><span class="btn-store-name">Google Play</span>
+       </a>`
+    : `<span class="btn btn-store btn-disabled" aria-disabled="true">
+         <span class="btn-store-kicker">COMING SOON</span><span class="btn-store-name">Google Play</span>
+       </span>`;
+  const appStoreButton = APP_STORE_URL
+    ? `<a class="btn btn-store" href="${escapeHtml(APP_STORE_URL)}">
+         <span class="btn-store-kicker">DOWNLOAD ON THE</span><span class="btn-store-name">App Store</span>
+       </a>`
+    : `<span class="btn btn-store btn-disabled" aria-disabled="true">
+         <span class="btn-store-kicker">COMING SOON</span><span class="btn-store-name">App Store</span>
+       </span>`;
+
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${safeTitle}</title>
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDescription}">
 <meta property="og:url" content="${safeUrl}">
 <meta property="og:type" content="website">
 ${imageTag}<meta name="description" content="${safeDescription}">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(180deg, #1A5C35 0%, #0D3D20 100%);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 24px;
+    padding: 32px 28px;
+    text-align: center;
+    backdrop-filter: blur(6px);
+  }
+  .logo {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    border-radius: 18px;
+    background: #00B246;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 24px;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 10px;
+    line-height: 1.3;
+  }
+  p.desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.82);
+    margin: 0 0 26px;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1px;
+    text-decoration: none;
+    border-radius: 14px;
+    padding: 10px 16px;
+    margin-bottom: 10px;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: #FFFFFF;
+    color: #1A5C35;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 14px 16px;
+  }
+  .btn-store {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    min-height: 46px;
+    justify-content: center;
+  }
+  .btn-store-kicker {
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    color: rgba(255,255,255,0.7);
+  }
+  .btn-store-name {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .btn-disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .footnote {
+    margin-top: 16px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+  }
+</style>
 </head>
 <body>
-<h1>${safeTitle}</h1>
-<p>${safeDescription}</p>
-<p>Open this in the TouchPoints app to see more.</p>
+<div class="card">
+  <div class="logo">TP</div>
+  <h1>${safeTitle}</h1>
+  <p class="desc">${safeDescription}</p>
+
+  <a class="btn btn-primary" href="${appSchemeUrl}">Open in TouchPoints</a>
+  ${playStoreButton}
+  ${appStoreButton}
+
+  <p class="footnote">Don't have the app yet? Get it above to see the full experience.</p>
+</div>
 </body>
 </html>`;
 }

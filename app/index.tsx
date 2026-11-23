@@ -14,7 +14,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -693,11 +693,17 @@ export default function OnboardingScreen() {
   // stay mounted underneath a pushed /(auth)/sign-up route (e.g. a share-link deep link into a
   // fresh cold start), so without checking the hold here too, this guard was winning the race
   // against sign-up's own content-aware post-registration redirect and bouncing to feed first.
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && !holdAuthRedirectRef.current) {
-      router.replace('/(tabs)/feed' as never);
-    }
-  }, [authLoading, isAuthenticated, router, holdAuthRedirectRef]);
+  // useFocusEffect (not plain useEffect) so this also re-fires if the user later navigates BACK
+  // to this already-mounted screen (e.g. from the shared detail page) — a plain useEffect only
+  // re-runs when authLoading/isAuthenticated actually change, which they won't on a simple
+  // back-navigation, leaving this screen stuck on its blank placeholder forever otherwise.
+  useFocusEffect(
+    useCallback(() => {
+      if (!authLoading && isAuthenticated && !holdAuthRedirectRef.current) {
+        router.replace('/(tabs)/feed' as never);
+      }
+    }, [authLoading, isAuthenticated, router, holdAuthRedirectRef])
+  );
 
   const activeSlides = role === 'business' ? BUSINESS_SLIDES : CUSTOMER_SLIDES;
 
