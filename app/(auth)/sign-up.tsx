@@ -110,10 +110,15 @@ export default function SignUpScreen() {
     // Release the (auth) layout's bounce-to-feed guard now that we're performing our own
     // redirect below — see the matching setHoldAuthRedirect(true) in useSignUp's handleRegister.
     setHoldAuthRedirect(false);
-    // If the user arrived via a content-share deep link, land them on the shared detail screen;
-    // otherwise fall back to the default feed landing.
+    // If the user arrived via a content-share deep link, land them on the shared detail screen —
+    // replacing this screen with feed first, then pushing the detail screen on top, so the detail
+    // screen's back button returns to feed instead of to app/index.tsx (the root onboarding
+    // screen, still sitting under sign-up in the stack from before registration — authenticated
+    // users bounce straight off it, but only after a visible flash, which is the "green screen"
+    // this avoids entirely). Otherwise fall back to the default feed landing.
     if (postSignupRedirect) {
-      router.replace({ pathname: postSignupRedirect.pathname as never, params: postSignupRedirect.params as never });
+      router.replace('/(tabs)/feed' as never);
+      router.push({ pathname: postSignupRedirect.pathname as never, params: postSignupRedirect.params as never });
     } else {
       router.replace('/(tabs)/feed' as never);
     }

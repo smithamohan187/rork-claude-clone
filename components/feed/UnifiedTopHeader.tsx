@@ -33,6 +33,11 @@ const UnifiedTopHeader = React.memo(function UnifiedTopHeader({
   const { open: openDrawer } = useSideDrawer();
   const inputRef = useRef<TextInput>(null);
 
+  const handleOpenDrawer = useCallback(() => {
+    console.log('[UnifiedTopHeader] hamburger tapped, opening drawer');
+    openDrawer();
+  }, [openDrawer]);
+
   useEffect(() => {
     if (searchActive) {
       const t = setTimeout(() => inputRef.current?.focus(), 50);
@@ -116,9 +121,10 @@ const UnifiedTopHeader = React.memo(function UnifiedTopHeader({
         <View style={styles.bar}>
           <View style={styles.leftGroup}>
             <Pressable
-              onPress={openDrawer}
+              onPress={handleOpenDrawer}
               style={({ pressed }) => [styles.menuBtn, pressed && styles.iconBtnPressed]}
-              hitSlop={8}
+              hitSlop={16}
+              android_ripple={{ color: 'rgba(0,178,70,0.15)', borderless: true, radius: 22 }}
               testID="header-drawer-menu"
             >
               <MaterialCommunityIcons name="menu" size={28} color="#00B246" />

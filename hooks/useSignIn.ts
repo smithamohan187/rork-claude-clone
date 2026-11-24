@@ -25,7 +25,7 @@ function detectMode(val: string): InputMode {
 }
 
 export function useSignIn() {
-  const { loginWithTokens} = useAuth();
+  const { loginWithTokens, setHoldAuthRedirect } = useAuth();
   const router = useRouter();
 
   const [identifier, setIdentifier] = useState('');
@@ -74,6 +74,11 @@ export function useSignIn() {
       };
 
       const data = await signIn(payload);
+      // Hold off the (auth) layout's "already authenticated, bounce to feed" guard — it would
+      // otherwise fire the instant loginWithTokens flips isAuthenticated, racing ahead of (and
+      // winning over) this function's own async referral-resolution + redirect below. Same
+      // mechanism/reason as useSignUp.ts's handleRegister.
+      setHoldAuthRedirect(true);
       await loginWithTokens(data, mode === 'email' ? identifier.trim().toLowerCase() : undefined);
 
       // If this login was reached via a customer-invite link (or a business-QR scan), auto-subscribe
@@ -88,6 +93,7 @@ export function useSignIn() {
           const resolved = await resolvePendingInvite(pending.referral_code);
           if (resolved.matched && resolved.business) {
             await clearPendingShareReferral();
+            setHoldAuthRedirect(false);
             router.replace({
               pathname: '/business-profile/[id]' as never,
               params: { id: resolved.business.id, welcomePoints: String(resolved.welcomePoints) } as never,
@@ -106,6 +112,7 @@ export function useSignIn() {
         try {
           const resolved = await resolvePendingBusinessReferral(pending.referral_code);
           await clearPendingShareReferral();
+          setHoldAuthRedirect(false);
           router.replace({
             pathname: '/business-profile/[id]' as never,
             params: { id: pending.business_id, welcomePoints: String(resolved.welcomePoints) } as never,
@@ -122,6 +129,7 @@ export function useSignIn() {
         try {
           const resolved = await scanSubscribeToBusiness(pending.business_id);
           await clearPendingShareReferral();
+          setHoldAuthRedirect(false);
           router.replace({
             pathname: '/business-profile/[id]' as never,
             params: { id: resolved.business.id, welcomePoints: String(resolved.welcomePoints) } as never,
@@ -132,15 +140,41 @@ export function useSignIn() {
         }
       }
 
+      // Plain content share (post/offer/event/broadcast) or an app-level referral — no resolve
+      // call needed, just land on the originally shared detail screen, same as useSignUp.ts's
+      // postSignupRedirect. `business_invite` is deliberately excluded and left in storage — it
+      // isn't resolved at personal-account login, it survives until the user goes through Create
+      // Business (see useSignUp.ts/business-create.md).
+      //
+      // Replace to feed first, then push the detail screen on top — so the detail screen's back
+      // button returns to feed instead of to app/index.tsx (the root onboarding screen, still
+      // sitting under sign-in in the stack from before login), same fix as sign-up.tsx's
+      // handleSnackbarDismiss.
+      if (pending && pending.content_type !== 'business_invite') {
+        await clearPendingShareReferral();
+        setHoldAuthRedirect(false);
+        router.replace('/feed' as never);
+        router.push({
+          pathname: pending.route as never,
+          params: {
+            [pending.id_param]: pending.content_id,
+            businessId: pending.business_id,
+          } as never,
+        });
+        return;
+      }
+
+      setHoldAuthRedirect(false);
       router.replace('/feed' as never);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
       if (__DEV__) console.error('[useSignIn] handleLogin error:', err);
       setAuthError(msg);
+      setHoldAuthRedirect(false);
     } finally {
       setLoading(false);
     }
-  }, [identifier, password, mode, loginWithTokens, router]);
+  }, [identifier, password, mode, loginWithTokens, router, setHoldAuthRedirect]);
 
   return {
     identifier,

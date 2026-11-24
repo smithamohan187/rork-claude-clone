@@ -34,7 +34,6 @@ import {
   Store,
   FileText,
   ShieldCheck,
-  PenLine,
   ImagePlus,
   X,
   MessagesSquare,
@@ -1008,12 +1007,17 @@ export default function CreateBusinessProfileScreen() {
           showsVerticalScrollIndicator={false}
         >
           <LinearGradient
-            colors={['#0F1A2E', '#152238', '#1A2F4A']}
+            colors={[Colors.primaryDark, Colors.accentDark]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroBanner}
           >
+            <View style={styles.heroGlowTop} pointerEvents="none" />
+            <View style={styles.heroGlowBottom} pointerEvents="none" />
             <View style={styles.heroContent}>
+              <View style={styles.heroIconBadge}>
+                <Building2 size={22} color="#fff" />
+              </View>
               <Text style={styles.heroLabel}>FOR BUSINESSES</Text>
               <Text style={styles.heroHeadline}>Grow Your Business with Real Connections</Text>
               <Text style={styles.heroSubtext}>
@@ -1021,7 +1025,7 @@ export default function CreateBusinessProfileScreen() {
               </Text>
               <TouchableOpacity style={styles.heroCta} activeOpacity={0.85} onPress={handleSelectManual}>
                 <Text style={styles.heroCtaText}>Get Started</Text>
-                <ChevronRight size={18} color="#fff" />
+                <ChevronRight size={18} color={Colors.primaryDark} />
               </TouchableOpacity>
             </View>
           </LinearGradient>
@@ -1043,7 +1047,7 @@ export default function CreateBusinessProfileScreen() {
                 <View style={styles.slideCardOuter}>
                   <View style={styles.slideCard}>
                     <View style={styles.slideIconCircle}>
-                      <item.icon size={36} color="#2E7D32" />
+                      <item.icon size={36} color={Colors.primaryDark} />
                     </View>
                     <Text style={styles.slideTitle}>{item.title}</Text>
                     <Text style={styles.slideDesc}>{item.desc}</Text>
@@ -1062,23 +1066,10 @@ export default function CreateBusinessProfileScreen() {
           </View>
 
           <Animated.View style={[styles.methodSelectionWrap, { opacity: methodFadeAnim }]}>
-            <TouchableOpacity style={styles.methodCard} activeOpacity={0.7} onPress={handleSelectManual}>
-              <View style={styles.methodCardIconWrap}>
-                <View style={[styles.methodCardIcon, { backgroundColor: Colors.navyDark + '10' }]}>
-                  <PenLine size={24} color={Colors.navyDark} />
-                </View>
-              </View>
-              <View style={styles.methodCardContent}>
-                <Text style={styles.methodCardTitle}>Create New Profile</Text>
-                <Text style={styles.methodCardDesc}>
-                  Build your business profile from scratch with your own details, logo, and information
-                </Text>
-              </View>
-              <ChevronRight size={20} color={Colors.textTertiary} />
-            </TouchableOpacity>
-
             <View style={styles.methodInfoBanner}>
-              <Sparkles size={16} color={Colors.navyLight} />
+              <View style={styles.methodInfoIconWrap}>
+                <Sparkles size={18} color={Colors.primaryDark} />
+              </View>
               <Text style={styles.methodInfoText}>
                 Complete your profile in 6 quick steps — business details, contact info, hours, referral settings, media, and plan.
               </Text>
@@ -1155,86 +1146,27 @@ const styles = StyleSheet.create({
   methodSelectionWrap: {
     paddingTop: 8,
   },
-  methodHeader: {
-    alignItems: 'center',
-    marginBottom: 32,
-    gap: 6,
-  },
-  methodTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: -0.4,
-    marginTop: 12,
-  },
-  methodSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-    maxWidth: 280,
-  },
-  methodCard: {
+  methodInfoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-    gap: 14,
+    gap: 12,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  methodCardGoogle: {
-    borderColor: '#4285F4' + '30',
-  },
-  methodCardIconWrap: {},
-  methodCardIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+  methodInfoIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  methodCardContent: {
-    flex: 1,
-  },
-  methodCardTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  methodCardDesc: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-  methodDividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 18,
-    gap: 12,
-  },
-  methodDividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.borderLight,
-  },
-  methodDividerText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textTertiary,
-    letterSpacing: 0.5,
-  },
-  methodInfoBanner: {
-    flexDirection: 'row',
-    backgroundColor: Colors.navyDark + '06',
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: Colors.navyDark + '10',
   },
   methodInfoText: {
     flex: 1,
@@ -2081,17 +2013,51 @@ const styles = StyleSheet.create({
   // ─── Hero Banner ───
   heroBanner: {
     paddingHorizontal: 24,
-    paddingTop: 36,
-    paddingBottom: 40,
+    paddingTop: 44,
+    paddingBottom: 44,
+    marginHorizontal: -20,
+    marginTop: -20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+  },
+  heroGlowTop: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    top: -90,
+    right: -60,
+  },
+  heroGlowBottom: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(0,178,70,0.16)',
+    bottom: -70,
+    left: -50,
   },
   heroContent: {
     alignItems: 'center',
     gap: 12,
   },
+  heroIconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
   heroLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.primary,
+    color: '#8FE3B0',
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
   },
@@ -2113,17 +2079,22 @@ const styles = StyleSheet.create({
   heroCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
+    backgroundColor: '#fff',
     paddingHorizontal: 24,
     paddingVertical: 13,
     borderRadius: 12,
     gap: 6,
     marginTop: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   heroCtaText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: '#fff',
+    color: Colors.primaryDark,
   },
 
   // ─── Feature Slides ───
@@ -2149,16 +2120,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
     alignItems: 'center',
     gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   slideIconCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
