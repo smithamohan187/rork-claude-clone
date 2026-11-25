@@ -452,11 +452,21 @@ export function useCreateBusiness() {
     validateStep, plans, selectedPlanId, checkout, finishAndNavigate, isPlanLocked,
   ]);
 
-  // Simplified creation path for a logged-in customer with no business yet — collects only
-  // name + category (business_type defaults to 'goodwill', same as the minimal onboarding
-  // signup form). Deliberately skips logo/cover upload, completeOnboarding, and plan selection —
-  // the resulting business lands in the same state a minimal-signup business would, which the
-  // dashboard's "Complete Profile" checklist (useCompleteBusinessProfile.ts) already handles.
+  // Simplified creation path for a logged-in customer — collects only name + category on
+  // screen, but this doubles as the *only* entry point now (handleSelectManual in
+  // create-business-profile.tsx always routes here, even when a business already exists), so
+  // it must behave as a safe upsert, not a fresh create. registerBusiness's edit-path (SQL
+  // UPDATE) overwrites every column it's given, including with null for anything omitted — so
+  // every other field below is carried over from the hook's own prefilled state (loaded from
+  // the existing business on mount, see the fetchMyBusiness effect above) rather than omitted,
+  // to avoid silently erasing phone/website/address/etc. that the user already filled in via
+  // the old wizard or a previous visit. Only business_name/category_id are ever actually
+  // editable from this screen, so only those two can change here. Deliberately skips logo/cover
+  // upload — the dashboard's "Complete Profile" checklist (useCompleteBusinessProfile.ts) picks
+  // that up later. It calls completeOnboarding so app/(tabs)/_layout.tsx's dashboard gate lets
+  // the business through — but deliberately does NOT touch plan/billing at all: that's handled
+  // entirely by the dashboard's own "Start your Stripe trial" checklist item
+  // (components/business/SetupChecklist.tsx), not this screen.
   const submitSimple = useCallback(async () => {
     const errs: Record<string, string> = {};
     if (!businessName.trim()) errs.businessName = 'Business name is required';
@@ -470,10 +480,19 @@ export function useCreateBusiness() {
       const business = await registerBusiness({
         business_name: businessName.trim(),
         category_id: categoryId,
-        business_type: 'goodwill',
-        inhouse_referral: false,
+        business_type: (businessType || 'goodwill') as 'goodwill' | 'incentivised',
+        description: description.trim() || undefined,
+        phone: phone.trim() || undefined,
+        website: website.trim() || undefined,
+        address: address.trim() || undefined,
+        city: city.trim() || undefined,
+        state: state.trim() || undefined,
+        country: country.trim() || undefined,
+        inhouse_referral: inhouseReferral,
+        inhouse_referral_url: inhouseReferral ? inhouseReferralUrl.trim() : undefined,
       });
       setBusinessId(business.id);
+      await completeOnboarding(business.id);
       await finishAndNavigate('Business created successfully!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
@@ -481,7 +500,11 @@ export function useCreateBusiness() {
     } finally {
       setLoading(false);
     }
-  }, [businessName, categoryId, finishAndNavigate]);
+  }, [
+    businessName, categoryId, businessType, description, phone, website,
+    address, city, state, country, inhouseReferral, inhouseReferralUrl,
+    finishAndNavigate,
+  ]);
 
   return {
     currentStep,

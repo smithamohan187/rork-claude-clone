@@ -364,6 +364,10 @@ const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
+    // Android stacks sibling views by `elevation`, not `zIndex` (that's web/iOS-only) — without
+    // this, the bottom tab bar's `elevation: 8` (app/(tabs)/_layout.tsx) wins and renders on top
+    // of this portaled drawer even though it's mounted/animating correctly underneath.
+    elevation: 24,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

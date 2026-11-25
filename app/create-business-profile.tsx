@@ -220,23 +220,36 @@ export default function CreateBusinessProfileScreen() {
   }, [currentStep, animateTransition, hookGoBack, animateProgress, methodFadeAnim]);
 
   const handleSelectManual = useCallback(() => {
-    // An existing business owner (edit/resume) still gets the full wizard; a customer with no
-    // business yet gets the short name+category form instead — see submitSimple in
-    // useCreateBusiness.ts.
-    const target: CreationMethod = businessId ? 'manual' : 'simple';
+    // The old 6-step wizard is no longer the entry point for any business, new or existing —
+    // "Get Started" always opens the short name+category form (submitSimple in
+    // useCreateBusiness.ts), which upserts the existing business row if one already exists.
+    // The full wizard still exists only for the separate cancelled-Stripe-checkout resume path
+    // (the currentStep>1 effect above), not for this button.
     Animated.timing(methodFadeAnim, {
       toValue: 0,
       duration: 120,
       useNativeDriver: true,
     }).start(() => {
-      setCreationMethod(target);
+      setCreationMethod('simple');
       Animated.timing(methodFadeAnim, {
         toValue: 1,
         duration: 200,
         useNativeDriver: true,
       }).start();
     });
-  }, [methodFadeAnim, businessId]);
+  }, [methodFadeAnim]);
+
+  // This landing screen is often reached via router.replace (e.g. app/(tabs)/_layout.tsx's
+  // business onboarding gate), which leaves nothing in the stack for a plain router.back() to
+  // pop to — that produced a blank white screen with no way out. Fall back to feed when there's
+  // truly nowhere to go back to.
+  const handleLandingBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/feed' as never);
+    }
+  }, [router]);
 
   const handleSimpleBack = useCallback(() => {
     Animated.timing(methodFadeAnim, {
@@ -993,7 +1006,7 @@ export default function CreateBusinessProfileScreen() {
       <View style={styles.container}>
         <SafeAreaView edges={['top']} style={styles.safeTop}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleLandingBack} style={styles.headerBtn} activeOpacity={0.7}>
               <ArrowLeft size={22} color={Colors.bannerText} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Create Business Profile</Text>

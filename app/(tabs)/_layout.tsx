@@ -88,16 +88,13 @@ export default function TabLayout() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Hard gate: a business account with an incomplete profile or no active/trial plan is bounced
-  // straight to the create-business-profile flow (which already knows to resume at the Plan step
-  // when billing is unresolved — see useCreateBusiness.ts) instead of ever seeing the dashboard.
-  //
-  // Landing here fires immediately after Stripe checkout succeeds (see checkout-success.tsx /
-  // useCreateBusiness.ts's finishAndNavigate), and business_subscriptions can take a moment to
-  // reflect the just-completed payment (webhook lag, or a hair of replication lag on the read).
-  // A single unlucky read here used to bounce a paying customer straight back to the plan-selection
-  // step, looking like the payment never happened. Retry with the same short backoff
-  // checkout-success.tsx already uses before concluding the plan is genuinely unresolved.
+  // Hard gate: a business account that hasn't even finished the minimal name+category create
+  // step is bounced straight to create-business-profile instead of ever seeing the dashboard.
+  // Plan/billing is NOT part of this gate — that's deliberately deferred to the dashboard's own
+  // "Start your Stripe trial" checklist item (components/business/SetupChecklist.tsx), which the
+  // user can complete (or skip and come back to) from inside the dashboard. Requiring an
+  // active/trial plan here as well used to force every business through plan selection before
+  // they could ever reach the dashboard, which no longer matches how onboarding works.
   const GATE_MAX_ATTEMPTS = 4;
   const GATE_RETRY_DELAY_MS = 1200;
   const [businessGateChecking, setBusinessGateChecking] = useState(true);
@@ -111,13 +108,12 @@ export default function TabLayout() {
         if (!active) return;
         try {
           const summary = await fetchDashboardSummary();
-          const planActive = summary.subscription_status === 'active' || summary.subscription_status === 'trial';
-          if (summary.onboarding_complete && planActive) {
+          if (summary.onboarding_complete) {
             if (active) setBusinessGateChecking(false);
             return;
           }
         } catch {
-          // Transient failure — fall through to retry same as an unresolved plan.
+          // Transient failure — fall through to retry same as an unresolved onboarding flag.
         }
         if (attempt < GATE_MAX_ATTEMPTS - 1) {
           await new Promise(resolve => setTimeout(resolve, GATE_RETRY_DELAY_MS));
